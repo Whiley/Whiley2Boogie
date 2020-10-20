@@ -13,6 +13,7 @@
 // limitations under the License.
 package wy2boogie.core;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -69,6 +70,12 @@ public class BoogieFile {
 
 	public List<Decl> getDeclarations() {
 		return declarations;
+	}
+
+	public byte[] getBytes() {
+		ByteArrayOutputStream output = new ByteArrayOutputStream();
+		new BoogieFilePrinter(output).write(this);
+		return output.toByteArray();
 	}
 
 	// =========================================================================

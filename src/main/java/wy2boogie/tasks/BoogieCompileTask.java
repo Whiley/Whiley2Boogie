@@ -20,6 +20,7 @@ import java.util.*;
 import java.util.function.Function;
 
 import wy2boogie.core.BoogieFile;
+import wy2boogie.util.Boogie;
 import wybs.lang.Build;
 import wybs.lang.Build.Meter;
 import wybs.util.AbstractBuildTask;
@@ -27,13 +28,29 @@ import wyfs.lang.Path;
 import wyil.lang.WyilFile;
 
 public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
+	/**
+	 * Handle for the boogie verifier
+	 */
+	private final Boogie verifier = new Boogie();
+	/**
+	 * Specify whether to print verbose progress messages or not
+	 */
+	private boolean verbose = true;
+	/**
+	 * Boogie process timeout (in milli-seconds)
+	 */
+	private int timeout = 10000;
+	/**
+	 * Determines whether or not to verify generate files with Boogie.
+	 */
+	private boolean verification = false;
 
 	public BoogieCompileTask(Build.Project project, Path.Entry<BoogieFile> target, Path.Entry<WyilFile> source) {
 		super(project, target, Arrays.asList(source));
 	}
 
 	public void setVerification(boolean flag) {
-		throw new UnsupportedOperationException("implement BoogieCompileTask.setVerification()");
+		this.verification = flag;
 	}
 
 	public void setCounterExamples(boolean flag) {
@@ -61,14 +78,25 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 	 * @param sources --- The WyilFile(s) being translated.
 	 * @return
 	 */
-	public boolean execute(Build.Meter meter, BoogieFile target, WyilFile... sources) {
+	public boolean execute(Build.Meter meter, BoogieFile target, WyilFile source) {
 		meter = meter.fork("BoogieCompiler");
-		// Parse source files into target
-		WyilFile source = sources[0];
 		//
 		new BoogieCompiler(meter,target).visitModule(source);
 		//
 		meter.done();
+		//
+		if (verification) {
+			String id = source.getEntry().id().toString();
+			Boogie.Error[] errors = verifier.check(timeout, id, target);
+			//
+			if(verbose && errors != null) {
+				// Debugging output
+				for(int i=0;i!=errors.length;++i) {
+					System.out.println(errors[i]);
+				}
+			}
+			return errors != null && errors.length == 0;
+		}
 		//
 		return true;
 	}

@@ -1,0 +1,2 @@
+public method main():
+    skip
