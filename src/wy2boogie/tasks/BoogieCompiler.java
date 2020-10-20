@@ -16,11 +16,12 @@ package wy2boogie.tasks;
 import java.util.List;
 
 import wy2boogie.core.BoogieFile;
-import wy2boogie.core.BoogieFile.Term;
+import wy2boogie.core.BoogieFile.Decl;
+import wy2boogie.core.BoogieFile.Expr;
+import wy2boogie.core.BoogieFile.Stmt;
 import wybs.lang.Build.Meter;
 import wyfs.util.Pair;
 import wyil.lang.WyilFile;
-import wyil.lang.WyilFile.Decl;
 import wyil.lang.WyilFile.Decl.*;
 import wyil.lang.WyilFile.Expr.*;
 import wyil.lang.WyilFile.Stmt.*;
@@ -29,7 +30,7 @@ import wyil.util.IncrementalSubtypingEnvironment;
 import wyil.util.Subtyping;
 import wyil.util.TypeMangler;
 
-public class BoogieCompiler extends AbstractTranslator<Term> {
+public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 	/**
 	 * Provides a standard mechanism for writing out type mangles.
 	 */
@@ -50,9 +51,9 @@ public class BoogieCompiler extends AbstractTranslator<Term> {
 
 	public void visitModule(WyilFile wf) {
 		// Translate local units
-		for (Decl.Unit unit : wf.getModule().getUnits()) {
-			for (Decl decl : unit.getDeclarations()) {
-				BoogieFile.Declaration d = (BoogieFile.Declaration) visitDeclaration(decl);
+		for (Unit unit : wf.getModule().getUnits()) {
+			for (WyilFile.Decl decl : unit.getDeclarations()) {
+				BoogieFile.Decl d = visitDeclaration(decl);
 				if (d != null) {
 					boogieFile.getDeclarations().add(d);
 				}
@@ -61,447 +62,446 @@ public class BoogieCompiler extends AbstractTranslator<Term> {
 	}
 
 	@Override
-	public Term constructImport(Import d) {
+	public Decl constructImport(Import d) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructType(Type d, List<Term> invariant) {
+	public Decl constructType(Type d, List<Expr> invariant) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructStaticVariable(StaticVariable d, Term initialiser) {
+	public Decl constructStaticVariable(StaticVariable d, Expr initialiser) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructProperty(Property decl, List<Term> clauses) {
+	public Decl constructProperty(Property decl, List<Expr> clauses) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructFunction(Function d, List<Term> precondition, List<Term> postcondition, Term body) {
+	public Decl constructFunction(Function d, List<Expr> precondition, List<Expr> postcondition, Stmt body) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructMethod(Method d, List<Term> precondition, List<Term> postcondition, Term body) {
+	public Decl constructMethod(Method d, List<Expr> precondition, List<Expr> postcondition, Stmt body) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructLambda(Lambda decl, Term body) {
+	public Expr constructLambda(Lambda decl, Stmt body) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructAssert(Assert stmt, Term condition) {
+	public Stmt constructAssert(Assert stmt, Expr condition) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructAssign(Assign stmt, List<Term> lvals, List<Term> rvals) {
+	public Stmt constructAssign(Assign stmt, List<Expr> lvals, List<Expr> rvals) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructAssume(Assume stmt, Term condition) {
+	public Stmt constructAssume(Assume stmt, Expr condition) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructBlock(Block stmt, List<Term> stmts) {
+	public Stmt constructBlock(Block stmt, List<Stmt> stmts) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructBreak(Break stmt) {
+	public Stmt constructBreak(Break stmt) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructContinue(Continue stmt) {
+	public Stmt constructContinue(Continue stmt) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructDebug(Debug stmt, Term operand) {
+	public Stmt constructDebug(Debug stmt, Expr operand) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructDoWhile(DoWhile stmt, Term body, Term condition, List<Term> invariant) {
+	public Stmt constructDoWhile(DoWhile stmt, Stmt body, Expr condition, List<Expr> invariant) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructFail(Fail stmt) {
+	public Stmt constructFail(Fail stmt) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructFor(For stmt, Pair<Term, Term> range, List<Term> invariant, Term body) {
+	public Stmt constructFor(For stmt, Pair<Expr, Expr> range, List<Expr> invariant, Stmt body) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructIfElse(IfElse stmt, Term condition, Term trueBranch, Term falseBranch) {
+	public Stmt constructIfElse(IfElse stmt, Expr condition, Stmt trueBranch, Stmt falseBranch) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructInitialiser(Initialiser stmt, Term initialiser) {
+	public Stmt constructInitialiser(Initialiser stmt, Expr initialiser) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructNamedBlock(NamedBlock stmt, List<Term> stmts) {
+	public Stmt constructNamedBlock(NamedBlock stmt, List<Stmt> stmts) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructReturn(Return stmt, Term ret) {
+	public Stmt constructReturn(Return stmt, Expr ret) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructSkip(Skip stmt) {
+	public Stmt constructSkip(Skip stmt) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructSwitch(Switch stmt, Term condition, List<Pair<List<Term>, Term>> cases) {
+	public Stmt constructSwitch(Switch stmt, Expr condition, List<Pair<List<Expr>, Stmt>> cases) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructWhile(While stmt, Term condition, List<Term> invariant, Term body) {
+	public Stmt constructWhile(While stmt, Expr condition, List<Expr> invariant, Stmt body) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructArrayAccessLVal(ArrayAccess expr, Term source, Term index) {
+	public Expr constructArrayAccessLVal(ArrayAccess expr, Expr source, Expr index) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructDereferenceLVal(Dereference expr, Term operand) {
+	public Expr constructDereferenceLVal(Dereference expr, Expr operand) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructFieldDereferenceLVal(FieldDereference expr, Term operand) {
+	public Expr constructFieldDereferenceLVal(FieldDereference expr, Expr operand) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructRecordAccessLVal(RecordAccess expr, Term source) {
+	public Expr constructRecordAccessLVal(RecordAccess expr, Expr source) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructTupleInitialiserLVal(TupleInitialiser expr, List<Term> source) {
+	public Expr constructTupleInitialiserLVal(TupleInitialiser expr, List<Expr> source) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructVariableAccessLVal(VariableAccess expr) {
+	public Expr constructVariableAccessLVal(VariableAccess expr) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructArrayAccess(ArrayAccess expr, Term source, Term index) {
+	public Expr constructArrayAccess(ArrayAccess expr, Expr source, Expr index) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructArrayLength(ArrayLength expr, Term source) {
+	public Expr constructArrayLength(ArrayLength expr, Expr source) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructArrayGenerator(ArrayGenerator expr, Term value, Term length) {
+	public Expr constructArrayGenerator(ArrayGenerator expr, Expr value, Expr length) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructArrayInitialiser(ArrayInitialiser expr, List<Term> values) {
+	public Expr constructArrayInitialiser(ArrayInitialiser expr, List<Expr> values) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructBitwiseComplement(BitwiseComplement expr, Term operand) {
+	public Expr constructBitwiseComplement(BitwiseComplement expr, Expr operand) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructBitwiseAnd(BitwiseAnd expr, List<Term> operands) {
+	public Expr constructBitwiseAnd(BitwiseAnd expr, List<Expr> operands) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructBitwiseOr(BitwiseOr expr, List<Term> operands) {
+	public Expr constructBitwiseOr(BitwiseOr expr, List<Expr> operands) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructBitwiseXor(BitwiseXor expr, List<Term> operands) {
+	public Expr constructBitwiseXor(BitwiseXor expr, List<Expr> operands) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructBitwiseShiftLeft(BitwiseShiftLeft expr, Term lhs, Term rhs) {
+	public Expr constructBitwiseShiftLeft(BitwiseShiftLeft expr, Expr lhs, Expr rhs) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructBitwiseShiftRight(BitwiseShiftRight expr, Term lhs, Term rhs) {
+	public Expr constructBitwiseShiftRight(BitwiseShiftRight expr, Expr lhs, Expr rhs) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructCast(Cast expr, Term operand) {
+	public Expr constructCast(Cast expr, Expr operand) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructConstant(Constant expr) {
+	public Expr constructConstant(Constant expr) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructDereference(Dereference expr, Term operand) {
+	public Expr constructDereference(Dereference expr, Expr operand) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructFieldDereference(FieldDereference expr, Term operand) {
+	public Expr constructFieldDereference(FieldDereference expr, Expr operand) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructEqual(Equal expr, Term lhs, Term rhs) {
+	public Expr constructEqual(Equal expr, Expr lhs, Expr rhs) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructIntegerLessThan(IntegerLessThan expr, Term lhs, Term rhs) {
+	public Expr constructIntegerLessThan(IntegerLessThan expr, Expr lhs, Expr rhs) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructIntegerLessThanOrEqual(IntegerLessThanOrEqual expr, Term lhs, Term rhs) {
+	public Expr constructIntegerLessThanOrEqual(IntegerLessThanOrEqual expr, Expr lhs, Expr rhs) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructIntegerGreaterThan(IntegerGreaterThan expr, Term lhs, Term rhs) {
+	public Expr constructIntegerGreaterThan(IntegerGreaterThan expr, Expr lhs, Expr rhs) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructIntegerGreaterThanOrEqual(IntegerGreaterThanOrEqual expr, Term lhs, Term rhs) {
+	public Expr constructIntegerGreaterThanOrEqual(IntegerGreaterThanOrEqual expr, Expr lhs, Expr rhs) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructIntegerNegation(IntegerNegation expr, Term operand) {
+	public Expr constructIntegerNegation(IntegerNegation expr, Expr operand) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructIntegerAddition(IntegerAddition expr, Term lhs, Term rhs) {
+	public Expr constructIntegerAddition(IntegerAddition expr, Expr lhs, Expr rhs) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructIntegerSubtraction(IntegerSubtraction expr, Term lhs, Term rhs) {
+	public Expr constructIntegerSubtraction(IntegerSubtraction expr, Expr lhs, Expr rhs) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructIntegerMultiplication(IntegerMultiplication expr, Term lhs, Term rhs) {
+	public Expr constructIntegerMultiplication(IntegerMultiplication expr, Expr lhs, Expr rhs) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructIntegerDivision(IntegerDivision expr, Term lhs, Term rhs) {
+	public Expr constructIntegerDivision(IntegerDivision expr, Expr lhs, Expr rhs) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructIntegerRemainder(IntegerRemainder expr, Term lhs, Term rhs) {
+	public Expr constructIntegerRemainder(IntegerRemainder expr, Expr lhs, Expr rhs) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructIs(Is expr, Term operand) {
+	public Expr constructIs(Is expr, Expr operand) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructLogicalAnd(LogicalAnd expr, List<Term> operands) {
+	public Expr constructLogicalAnd(LogicalAnd expr, List<Expr> operands) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructLogicalImplication(LogicalImplication expr, Term lhs, Term rhs) {
+	public Expr constructLogicalImplication(LogicalImplication expr, Expr lhs, Expr rhs) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructLogicalIff(LogicalIff expr, Term lhs, Term rhs) {
+	public Expr constructLogicalIff(LogicalIff expr, Expr lhs, Expr rhs) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructLogicalNot(LogicalNot expr, Term operand) {
+	public Expr constructLogicalNot(LogicalNot expr, Expr operand) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructLogicalOr(LogicalOr expr, List<Term> operands) {
+	public Expr constructLogicalOr(LogicalOr expr, List<Expr> operands) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructExistentialQuantifier(ExistentialQuantifier expr, List<Pair<Term, Term>> ranges, Term body) {
+	public Expr constructExistentialQuantifier(ExistentialQuantifier expr, List<Pair<Expr, Expr>> ranges, Expr body) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructUniversalQuantifier(UniversalQuantifier expr, List<Pair<Term, Term>> ranges, Term body) {
+	public Expr constructUniversalQuantifier(UniversalQuantifier expr, List<Pair<Expr, Expr>> ranges, Expr body) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructInvoke(Invoke expr, List<Term> arguments) {
+	public Expr constructInvoke(Invoke expr, List<Expr> arguments) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructIndirectInvoke(IndirectInvoke expr, Term source, List<Term> arguments) {
+	public Expr constructIndirectInvoke(IndirectInvoke expr, Expr source, List<Expr> arguments) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructLambdaAccess(LambdaAccess expr) {
+	public Expr constructLambdaAccess(LambdaAccess expr) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructNew(New expr, Term operand) {
+	public Expr constructNew(New expr, Expr operand) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructNotEqual(NotEqual expr, Term lhs, Term rhs) {
+	public Expr constructNotEqual(NotEqual expr, Expr lhs, Expr rhs) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructRecordAccess(RecordAccess expr, Term source) {
+	public Expr constructRecordAccess(RecordAccess expr, Expr source) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructRecordInitialiser(RecordInitialiser expr, List<Term> operands) {
+	public Expr constructRecordInitialiser(RecordInitialiser expr, List<Expr> operands) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructTupleInitialiser(TupleInitialiser expr, List<Term> operands) {
+	public Expr constructTupleInitialiser(TupleInitialiser expr, List<Expr> operands) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructStaticVariableAccess(StaticVariableAccess expr) {
+	public Expr constructStaticVariableAccess(StaticVariableAccess expr) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term constructVariableAccess(VariableAccess expr) {
+	public Expr constructVariableAccess(VariableAccess expr) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Term applyImplicitCoercion(wyil.lang.WyilFile.Type target, wyil.lang.WyilFile.Type source, Term expr) {
+	public Stmt applyImplicitCoercion(wyil.lang.WyilFile.Type target, wyil.lang.WyilFile.Type source, Stmt expr) {
 		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me!");
+		throw new UnsupportedOperationException("implement me");
 	}
-
 }

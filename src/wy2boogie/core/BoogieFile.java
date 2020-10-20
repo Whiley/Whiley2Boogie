@@ -16,6 +16,7 @@ package wy2boogie.core;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.math.BigInteger;
 import java.util.List;
 
 import wyfs.lang.Content;
@@ -62,21 +63,74 @@ public class BoogieFile {
 	/**
 	 * The list of top-level declarations within this file.
 	 */
-	private List<Declaration> declarations;
+	private List<Decl> declarations;
 
-	public List<Declaration> getDeclarations() {
+	public List<Decl> getDeclarations() {
 		return declarations;
 	}
 
 	// =========================================================================
-	// Abstract Syntax Tree
+	// Declarations
 	// =========================================================================
 
-	public interface Term {
+	public interface Decl {
+		public class Axiom {
+			private final Expr operand;
+
+			public Axiom(Expr operand) {
+				this.operand = operand;
+			}
+
+			public Expr getOperand() {
+				return operand;
+			}
+		}
+	};
+
+	// =========================================================================
+	// Statements
+	// =========================================================================
+
+	public interface Stmt {
 
 	}
 
-	public interface Declaration {
+	// =========================================================================
+	// Expressions
+	// =========================================================================
 
-	};
+	public interface Expr extends Stmt {
+	}
+
+
+	public static class Constant implements Expr {
+		public final static Constant NULL = new Constant((String) null);
+		public final static Constant TRUE = new Constant(true);
+		public final static Constant FALSE = new Constant(false);
+
+		private Object value;
+
+		public Constant(boolean v) {
+			this.value = v;
+		}
+		public Constant(byte v) {
+			this.value = v;
+		}
+		public Constant(long v) {
+			this.value = v;
+		}
+		public Constant(double v) {
+			this.value = v;
+		}
+		public Constant(BigInteger v) {
+			this.value = v;
+		}
+		public Constant(String v) {
+			this.value = v;
+		}
+
+		public Object getValue() {
+			return value;
+		}
+	}
 }
