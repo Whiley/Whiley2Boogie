@@ -19,6 +19,7 @@ import java.io.OutputStream;
 import java.math.BigInteger;
 import java.util.List;
 
+import wy2boogie.io.BoogieFilePrinter;
 import wyfs.lang.Content;
 import wyfs.lang.Path;
 
@@ -41,12 +42,13 @@ public class BoogieFile {
 
 		@Override
 		public BoogieFile read(Path.Entry<BoogieFile> e, InputStream input) throws IOException {
-			throw new IllegalArgumentException("Implement BoogieFile.ContentType.read()");
+			// FIXME: this is a bit of a kludge for now.
+			return new BoogieFile();
 		}
 
 		@Override
 		public void write(OutputStream output, BoogieFile bf) throws IOException {
-			throw new IllegalArgumentException("Implement BoogieFile.ContentType.write()");
+			new BoogieFilePrinter(output).write(bf);
 		}
 
 		@Override
