@@ -13,6 +13,8 @@
 // limitations under the License.
 package wyboogie.tasks;
 
+import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -20,6 +22,8 @@ import wyboogie.core.BoogieFile;
 import wyboogie.core.BoogieFile.Decl;
 import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.Stmt;
+import wyboogie.core.BoogieFile.Expr.Constant;
+import wyboogie.core.BoogieFile.LVal;
 import wybs.lang.Build.Meter;
 import wyfs.util.Pair;
 import wyil.lang.WyilFile;
@@ -95,9 +99,22 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 	@Override
 	public Decl constructMethod(Method d, List<Expr> precondition, List<Expr> postcondition, Stmt body) {
 		String mangled = d.getName().toString();
-		List<Decl.Parameter> parameters = Collections.EMPTY_LIST;
-		List<Decl.Parameter> returns = Collections.EMPTY_LIST;
-		return new Decl.Procedure(mangled, parameters, returns, (Stmt.Block) body);
+		List<Decl.Parameter> parameters = constructParameters(d.getParameters());
+		List<Decl.Parameter> returns = constructParameters(d.getReturns());
+		return new Decl.Procedure(mangled, parameters, returns, precondition, postcondition, (Stmt.Block) body);
+	}
+
+	public List<Decl.Parameter> constructParameters(WyilFile.Tuple<WyilFile.Decl.Variable> params) {
+		ArrayList<Decl.Parameter> ps = new ArrayList<>();
+		for(int i=0;i!=params.size();++i) {
+			ps.add(constructParameter(params.get(i)));
+		}
+		return ps;
+	}
+
+	public Decl.Parameter constructParameter(WyilFile.Decl.Variable ps) {
+		BoogieFile.Type type = constructType(ps.getType());
+		return new Decl.Parameter(ps.getName().get(), type);
 	}
 
 	@Override
@@ -108,20 +125,20 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Stmt constructAssert(Assert stmt, Expr condition) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Stmt.Assert(condition);
 	}
 
 	@Override
 	public Stmt constructAssign(Assign stmt, List<Expr> lvals, List<Expr> rvals) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		if(lvals.size() != 1 || rvals.size() != 1) {
+			throw new UnsupportedOperationException("Multiple assignments not supported (yet)");
+		}
+		return new Stmt.Assignment((LVal) lvals.get(0), rvals.get(0));
 	}
 
 	@Override
 	public Stmt constructAssume(Assume stmt, Expr condition) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Stmt.Assume(condition);
 	}
 
 	@Override
@@ -155,8 +172,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Stmt constructFail(Fail stmt) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Stmt.Assert(new Expr.Constant(false));
 	}
 
 	@Override
@@ -173,8 +189,21 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Stmt constructInitialiser(Initialiser stmt, Expr initialiser) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		WyilFile.Tuple<Variable> vars = stmt.getVariables();
+		if(vars.size() != 1) {
+			throw new UnsupportedOperationException("Multiple initialisers not supported (yet)");
+		}
+		String name = vars.get(0).getName().toString();
+		BoogieFile.Type type = constructType(vars.get(0).getType());
+		//
+		Stmt.VariableDeclarations decl = new Stmt.VariableDeclarations(name, type);
+		//
+		if(initialiser == null) {
+			return decl;
+		} else {
+			Stmt.Assignment init = new Stmt.Assignment(new Expr.VariableAccess(name),initialiser);
+			return new Stmt.Sequence(decl,init);
+		}
 	}
 
 	@Override
@@ -202,8 +231,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Stmt constructWhile(While stmt, Expr condition, List<Expr> invariant, Stmt body) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Stmt.While(condition, invariant, (Stmt.Block) body);
 	}
 
 	@Override
@@ -238,8 +266,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Expr constructVariableAccessLVal(VariableAccess expr) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return constructVariableAccess(expr);
 	}
 
 	@Override
@@ -309,9 +336,20 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 	}
 
 	@Override
-	public Expr constructConstant(Constant expr) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+	public Expr constructConstant(WyilFile.Expr.Constant expr) {
+		WyilFile.Value v = expr.getValue();
+		switch(v.getOpcode()) {
+		case WyilFile.ITEM_bool: {
+			boolean b = ((WyilFile.Value.Bool) v).get();
+			return b ? Expr.Constant.TRUE : Expr.Constant.FALSE;
+		}
+		case WyilFile.ITEM_int: {
+			BigInteger i = ((WyilFile.Value.Int) v).get();
+			return new Expr.Constant(i);
+		}
+		default:
+			throw new IllegalArgumentException("unknown constant encountered (" + expr.getClass().getName() + ")");
+		}
 	}
 
 	@Override
@@ -328,32 +366,27 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Expr constructEqual(Equal expr, Expr lhs, Expr rhs) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.EQ, lhs, rhs);
 	}
 
 	@Override
 	public Expr constructIntegerLessThan(IntegerLessThan expr, Expr lhs, Expr rhs) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LT, lhs, rhs);
 	}
 
 	@Override
 	public Expr constructIntegerLessThanOrEqual(IntegerLessThanOrEqual expr, Expr lhs, Expr rhs) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LTEQ, lhs, rhs);
 	}
 
 	@Override
 	public Expr constructIntegerGreaterThan(IntegerGreaterThan expr, Expr lhs, Expr rhs) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.GT, lhs, rhs);
 	}
 
 	@Override
 	public Expr constructIntegerGreaterThanOrEqual(IntegerGreaterThanOrEqual expr, Expr lhs, Expr rhs) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.GTEQ, lhs, rhs);
 	}
 
 	@Override
@@ -364,32 +397,27 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Expr constructIntegerAddition(IntegerAddition expr, Expr lhs, Expr rhs) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.ADD, lhs, rhs);
 	}
 
 	@Override
 	public Expr constructIntegerSubtraction(IntegerSubtraction expr, Expr lhs, Expr rhs) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.SUB, lhs, rhs);
 	}
 
 	@Override
 	public Expr constructIntegerMultiplication(IntegerMultiplication expr, Expr lhs, Expr rhs) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.MUL, lhs, rhs);
 	}
 
 	@Override
 	public Expr constructIntegerDivision(IntegerDivision expr, Expr lhs, Expr rhs) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.DIV, lhs, rhs);
 	}
 
 	@Override
 	public Expr constructIntegerRemainder(IntegerRemainder expr, Expr lhs, Expr rhs) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.REM, lhs, rhs);
 	}
 
 	@Override
@@ -400,20 +428,17 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Expr constructLogicalAnd(LogicalAnd expr, List<Expr> operands) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, operands);
 	}
 
 	@Override
 	public Expr constructLogicalImplication(LogicalImplication expr, Expr lhs, Expr rhs) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.IF, lhs, rhs);
 	}
 
 	@Override
 	public Expr constructLogicalIff(LogicalIff expr, Expr lhs, Expr rhs) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.IFF, lhs, rhs);
 	}
 
 	@Override
@@ -424,8 +449,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Expr constructLogicalOr(LogicalOr expr, List<Expr> operands) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.NaryOperator(Expr.NaryOperator.Kind.OR, operands);
 	}
 
 	@Override
@@ -466,8 +490,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Expr constructNotEqual(NotEqual expr, Expr lhs, Expr rhs) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.NEQ, lhs, rhs);
 	}
 
 	@Override
@@ -496,8 +519,19 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Expr constructVariableAccess(VariableAccess expr) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.VariableAccess(expr.getVariableDeclaration().getName().toString());
+	}
+
+	public BoogieFile.Type constructType(WyilFile.Type type) {
+		// FIXME: this should be moved into AbstractTranslator.
+		switch(type.getOpcode()) {
+		case WyilFile.TYPE_bool:
+			return BoogieFile.Type.Bool;
+		case WyilFile.TYPE_int:
+			return BoogieFile.Type.Int;
+		default:
+			throw new IllegalArgumentException("unknown type encoutnered (" + type.getClass().getName() + ")");
+		}
 	}
 
 	@Override
