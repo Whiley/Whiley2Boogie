@@ -11,14 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package wy2boogie.tasks;
+package wyboogie.tasks;
 
 import java.util.List;
 
-import wy2boogie.core.BoogieFile;
-import wy2boogie.core.BoogieFile.Decl;
-import wy2boogie.core.BoogieFile.Expr;
-import wy2boogie.core.BoogieFile.Stmt;
+import wyboogie.core.BoogieFile;
+import wyboogie.core.BoogieFile.Decl;
+import wyboogie.core.BoogieFile.Expr;
+import wyboogie.core.BoogieFile.Stmt;
 import wybs.lang.Build.Meter;
 import wyfs.util.Pair;
 import wyil.lang.WyilFile;

@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package wy2boogie.core;
+package wyboogie.core;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -20,7 +20,7 @@ import java.io.OutputStream;
 import java.math.BigInteger;
 import java.util.List;
 
-import wy2boogie.io.BoogieFilePrinter;
+import wyboogie.io.BoogieFilePrinter;
 import wyfs.lang.Content;
 import wyfs.lang.Path;
 

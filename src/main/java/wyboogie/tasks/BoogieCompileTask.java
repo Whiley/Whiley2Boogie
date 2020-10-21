@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package wy2boogie.tasks;
+package wyboogie.tasks;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -19,8 +19,8 @@ import java.io.PrintWriter;
 import java.util.*;
 import java.util.function.Function;
 
-import wy2boogie.core.BoogieFile;
-import wy2boogie.util.Boogie;
+import wyboogie.core.BoogieFile;
+import wyboogie.util.Boogie;
 import wybs.lang.Build;
 import wybs.lang.Build.Meter;
 import wybs.util.AbstractBuildTask;
@@ -51,10 +51,6 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 
 	public void setVerification(boolean flag) {
 		this.verification = flag;
-	}
-
-	public void setCounterExamples(boolean flag) {
-		throw new UnsupportedOperationException("implement BoogieCompileTask.setCounterExamples()");
 	}
 
 	@Override

@@ -11,10 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package wy2boogie;
+package wyboogie;
 
-import wy2boogie.core.BoogieFile;
-import wy2boogie.tasks.BoogieCompileTask;
 import wybs.lang.Build;
 import wybs.util.AbstractBuildRule;
 import wybs.util.AbstractCompilationUnit.Value;
@@ -30,28 +28,29 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 
+import wyboogie.core.BoogieFile;
+import wyboogie.tasks.BoogieCompileTask;
+
 public class Activator implements Module.Activator {
 
 	public static Trie PKGNAME_CONFIG_OPTION = Trie.fromString("package/name");
 	public static Trie SOURCE_CONFIG_OPTION = Trie.fromString("build/whiley/target");
 	public static Trie TARGET_CONFIG_OPTION = Trie.fromString("build/boogie/target");
 	public static Trie VERIFY_CONFIG_OPTION = Trie.fromString("build/boogie/verify");
-	public static Trie COUNTEREXAMPLE_CONFIG_OPTION = Trie.fromString("build/boogie/counterexamples");
 	private static Value.UTF8 TARGET_DEFAULT = new Value.UTF8("bin".getBytes());
 
 	public static Command.Platform BOOGIE_PLATFORM = new Command.Platform() {
 		//
 		@Override
 		public String getName() {
-			return "boogie";
+			return "boogie2";
 		}
 
 		@Override
 		public Configuration.Schema getConfigurationSchema() {
 			return Configuration.fromArray(
 					Configuration.UNBOUND_STRING(TARGET_CONFIG_OPTION, "Specify location for generated Boogie .bpl files", TARGET_DEFAULT),
-					Configuration.UNBOUND_BOOLEAN(VERIFY_CONFIG_OPTION, "Enable verification of Whiley files using Boogie", new Value.Bool(false)),
-					Configuration.UNBOUND_BOOLEAN(COUNTEREXAMPLE_CONFIG_OPTION, "Enable counterexample generation during verification", new Value.Bool(false)));
+					Configuration.UNBOUND_BOOLEAN(VERIFY_CONFIG_OPTION, "Enable verification of Whiley files using Boogie", new Value.Bool(false)));
 		}
 
 		@Override
@@ -71,8 +70,6 @@ public class Activator implements Module.Activator {
 			Trie target= Trie.fromString(configuration.get(Value.UTF8.class, TARGET_CONFIG_OPTION).unwrap());
 			// Determine whether verification enabled or not
 			boolean verification = configuration.get(Value.Bool.class, VERIFY_CONFIG_OPTION).unwrap();
-			// Determine whether to try and find counterexamples or not
-			boolean counterexamples = configuration.get(Value.Bool.class, COUNTEREXAMPLE_CONFIG_OPTION).unwrap();
 			// Construct the binary root
 			Path.Root binaryRoot = project.getRoot().createRelativeRoot(target);
 			// Initialise the target file being built
@@ -88,7 +85,6 @@ public class Activator implements Module.Activator {
 					BoogieCompileTask task = new BoogieCompileTask(project, binary, matches.get(0));
 					// task.setVerbose();
 					task.setVerification(verification);
-				    task.setCounterExamples(counterexamples);
 					// Submit the task for execution
 					tasks.add(task);
 				}

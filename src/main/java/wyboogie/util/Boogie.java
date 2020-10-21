@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package wy2boogie.util;
+package wyboogie.util;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -23,7 +23,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import wy2boogie.core.BoogieFile;
+import wyboogie.core.BoogieFile;
+import wybs.lang.SyntacticException;
 import wyfs.util.ArrayUtils;
 
 /**
@@ -78,8 +79,10 @@ public class Boogie {
 	 * @return
 	 */
 	public Error[] check(int timeout, String id, BoogieFile boogie) {
+		String filename = null;
 		try {
-			String filename = createTemporaryFile(id, ".bpl", boogie.getBytes());
+			// Create the temporary file.
+			filename = createTemporaryFile(id, ".bpl", boogie.getBytes());
 			// ===================================================
 			// Construct command
 			// ===================================================
@@ -109,20 +112,24 @@ public class Boogie {
 				boolean success = child.waitFor(timeout, TimeUnit.MILLISECONDS);
 				byte[] stdout = readInputStream(input);
 				byte[] stderr = readInputStream(error);
+				System.out.println("STDOUT: " + new String(stdout));
+				System.out.println("STDERR: " + new String(stdout));
 				if(success && child.exitValue() == 0) {
 					return parseErrors(new String(stdout));
 				}
-				System.out.println("STDOUT: " + new String(stdout));
 			} finally {
 				// make sure child process is destroyed.
 				child.destroy();
+			}
+		} catch(IOException e) {
+			throw new RuntimeException(e.getMessage(), e);
+		} catch(InterruptedException e) {
+			throw new RuntimeException(e.getMessage(),e);
+		} finally {
+			if(filename != null) {
 				// delete the temporary file
 				new File(filename).delete();
 			}
-		} catch(IOException e) {
-
-		} catch(InterruptedException e) {
-
 		}
 		return null;
 	}

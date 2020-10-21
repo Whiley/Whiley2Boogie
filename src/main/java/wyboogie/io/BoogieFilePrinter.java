@@ -11,12 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package wy2boogie.io;
+package wyboogie.io;
 
 import java.io.OutputStream;
 import java.io.PrintWriter;
 
-import wy2boogie.core.BoogieFile;
+import wyboogie.core.BoogieFile;
 
 public class BoogieFilePrinter {
 	private final PrintWriter out;

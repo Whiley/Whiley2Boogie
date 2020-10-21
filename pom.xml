@@ -6,7 +6,7 @@
   <!-- ============================================== -->
 
   <groupId>org.whiley</groupId>
-  <artifactId>wy2boogie</artifactId>
+  <artifactId>wyboogie</artifactId>
   <version>0.1.0</version>
   <packaging>jar</packaging>
 

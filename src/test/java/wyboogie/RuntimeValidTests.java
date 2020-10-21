@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package wy2boogie;
+package wyboogie;
 
 import static org.junit.Assert.fail;
 
@@ -34,6 +34,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
+import wyboogie.core.BoogieFile;
+import wyboogie.tasks.BoogieCompileTask;
 import wybs.lang.Build;
 import wybs.lang.SyntacticException;
 import wybs.util.Logger;
@@ -47,8 +49,6 @@ import wyfs.lang.Path;
 import wyfs.util.DirectoryRoot;
 import wyfs.util.Pair;
 import wyil.lang.WyilFile;
-import wy2boogie.core.BoogieFile;
-import wy2boogie.tasks.BoogieCompileTask;
 
 /**
  * Run through all valid test cases with verification enabled. Since every test
@@ -93,7 +93,7 @@ public class RuntimeValidTests {
 
  	protected void runTest(String name) throws IOException {
 		// Compile to Java Bytecode
-		Pair<Boolean, String> p = compileWhiley2JavaScript(
+		Pair<Boolean, String> p = compileWhiley2Boogie(
 				WHILEY_SRC_DIR, // location of source directory
 				name); // name of test to compile
 
@@ -103,7 +103,6 @@ public class RuntimeValidTests {
 		if (!r) {
 			fail("Test failed to compile!");
 		}
-		// Execute the generated JavaScript Program.
 	}
 
  	/**
@@ -113,7 +112,7 @@ public class RuntimeValidTests {
 
  	/**
 	 * Run the Whiley Compiler with the given list of arguments to produce a
-	 * JavaScript source file. This will then need to be separately compiled.
+	 * Boogie source file. This will then need to be checked separately.
 	 *
 	 * @param arg
 	 *            --- list of command-line arguments to provide to the Whiley
@@ -121,7 +120,7 @@ public class RuntimeValidTests {
 	 * @return
 	 * @throws IOException
 	 */
-	public static Pair<Boolean,String> compileWhiley2JavaScript(String whileydir, String arg) throws IOException {
+	public static Pair<Boolean,String> compileWhiley2Boogie(String whileydir, String arg) throws IOException {
 		ByteArrayOutputStream syserr = new ByteArrayOutputStream();
 		ByteArrayOutputStream sysout = new ByteArrayOutputStream();
 		//
@@ -148,11 +147,10 @@ public class RuntimeValidTests {
 			});
 			// Construct an empty BoogieFile
 			Path.Entry<BoogieFile> bgTarget = root.create(wyilTarget.id(), BoogieFile.ContentType);
-			// NOTE: Java Nashorn supports ES5 only?
 			BoogieFile bgFile = new BoogieFile();
-			// Write out the JavaScriptFile
+			// Write out the Boogie file
 			bgTarget.write(bgFile);
-			// Add WyIL => JavaScript Build Rule
+			// Add WyIL => Boogie Build Rule
 			project.add(new Build.Rule() {
 				@Override
 				public void apply(Collection<Build.Task> tasks) throws IOException {
