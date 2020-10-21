@@ -18,6 +18,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 import wyboogie.io.BoogieFilePrinter;
@@ -68,6 +70,10 @@ public class BoogieFile {
 	 */
 	private List<Decl> declarations;
 
+	public BoogieFile() {
+		this.declarations = new ArrayList<>();
+	}
+
 	public List<Decl> getDeclarations() {
 		return declarations;
 	}
@@ -83,7 +89,8 @@ public class BoogieFile {
 	// =========================================================================
 
 	public interface Decl {
-		public class Axiom {
+
+		public static class Axiom {
 			private final Expr operand;
 
 			public Axiom(Expr operand) {
@@ -94,6 +101,48 @@ public class BoogieFile {
 				return operand;
 			}
 		}
+
+		public static class Procedure implements Decl {
+			private final String name;
+			private final List<Parameter> parameters;
+			private final List<Parameter> returns;
+			private final Stmt.Block body;
+
+			public Procedure(String name, List<Parameter> parameters, List<Parameter> returns, Stmt.Block body) {
+				this.name = name;
+				this.parameters = new ArrayList<>(parameters);
+				this.returns = new ArrayList<>(parameters);
+				this.body = body;
+			}
+
+			public String getName() {
+				return name;
+			}
+
+			public List<Parameter> getParmeters() {
+				return parameters;
+			}
+
+			public List<Parameter> getReturns() {
+				return returns;
+			}
+
+			public Stmt.Block getBody() {
+				return body;
+			}
+		}
+
+		public static class Parameter {
+			private final String name;
+
+			public Parameter(String name) {
+				this.name = name;
+			}
+
+			public String getName() {
+				return name;
+			}
+		}
 	};
 
 	// =========================================================================
@@ -101,7 +150,37 @@ public class BoogieFile {
 	// =========================================================================
 
 	public interface Stmt {
+		public static class Block implements Stmt {
+			private final List<Stmt> stmts;
 
+			public Block(Collection<Stmt> stmts) {
+				this.stmts = new ArrayList<>(stmts);
+			}
+
+			public int size() {
+				return stmts.size();
+			}
+
+			public Stmt get(int i) {
+				return stmts.get(i);
+			}
+
+			public List<Stmt> getAll() {
+				return stmts;
+			}
+		}
+
+		public static class Assert implements Stmt {
+			private final Expr condition;
+
+			public Assert(Expr condition) {
+				this.condition = condition;
+			}
+
+			public Expr getCondition() {
+				return condition;
+			}
+		}
 	}
 
 	// =========================================================================
@@ -109,37 +188,36 @@ public class BoogieFile {
 	// =========================================================================
 
 	public interface Expr extends Stmt {
-	}
 
+		public static class Constant implements Expr {
+			public final static Constant NULL = new Constant((String) null);
+			public final static Constant TRUE = new Constant(true);
+			public final static Constant FALSE = new Constant(false);
 
-	public static class Constant implements Expr {
-		public final static Constant NULL = new Constant((String) null);
-		public final static Constant TRUE = new Constant(true);
-		public final static Constant FALSE = new Constant(false);
+			private Object value;
 
-		private Object value;
+			public Constant(boolean v) {
+				this.value = v;
+			}
+			public Constant(byte v) {
+				this.value = v;
+			}
+			public Constant(long v) {
+				this.value = v;
+			}
+			public Constant(double v) {
+				this.value = v;
+			}
+			public Constant(BigInteger v) {
+				this.value = v;
+			}
+			public Constant(String v) {
+				this.value = v;
+			}
 
-		public Constant(boolean v) {
-			this.value = v;
-		}
-		public Constant(byte v) {
-			this.value = v;
-		}
-		public Constant(long v) {
-			this.value = v;
-		}
-		public Constant(double v) {
-			this.value = v;
-		}
-		public Constant(BigInteger v) {
-			this.value = v;
-		}
-		public Constant(String v) {
-			this.value = v;
-		}
-
-		public Object getValue() {
-			return value;
+			public Object getValue() {
+				return value;
+			}
 		}
 	}
 }

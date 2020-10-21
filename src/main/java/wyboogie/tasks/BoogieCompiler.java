@@ -13,6 +13,7 @@
 // limitations under the License.
 package wyboogie.tasks;
 
+import java.util.Collections;
 import java.util.List;
 
 import wyboogie.core.BoogieFile;
@@ -93,8 +94,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Decl constructMethod(Method d, List<Expr> precondition, List<Expr> postcondition, Stmt body) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		String mangled = d.getName().toString();
+		List<Decl.Parameter> parameters = Collections.EMPTY_LIST;
+		List<Decl.Parameter> returns = Collections.EMPTY_LIST;
+		return new Decl.Procedure(mangled, parameters, returns, (Stmt.Block) body);
 	}
 
 	@Override
@@ -123,8 +126,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Stmt constructBlock(Block stmt, List<Stmt> stmts) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Stmt.Block(stmts);
 	}
 
 	@Override
@@ -189,8 +191,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Stmt constructSkip(Skip stmt) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Stmt.Assert(new Expr.Constant(true));
 	}
 
 	@Override
