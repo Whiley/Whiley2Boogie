@@ -76,7 +76,7 @@ public class BoogieFilePrinter {
 			writeExpression(ensures.get(i));
 			out.println(";");
 		}
-		writeBlock(indent,d.getBody());
+		writeBlock(indent, d.getBody(), false);
 	}
 
 	private void writeParameters(List<Decl.Parameter> parameters) {
@@ -104,7 +104,11 @@ public class BoogieFilePrinter {
 		} else if(s instanceof Stmt.Assume) {
 			writeAssume(indent,(Stmt.Assume) s);
 		} else if(s instanceof Stmt.Block) {
-			writeBlock(indent,(Stmt.Block)s);
+			writeBlock(indent, (Stmt.Block) s, false);
+		} else if(s instanceof Stmt.IfElse) {
+			writeIfElse(indent,(Stmt.IfElse)s);
+		} else if(s instanceof Stmt.Return) {
+			writeReturn(indent,(Stmt.Return)s);
 		} else if(s instanceof Stmt.Sequence) {
 			writeSequence(indent,(Stmt.Sequence)s);
 		} else if(s instanceof Stmt.VariableDeclarations) {
@@ -134,8 +138,10 @@ public class BoogieFilePrinter {
 		writeExpression(s.getCondition());
 		out.println(";");
 	}
-	private void writeBlock(int indent, Stmt.Block s) {
-		tab(indent);
+	private void writeBlock(int indent, Stmt.Block s, boolean inline) {
+		if(!inline) {
+			tab(indent);
+		}
 		out.println("{");
 		indent = indent + 1;
 		for(int i=0;i!=s.size();++i) {
@@ -143,6 +149,21 @@ public class BoogieFilePrinter {
 		}
 		tab(indent - 1);
 		out.println("}");
+	}
+	private void writeIfElse(int indent, Stmt.IfElse s) {
+		tab(indent);
+		out.print("if(");
+		writeExpression(s.getCondition());
+		out.print(") ");
+		writeBlock(indent,s.getTrueBranch(),true);
+		if(s.getFalseBranch() != null) {
+			out.print(" else ");
+			writeBlock(indent,s.getFalseBranch(),true);
+		}
+	}
+	private void writeReturn(int indent, Stmt.Return s) {
+		tab(indent);
+		out.println("return;");
 	}
 	private void writeSequence(int indent, Stmt.Sequence s) {
 		for(int i=0;i!=s.size();++i) {
@@ -161,7 +182,7 @@ public class BoogieFilePrinter {
 			writeExpression(invariant.get(i));
 			out.println(";");
 		}
-		writeBlock(indent, s.getBody());
+		writeBlock(indent, s.getBody(), false);
 	}
 	private void writeVariableDeclarations(int indent, Stmt.VariableDeclarations s) {
 		tab(indent);

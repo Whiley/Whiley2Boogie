@@ -81,6 +81,7 @@ public class Boogie {
 	public Error[] check(int timeout, String id, BoogieFile boogie) {
 		String filename = null;
 		try {
+			System.err.println(new String(boogie.getBytes()));
 			// Create the temporary file.
 			filename = createTemporaryFile(id, ".bpl", boogie.getBytes());
 			// ===================================================

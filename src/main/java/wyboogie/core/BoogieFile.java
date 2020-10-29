@@ -231,7 +231,29 @@ public class BoogieFile {
 				return rhs;
 			}
 		}
+		public static class IfElse implements Stmt {
+			private final Expr condition;
+			private final Stmt.Block trueBranch;
+			private final Stmt.Block falseBranch;
 
+			public IfElse(Expr condition, Stmt.Block trueBranch, Stmt.Block falseBranch) {
+				this.condition = condition;
+				this.trueBranch = trueBranch;
+				this.falseBranch = falseBranch;
+			}
+
+			public Expr getCondition() {
+				return condition;
+			}
+
+			public Stmt.Block getTrueBranch() {
+				return trueBranch;
+			}
+			
+			public Stmt.Block getFalseBranch() {
+				return falseBranch;
+			}
+		}
 		public static class While implements Stmt {
 			private final Expr condition;
 			private final List<Expr> invariant;
@@ -254,6 +276,9 @@ public class BoogieFile {
 			public Stmt.Block getBody() {
 				return body;
 			}
+		}
+		public static class Return implements Stmt {
+			
 		}
 		public static class Sequence implements Stmt {
 			private final List<Stmt> stmts;

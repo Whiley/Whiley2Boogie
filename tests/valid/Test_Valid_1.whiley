@@ -1,8 +1,7 @@
-public method main(int x)
+public method main(int x) -> int
 requires  x >= 0:
     //
-    int y = 1
+    if x >= 0:
+        x = x - 1
     //
-    y = y - 1
-    //
-    assert y > 0
+    return x

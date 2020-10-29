@@ -160,14 +160,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Stmt constructDebug(Debug stmt, Expr operand) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Stmt.Assert(new Expr.Constant(true));
 	}
 
 	@Override
 	public Stmt constructDoWhile(DoWhile stmt, Stmt body, Expr condition, List<Expr> invariant) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		Stmt loop = new Stmt.While(condition, invariant, (Stmt.Block) body);
+		return new Stmt.Sequence(body, loop);
 	}
 
 	@Override
@@ -183,8 +182,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Stmt constructIfElse(IfElse stmt, Expr condition, Stmt trueBranch, Stmt falseBranch) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Stmt.IfElse(condition, (Stmt.Block) trueBranch, (Stmt.Block) falseBranch);
 	}
 
 	@Override
@@ -208,14 +206,28 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Stmt constructNamedBlock(NamedBlock stmt, List<Stmt> stmts) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Stmt.Block(stmts);
 	}
 
 	@Override
 	public Stmt constructReturn(Return stmt, Expr ret) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		if (ret != null) {
+			// Identify enclosing function or method to figure out names of return
+			// variables.
+			Callable enclosing = stmt.getAncestor(WyilFile.Decl.FunctionOrMethod.class);
+			WyilFile.Tuple<Variable> returns = enclosing.getReturns();
+			if (returns.size() != 1) {
+				// TODO: implement this!
+				throw new IllegalArgumentException("Missing support for multiple returns");
+			} else {
+				String rv = returns.get(0).getName().get();
+				Stmt s1 = new Stmt.Assignment(new Expr.VariableAccess(rv), ret);
+				Stmt s2 = new Stmt.Return();
+				return new Stmt.Sequence(s1, s2);
+			}
+		} else {
+			return new Stmt.Return();
+		}
 	}
 
 	@Override
