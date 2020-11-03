@@ -163,6 +163,18 @@ public class BoogieFile {
 			}
 		}
 
+		public static class Variable extends Parameter implements Decl {
+			private final Expr invariant;
+			
+			public Variable(String name, Type type, Expr initialiser) {
+				super(name, type);
+				this.invariant = initialiser;
+			}
+			
+			public Expr getInitialiser() {
+				return invariant;
+			}			
+		}
 	};
 
 	// =========================================================================

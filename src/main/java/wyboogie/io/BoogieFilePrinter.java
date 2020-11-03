@@ -42,6 +42,8 @@ public class BoogieFilePrinter {
 			writeAxiom(indent, (Decl.Axiom) d);
 		} else if(d instanceof Decl.Procedure) {
 			writeProcedure(indent,(Decl.Procedure) d);
+		} else if(d instanceof Decl.Variable) {
+			writeVariable(indent,(Decl.Variable) d);
 		} else {
 			throw new IllegalArgumentException("unknown declaration encountered (" + d.getClass().getName() + ")");
 		}
@@ -96,6 +98,13 @@ public class BoogieFilePrinter {
 		writeType(parameter.getType());
 	}
 
+	private void writeVariable(int indent, Decl.Variable d) {
+		out.print("const ");
+		out.print(d.getName());
+		out.print(" : ");
+		out.print(d.getType());		
+	}
+	
 	private void writeStmt(int indent, Stmt s) {
 		if(s instanceof Stmt.Assignment) {
 			writeAssignment(indent,(Stmt.Assignment) s);

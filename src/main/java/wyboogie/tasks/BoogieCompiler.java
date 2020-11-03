@@ -81,8 +81,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Decl constructStaticVariable(StaticVariable d, Expr initialiser) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		// FIXME: mangling required here.
+		BoogieFile.Type type = constructType(d.getType());
+		return new Decl.Constant(d.getName().get(), type);
 	}
 
 	@Override
@@ -544,8 +545,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Expr constructStaticVariableAccess(StaticVariableAccess expr) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		// FIXME: name mangling required here
+		return new Expr.VariableAccess(expr.getLink().getName().toString().toString());
 	}
 
 	@Override
