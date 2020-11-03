@@ -103,6 +103,10 @@ public class BoogieFilePrinter {
 			writeAssert(indent,(Stmt.Assert) s);
 		} else if(s instanceof Stmt.Assume) {
 			writeAssume(indent,(Stmt.Assume) s);
+		} else if(s instanceof Stmt.Goto) {
+			writeGoto(indent,(Stmt.Goto)s);
+		} else if(s instanceof Stmt.Label) {
+			writeLabel(indent,(Stmt.Label)s);
 		} else if(s instanceof Stmt.Block) {
 			writeBlock(indent, (Stmt.Block) s, false);
 		} else if(s instanceof Stmt.IfElse) {
@@ -149,6 +153,17 @@ public class BoogieFilePrinter {
 		}
 		tab(indent - 1);
 		out.println("}");
+	}
+	private void writeGoto(int indent, Stmt.Goto s) {
+		tab(indent);
+		out.print("goto ");
+		out.print(s.getLabel());
+		out.println(";");
+	}
+	private void writeLabel(int indent, Stmt.Label s) {
+		tab(indent);
+		out.print(s.getLabel());
+		out.println(":");
 	}
 	private void writeIfElse(int indent, Stmt.IfElse s) {
 		tab(indent);

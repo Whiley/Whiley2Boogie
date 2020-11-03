@@ -231,6 +231,28 @@ public class BoogieFile {
 				return rhs;
 			}
 		}
+		public static class Goto implements Stmt {
+			private final String label;
+			
+			public Goto(String label) {
+				this.label = label;
+			}
+			
+			public String getLabel() {
+				return label;
+			}
+		}
+		public static class Label implements Stmt {
+			private final String label;
+			
+			public Label(String label) {
+				this.label = label;
+			}
+			
+			public String getLabel() {
+				return label;
+			}
+		}
 		public static class IfElse implements Stmt {
 			private final Expr condition;
 			private final Stmt.Block trueBranch;
@@ -302,7 +324,7 @@ public class BoogieFile {
 			public List<Stmt> getAll() {
 				return stmts;
 			}
-		}
+		}		
 		public static class VariableDeclarations implements Stmt {
 			private final List<String> names;
 			private final Type type;

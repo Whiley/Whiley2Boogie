@@ -31,6 +31,7 @@ import wyil.lang.WyilFile.Decl.*;
 import wyil.lang.WyilFile.Expr.*;
 import wyil.lang.WyilFile.Stmt.*;
 import wyil.util.AbstractTranslator;
+import wyil.util.AbstractVisitor;
 import wyil.util.IncrementalSubtypingEnvironment;
 import wyil.util.Subtyping;
 import wyil.util.TypeMangler;
@@ -148,14 +149,16 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Stmt constructBreak(Break stmt) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		WyilFile.Stmt loop = getEnclosingLoop(stmt);
+		String label = "BREAK_" + loop.getIndex();
+		return new Stmt.Goto(label);
 	}
 
 	@Override
 	public Stmt constructContinue(Continue stmt) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		WyilFile.Stmt loop = getEnclosingLoop(stmt);
+		String label = "CONTINUE_" + loop.getIndex();
+		return new Stmt.Goto(label);
 	}
 
 	@Override
@@ -243,7 +246,23 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Stmt constructWhile(While stmt, Expr condition, List<Expr> invariant, Stmt body) {
-		return new Stmt.While(condition, invariant, (Stmt.Block) body);
+		boolean needContinueLabel = containsContinueOrBreak(stmt, false);
+		boolean needBreakLabel = containsContinueOrBreak(stmt, true);
+		Stmt.While s = new Stmt.While(condition, invariant, (Stmt.Block) body);
+		// Handle need for continue / break
+		if (needContinueLabel && needBreakLabel) {
+			Stmt.Label continueLabel = new Stmt.Label("CONTINUE_" + stmt.getIndex());
+			Stmt.Label breakLabel = new Stmt.Label("BREAK_" + stmt.getIndex());
+			return new Stmt.Sequence(continueLabel, s, breakLabel);
+		} else if (needContinueLabel) {
+			Stmt.Label continueLabel = new Stmt.Label("CONTINUE_" + stmt.getIndex());
+			return new Stmt.Sequence(continueLabel, s);
+		} else if (needBreakLabel) {
+			Stmt.Label breakLabel = new Stmt.Label("BREAK_" + stmt.getIndex());
+			return new Stmt.Sequence(s, breakLabel);
+		} else {
+			return s;
+		}
 	}
 
 	@Override
@@ -550,5 +569,95 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 	public Stmt applyImplicitCoercion(wyil.lang.WyilFile.Type target, wyil.lang.WyilFile.Type source, Stmt expr) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
+	}
+	
+	
+	/**
+	 * Check whether a given (loop) statement contains a break or continue (which is
+	 * not contained within another). Observer that only the outermost loop counts,
+	 * and we should terminate the search for any inner loops. To do this, we use a
+	 * simple visitor over the abstract tree.
+	 * 
+	 * @param s
+	 * @param isBreak
+	 * @return
+	 */
+	private boolean containsContinueOrBreak(WyilFile.Stmt s, boolean isBreak) {
+		//
+		return new AbstractVisitor(meter) {
+			public boolean result = false;
+
+			public boolean run() {
+				super.visitStatement(s);
+				return result;
+			}
+
+			@Override
+			public void visitBreak(WyilFile.Stmt.Break stmt) {
+				if (isBreak) {
+					result = true;
+				}
+			}
+
+			@Override
+			public void visitContinue(WyilFile.Stmt.Continue stmt) {
+				if (!isBreak) {
+					result = true;
+				}
+			}
+
+			@Override
+			public void visitDoWhile(WyilFile.Stmt.DoWhile stmt) {
+				if (stmt != s) {
+					return;
+				} else {
+					super.visitDoWhile(stmt);
+				}
+			}
+
+			@Override
+			public void visitFor(WyilFile.Stmt.For stmt) {
+				if (stmt != s) {
+					return;
+				} else {
+					super.visitFor(stmt);
+				}
+			}
+
+			@Override
+			public void visitLambda(WyilFile.Decl.Lambda stmt) {
+				if (stmt != s) {
+					return;
+				} else {
+					super.visitLambda(stmt);
+				}
+			}
+
+			@Override
+			public void visitWhile(WyilFile.Stmt.While stmt) {
+				if (stmt != s) {
+					return;
+				} else {
+					super.visitWhile(stmt);
+				}
+			}
+		}.run();
+	}
+	
+	/**
+	 * Find the enclosing loop of a given statement. This could be deprecated in the
+	 * future using a better query mechanism for ASTs in <code>WyilFile</code>.
+	 * 
+	 * @param stmt
+	 * @return
+	 */
+	private static WyilFile.Stmt getEnclosingLoop(WyilFile.Stmt stmt) {
+		if (stmt == null) {
+			throw new IllegalArgumentException("no enclosing loop found");
+		} else if (stmt instanceof WyilFile.Stmt.Loop || stmt instanceof WyilFile.Stmt.For) {
+			return stmt;
+		} else {
+			return getEnclosingLoop(stmt.getParent(WyilFile.Stmt.class));
+		}
 	}
 }
