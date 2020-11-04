@@ -110,8 +110,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Decl constructFunction(Function d, List<Expr> precondition, List<Expr> postcondition, Stmt body) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		String name = d.getName().toString();
+		List<Decl.Parameter> parameters = constructParameters(d.getParameters());
+		List<Decl.Parameter> returns = constructParameters(d.getReturns());
+		return new Decl.Procedure(name, parameters, returns, precondition, postcondition, (Stmt.Block) body);
 	}
 
 	@Override
