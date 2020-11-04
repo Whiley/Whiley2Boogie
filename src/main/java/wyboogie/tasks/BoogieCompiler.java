@@ -13,6 +13,7 @@
 // limitations under the License.
 package wyboogie.tasks;
 
+import java.lang.reflect.Modifier;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -81,9 +82,21 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Decl constructStaticVariable(StaticVariable d, Expr initialiser) {
-		// FIXME: mangling required here.
 		BoogieFile.Type type = constructType(d.getType());
-		return new Decl.Constant(d.getName().get(), type);
+		// FIXME: mangling required here.
+		String name = d.getName().get();
+		//
+		if (d.getModifiers().match(WyilFile.Modifier.Final.class) != null) {
+			// Final static variables declared as constants with corresponding axiom
+			Decl d1 = new Decl.Constant(name, type);
+			Decl d2 = new Decl.Axiom(
+					new Expr.BinaryOperator(Expr.BinaryOperator.Kind.EQ, new Expr.VariableAccess(name), initialiser));
+			return new Decl.Sequence(d1,d2);
+		} else if(initialiser == null) {
+			return new Decl.Variable(name, type, null);
+		} else {
+			throw new IllegalArgumentException("non-final static variables with initialisers not supported");
+		}
 	}
 
 	@Override

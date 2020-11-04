@@ -91,7 +91,7 @@ public class BoogieFile {
 
 	public interface Decl {
 
-		public static class Axiom {
+		public static class Axiom implements Decl {
 			private final Expr operand;
 
 			public Axiom(Expr operand) {
@@ -163,6 +163,34 @@ public class BoogieFile {
 			}
 		}
 
+		public static class Constant extends Parameter implements Decl {
+			public Constant(String name, Type type) {
+				super(name, type);
+			}			
+		}
+		public static class Sequence implements Decl {
+			private final List<Decl> decls;
+
+			public Sequence(Decl... decls) {
+				this(Arrays.asList(decls));
+			}
+
+			public Sequence(Collection<Decl> decls) {
+				this.decls = new ArrayList<>(decls);
+			}
+
+			public int size() {
+				return decls.size();
+			}
+
+			public Decl get(int i) {
+				return decls.get(i);
+			}
+
+			public List<Decl> getAll() {
+				return decls;
+			}
+		}		
 		public static class Variable extends Parameter implements Decl {
 			private final Expr invariant;
 			
@@ -171,7 +199,7 @@ public class BoogieFile {
 				this.invariant = initialiser;
 			}
 			
-			public Expr getInitialiser() {
+			public Expr getInvariant() {
 				return invariant;
 			}			
 		}
