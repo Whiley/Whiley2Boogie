@@ -318,6 +318,12 @@ public class BoogieFilePrinter {
 			out.print("bool");
 		} else if(t == Type.Int) {
 			out.print("int");
+		} else if(t instanceof Type.Map) {
+			Type.Map m = (Type.Map) t;
+			out.print("[");
+			writeType(m.getKey());
+			out.print("]");
+			writeType(m.getValue());
 		} else {
 			throw new IllegalArgumentException("unknown type encountered (" + t.getClass().getName() + ")");
 		}

@@ -535,5 +535,23 @@ public class BoogieFile {
 		public static final Type Bool = new Type() {};
 		public static final Type Int = new Type() {};
 		public static final Type Real = new Type() {};
+		
+		public static class Map implements Type {
+			private final Type key;
+			private final Type value;
+
+			public Map(Type key, Type value) {
+				this.key = key;
+				this.value = value;
+			}
+
+			public Type getKey() {
+				return key;
+			}
+
+			public Type getValue() {
+				return value;
+			}
+		}
 	}
 }

@@ -1,3 +1,2 @@
-function f(int x) -> (int r):
-    x = x + 1
-    return x
+function f(int[] xs) -> (int r):
+    return 0

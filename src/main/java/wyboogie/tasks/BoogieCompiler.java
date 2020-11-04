@@ -110,6 +110,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Decl constructFunction(Function d, List<Expr> precondition, List<Expr> postcondition, Stmt body) {
+		// TODO: implement name mangling
 		String name = d.getName().toString();
 		List<Decl.Parameter> parameters = constructParameters(d.getParameters());
 		List<Decl.Parameter> returns = constructParameters(d.getReturns());
@@ -580,11 +581,18 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 			return BoogieFile.Type.Bool;
 		case WyilFile.TYPE_int:
 			return BoogieFile.Type.Int;
+		case WyilFile.TYPE_array:
+			return constructArrayType((WyilFile.Type.Array) type);
 		default:
 			throw new IllegalArgumentException("unknown type encoutnered (" + type.getClass().getName() + ")");
 		}
 	}
 
+	public BoogieFile.Type constructArrayType(WyilFile.Type.Array type) {
+		BoogieFile.Type t = constructType(type.getElement());
+		return new BoogieFile.Type.Map(BoogieFile.Type.Int, t);
+	}
+	
 	@Override
 	public Stmt applyImplicitCoercion(wyil.lang.WyilFile.Type target, wyil.lang.WyilFile.Type source, Stmt expr) {
 		// TODO Auto-generated method stub
