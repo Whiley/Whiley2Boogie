@@ -100,9 +100,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 	}
 
 	@Override
-	public Decl constructProperty(Property decl, List<Expr> clauses) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+	public Decl constructProperty(Property d, List<Expr> clauses) {
+		// TODO: implement name mangling
+		String name = d.getName().toString();
+		List<Decl.Parameter> parameters = constructParameters(d.getParameters());
+		Expr body = new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, clauses);
+		return new Decl.Function(name, parameters, BoogieFile.Type.Bool, body);
 	}
 
 	@Override
@@ -113,10 +116,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Decl constructMethod(Method d, List<Expr> precondition, List<Expr> postcondition, Stmt body) {
-		String mangled = d.getName().toString();
+		// TODO: implement name mangling
+		String name = d.getName().toString();
 		List<Decl.Parameter> parameters = constructParameters(d.getParameters());
 		List<Decl.Parameter> returns = constructParameters(d.getReturns());
-		return new Decl.Procedure(mangled, parameters, returns, precondition, postcondition, (Stmt.Block) body);
+		return new Decl.Procedure(name, parameters, returns, precondition, postcondition, (Stmt.Block) body);
 	}
 
 	public List<Decl.Parameter> constructParameters(WyilFile.Tuple<WyilFile.Decl.Variable> params) {

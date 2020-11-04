@@ -42,6 +42,8 @@ public class BoogieFilePrinter {
 			writeAxiom(indent, (Decl.Axiom) d);
 		} else if(d instanceof Decl.Constant) {
 			writeConstant(indent,(Decl.Constant) d);
+		} else if(d instanceof Decl.Function) {
+			writeFunction(indent,(Decl.Function) d);
 		} else if(d instanceof Decl.Procedure) {
 			writeProcedure(indent,(Decl.Procedure) d);
 		} else if(d instanceof Decl.Sequence) {
@@ -67,6 +69,26 @@ public class BoogieFilePrinter {
 		out.print(" : ");
 		writeType(d.getType());
 		out.println(";");
+	}
+	
+	private void writeFunction(int indent, Decl.Function d) {
+		tab(indent);
+		out.print("procedure ");
+		out.print(d.getName());
+		writeParameters(d.getParmeters());
+		out.print(" returns (");
+		writeType(d.getReturns());
+		out.print(")");
+		if(d.getBody() != null) {
+			out.println(" {");
+			tab(indent+1);
+			writeExpression(d.getBody());
+			out.println();
+			tab(indent);
+			out.println("}");
+		} else {
+			out.println(";");	
+		}
 	}
 	
 	private void writeProcedure(int indent, Decl.Procedure d) {

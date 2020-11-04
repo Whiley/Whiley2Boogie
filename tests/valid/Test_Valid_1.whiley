@@ -1,4 +1,1 @@
-final int sx = 0
-
-method m() -> int:
-    return sx
+property nat(int x) where x >= 0

@@ -102,6 +102,37 @@ public class BoogieFile {
 				return operand;
 			}
 		}
+		
+		public static class Function implements Decl {
+			private final String name;
+			private final List<Parameter> parameters;
+			private final Type returns;
+			private final Expr body;
+			
+			public Function(String name, List<Parameter> parameters, Type returns, Expr body) {
+				this.name = name;
+				this.parameters = parameters;
+				this.returns = returns;
+				this.body = body;
+			}
+			
+
+			public String getName() {
+				return name;
+			}
+
+			public List<Parameter> getParmeters() {
+				return parameters;
+			}
+
+			public Type getReturns() {
+				return returns;
+			}
+
+			public Expr getBody() {
+				return body;
+			}
+		}
 
 		public static class Procedure implements Decl {
 			private final String name;
