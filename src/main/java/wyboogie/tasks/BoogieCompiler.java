@@ -13,17 +13,14 @@
 // limitations under the License.
 package wyboogie.tasks;
 
-import java.lang.reflect.Modifier;
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 import wyboogie.core.BoogieFile;
 import wyboogie.core.BoogieFile.Decl;
 import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.Stmt;
-import wyboogie.core.BoogieFile.Expr.Constant;
 import wyboogie.core.BoogieFile.LVal;
 import wybs.lang.Build.Meter;
 import wyfs.util.Pair;
@@ -300,8 +297,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Expr constructArrayAccessLVal(ArrayAccess expr, Expr source, Expr index) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.Access(source,index);
 	}
 
 	@Override
@@ -335,14 +331,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Expr constructArrayAccess(ArrayAccess expr, Expr source, Expr index) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.Access(source,index);
 	}
 
 	@Override
 	public Expr constructArrayLength(ArrayLength expr, Expr source) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.Invoke("length",source);
 	}
 
 	@Override
@@ -518,20 +512,41 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Expr constructExistentialQuantifier(ExistentialQuantifier expr, List<Pair<Expr, Expr>> ranges, Expr body) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		WyilFile.Tuple<StaticVariable> params = expr.getParameters();
+		List<Decl.Parameter> ps = new ArrayList<>();
+		List<Expr> clauses = new ArrayList<>();
+		for (int i = 0; i != params.size(); ++i) {
+			Pair<Expr,Expr> ith = ranges.get(i);
+			String name = params.get(i).getName().get();
+			ps.add(new Decl.Parameter(name, BoogieFile.Type.Int));
+			clauses.add(new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LTEQ, ith.first(), new Expr.VariableAccess(name)));
+			clauses.add(new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LT, new Expr.VariableAccess(name), ith.second()));
+		}
+		clauses.add(body);
+		return new Expr.Quantifier(false, new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, clauses), ps);
 	}
 
 	@Override
 	public Expr constructUniversalQuantifier(UniversalQuantifier expr, List<Pair<Expr, Expr>> ranges, Expr body) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		WyilFile.Tuple<StaticVariable> params = expr.getParameters();
+		List<Decl.Parameter> ps = new ArrayList<>();
+		List<Expr> clauses = new ArrayList<>();
+		for (int i = 0; i != params.size(); ++i) {
+			Pair<Expr,Expr> ith = ranges.get(i);
+			String name = params.get(i).getName().get();
+			ps.add(new Decl.Parameter(name, BoogieFile.Type.Int));
+			clauses.add(new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LTEQ, ith.first(), new Expr.VariableAccess(name)));
+			clauses.add(new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LT, new Expr.VariableAccess(name), ith.second()));
+		}
+		Expr lhs = new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, clauses);
+		return new Expr.Quantifier(true, new Expr.BinaryOperator(Expr.BinaryOperator.Kind.IF, lhs, body), ps);
 	}
 
 	@Override
 	public Expr constructInvoke(Invoke expr, List<Expr> arguments) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		// FIXME: mangling required here
+		String name = expr.getLink().getName().toString();
+		return new Expr.Invoke(name,arguments);
 	}
 
 	@Override

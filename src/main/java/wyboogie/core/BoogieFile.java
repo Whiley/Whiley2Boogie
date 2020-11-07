@@ -444,6 +444,24 @@ public class BoogieFile {
 
 	public interface Expr extends Stmt {
 
+		public static class Access implements LVal {
+			private final Expr source;
+			private final Expr index;
+
+			public Access(Expr source, Expr index) {
+				this.source = source;
+				this.index = index;
+			}
+
+			public Expr getSource() {
+				return source;
+			}
+
+			public Expr getIndex() {
+				return index;
+			}
+		}
+
 		public static class Constant implements Expr {
 			public final static Constant NULL = new Constant((String) null);
 			public final static Constant TRUE = new Constant(true);
@@ -503,6 +521,29 @@ public class BoogieFile {
 			}
 		}
 
+		public static class Invoke implements Expr {
+			private final String name;
+			private final List<Expr> arguments;
+
+			public Invoke(String name, Expr... arguments) {
+				this.name = name;
+				this.arguments = Arrays.asList(arguments);
+			}
+
+			public Invoke(String name, Collection<Expr> arguments) {
+				this.name = name;
+				this.arguments = new ArrayList<>(arguments);
+			}
+
+			public String getName() {
+				return name;
+			}
+
+			public List<Expr> getArguments() {
+				return arguments;
+			}
+		}
+
 		public static class UnaryOperator implements Expr {
 
 		}
@@ -533,6 +574,12 @@ public class BoogieFile {
 			private final boolean universal;
 			private final List<Decl.Parameter> parameters;
 			private final Expr body;
+
+			public Quantifier(boolean universal, Expr body, Collection<Decl.Parameter> parameters) {
+				this.universal = universal;
+				this.parameters = new ArrayList<>(parameters);
+				this.body = body;
+			}
 
 			public Quantifier(boolean universal, Expr body, Decl.Parameter... parameters) {
 				this.universal = universal;
