@@ -48,6 +48,8 @@ public class BoogieFilePrinter {
 			writeProcedure(indent,(Decl.Procedure) d);
 		} else if(d instanceof Decl.Sequence) {
 			writeSequence(indent,(Decl.Sequence) d);
+		} else if(d instanceof Decl.TypeSynonym) {
+			writeTypeSynonym(indent,(Decl.TypeSynonym) d);
 		} else if(d instanceof Decl.Variable) {
 			writeVariable(indent,(Decl.Variable) d);
 		} else {
@@ -70,7 +72,7 @@ public class BoogieFilePrinter {
 		writeType(d.getType());
 		out.println(";");
 	}
-	
+
 	private void writeFunction(int indent, Decl.Function d) {
 		tab(indent);
 		out.print("procedure ");
@@ -87,10 +89,10 @@ public class BoogieFilePrinter {
 			tab(indent);
 			out.println("}");
 		} else {
-			out.println(";");	
+			out.println(";");
 		}
 	}
-	
+
 	private void writeProcedure(int indent, Decl.Procedure d) {
 		tab(indent);
 		out.print("procedure ");
@@ -137,6 +139,15 @@ public class BoogieFilePrinter {
 			writeDecl(indent,s.get(i));
 		}
 	}
+	private void writeTypeSynonym(int indent, Decl.TypeSynonym d) {
+		out.print("type ");
+		out.print(d.getName());
+		if(d.getSynonym() != null) {
+			out.print(" = ");
+			writeType(d.getSynonym());
+		}
+		out.println(";");
+	}
 	private void writeVariable(int indent, Decl.Variable d) {
 		out.print("const ");
 		out.print(d.getName());
@@ -148,7 +159,7 @@ public class BoogieFilePrinter {
 		}
 		out.println(";");
 	}
-	
+
 	private void writeStmt(int indent, Stmt s) {
 		if(s instanceof Stmt.Assignment) {
 			writeAssignment(indent,(Stmt.Assignment) s);
@@ -283,6 +294,8 @@ public class BoogieFilePrinter {
 			writeConstant((Expr.Constant) e);
 		} else if(e instanceof Expr.NaryOperator) {
 			writeNaryOperator((Expr.NaryOperator) e);
+		} else if(e instanceof Expr.Quantifier) {
+			writeQuantifier((Expr.Quantifier) e);
 		} else if(e instanceof Expr.VariableAccess) {
 			writeVariableAccess((Expr.VariableAccess) e);
 		} else {
@@ -309,6 +322,27 @@ public class BoogieFilePrinter {
 			writeExpressionWithBraces(operands.get(i));
 		}
 	}
+	private void writeQuantifier(Expr.Quantifier e) {
+		out.print("(");
+		List<Decl.Parameter> params = e.getParameters();
+		if(e.isUniversal()) {
+			out.print("forall ");
+		} else {
+			out.print("exists ");
+		}
+		for(int i=0;i!=params.size();++i) {
+			Decl.Parameter ith = params.get(i);
+			if(i != 0) {
+				out.print(",");
+			}
+			out.print(ith.getName());
+			out.print(":");
+			writeType(ith.getType());
+		}
+		out.print(" :: ");
+		writeExpression(e.getBody());
+		out.print(")");
+	}
 	private void writeVariableAccess(Expr.VariableAccess e) {
 		out.write(e.getVariable());
 	}
@@ -318,6 +352,9 @@ public class BoogieFilePrinter {
 			out.print("bool");
 		} else if(t == Type.Int) {
 			out.print("int");
+		} else if(t instanceof Type.Synonym) {
+			Type.Synonym s = (Type.Synonym) t;
+			out.print(s.getSynonym());
 		} else if(t instanceof Type.Map) {
 			Type.Map m = (Type.Map) t;
 			out.print("[");

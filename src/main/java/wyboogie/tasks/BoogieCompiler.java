@@ -76,8 +76,20 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Decl constructType(Type d, List<Expr> invariant) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		// FIXME: mangling required here
+		WyilFile.Decl.Variable var = d.getVariableDeclaration();
+		String name = d.getName().get();
+		Decl t = new Decl.TypeSynonym(name, constructType(var.getType()));
+		//
+		if(invariant.isEmpty()) {
+			return t;
+		} else {
+			// FIXME: this translation is not valid.
+			Decl.Parameter p = new Decl.Parameter(var.getName().get(), new BoogieFile.Type.Synonym(name));
+			Expr inv = new Expr.Quantifier(true, new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, invariant), p);
+			Decl a = new Decl.Axiom(inv);
+			return new Decl.Sequence(t,a);
+		}
 	}
 
 	@Override
@@ -581,6 +593,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 			return BoogieFile.Type.Bool;
 		case WyilFile.TYPE_int:
 			return BoogieFile.Type.Int;
+		case WyilFile.TYPE_nominal:
+			return constructNominalType((WyilFile.Type.Nominal) type);
 		case WyilFile.TYPE_array:
 			return constructArrayType((WyilFile.Type.Array) type);
 		default:
@@ -592,20 +606,26 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 		BoogieFile.Type t = constructType(type.getElement());
 		return new BoogieFile.Type.Map(BoogieFile.Type.Int, t);
 	}
-	
+
+	public BoogieFile.Type constructNominalType(WyilFile.Type.Nominal type) {
+		// FIXME: mangling required here
+		String name = type.getLink().getName().toString();
+		return new BoogieFile.Type.Synonym(name);
+	}
+
 	@Override
 	public Stmt applyImplicitCoercion(wyil.lang.WyilFile.Type target, wyil.lang.WyilFile.Type source, Stmt expr) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
-	
-	
+
+
 	/**
 	 * Check whether a given (loop) statement contains a break or continue (which is
 	 * not contained within another). Observer that only the outermost loop counts,
 	 * and we should terminate the search for any inner loops. To do this, we use a
 	 * simple visitor over the abstract tree.
-	 * 
+	 *
 	 * @param s
 	 * @param isBreak
 	 * @return
@@ -671,11 +691,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 			}
 		}.run();
 	}
-	
+
 	/**
 	 * Find the enclosing loop of a given statement. This could be deprecated in the
 	 * future using a better query mechanism for ASTs in <code>WyilFile</code>.
-	 * 
+	 *
 	 * @param stmt
 	 * @return
 	 */

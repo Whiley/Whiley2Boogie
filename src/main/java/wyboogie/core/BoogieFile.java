@@ -102,20 +102,26 @@ public class BoogieFile {
 				return operand;
 			}
 		}
-		
+
+		public static class Constant extends Parameter implements Decl {
+			public Constant(String name, Type type) {
+				super(name, type);
+			}
+		}
+
 		public static class Function implements Decl {
 			private final String name;
 			private final List<Parameter> parameters;
 			private final Type returns;
 			private final Expr body;
-			
+
 			public Function(String name, List<Parameter> parameters, Type returns, Expr body) {
 				this.name = name;
 				this.parameters = parameters;
 				this.returns = returns;
 				this.body = body;
 			}
-			
+
 
 			public String getName() {
 				return name;
@@ -193,12 +199,6 @@ public class BoogieFile {
 				return type;
 			}
 		}
-
-		public static class Constant extends Parameter implements Decl {
-			public Constant(String name, Type type) {
-				super(name, type);
-			}			
-		}
 		public static class Sequence implements Decl {
 			private final List<Decl> decls;
 
@@ -221,18 +221,37 @@ public class BoogieFile {
 			public List<Decl> getAll() {
 				return decls;
 			}
-		}		
+		}
+
+		public static class TypeSynonym implements Decl {
+			private final String name;
+			private final Type synonym;
+
+			public TypeSynonym(String name, Type synonym) {
+				this.name = name;
+				this.synonym = synonym;
+			}
+
+			public String getName() {
+				return name;
+			}
+
+			public Type getSynonym() {
+				return synonym;
+			}
+		}
+
 		public static class Variable extends Parameter implements Decl {
 			private final Expr invariant;
-			
+
 			public Variable(String name, Type type, Expr initialiser) {
 				super(name, type);
 				this.invariant = initialiser;
 			}
-			
+
 			public Expr getInvariant() {
 				return invariant;
-			}			
+			}
 		}
 	};
 
@@ -304,22 +323,22 @@ public class BoogieFile {
 		}
 		public static class Goto implements Stmt {
 			private final String label;
-			
+
 			public Goto(String label) {
 				this.label = label;
 			}
-			
+
 			public String getLabel() {
 				return label;
 			}
 		}
 		public static class Label implements Stmt {
 			private final String label;
-			
+
 			public Label(String label) {
 				this.label = label;
 			}
-			
+
 			public String getLabel() {
 				return label;
 			}
@@ -342,7 +361,7 @@ public class BoogieFile {
 			public Stmt.Block getTrueBranch() {
 				return trueBranch;
 			}
-			
+
 			public Stmt.Block getFalseBranch() {
 				return falseBranch;
 			}
@@ -371,7 +390,7 @@ public class BoogieFile {
 			}
 		}
 		public static class Return implements Stmt {
-			
+
 		}
 		public static class Sequence implements Stmt {
 			private final List<Stmt> stmts;
@@ -395,7 +414,7 @@ public class BoogieFile {
 			public List<Stmt> getAll() {
 				return stmts;
 			}
-		}		
+		}
 		public static class VariableDeclarations implements Stmt {
 			private final List<String> names;
 			private final Type type;
@@ -510,6 +529,30 @@ public class BoogieFile {
 			}
 		}
 
+		public static class Quantifier implements Expr {
+			private final boolean universal;
+			private final List<Decl.Parameter> parameters;
+			private final Expr body;
+
+			public Quantifier(boolean universal, Expr body, Decl.Parameter... parameters) {
+				this.universal = universal;
+				this.parameters = Arrays.asList(parameters);
+				this.body = body;
+			}
+
+			public boolean isUniversal() {
+				return universal;
+			}
+
+			public List<Decl.Parameter> getParameters() {
+				return parameters;
+			}
+
+			public Expr getBody() {
+				return body;
+			}
+		}
+
 		public static class VariableAccess implements LVal {
 			private final String variable;
 
@@ -535,7 +578,19 @@ public class BoogieFile {
 		public static final Type Bool = new Type() {};
 		public static final Type Int = new Type() {};
 		public static final Type Real = new Type() {};
-		
+
+		public static class Synonym implements Type {
+			private final String name;
+
+			public Synonym(String name) {
+				this.name = name;
+			}
+
+			public String getSynonym() {
+				return name;
+			}
+		}
+
 		public static class Map implements Type {
 			private final Type key;
 			private final Type value;
