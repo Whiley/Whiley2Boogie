@@ -34,7 +34,7 @@ import wyil.util.IncrementalSubtypingEnvironment;
 import wyil.util.Subtyping;
 import wyil.util.TypeMangler;
 
-public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
+public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	/**
 	 * Provides a standard mechanism for writing out type mangles.
 	 */
@@ -78,14 +78,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 		String name = d.getName().get();
 		Decl t = new Decl.TypeSynonym(name, constructType(var.getType()));
 		//
-		if(invariant.isEmpty()) {
+		if (invariant.isEmpty()) {
 			return t;
 		} else {
 			// FIXME: this translation is not valid.
 			Decl.Parameter p = new Decl.Parameter(var.getName().get(), new BoogieFile.Type.Synonym(name));
 			Expr inv = new Expr.Quantifier(true, new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, invariant), p);
 			Decl a = new Decl.Axiom(inv);
-			return new Decl.Sequence(t,a);
+			return new Decl.Sequence(t, a);
 		}
 	}
 
@@ -100,8 +100,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 			Decl d1 = new Decl.Constant(name, type);
 			Decl d2 = new Decl.Axiom(
 					new Expr.BinaryOperator(Expr.BinaryOperator.Kind.EQ, new Expr.VariableAccess(name), initialiser));
-			return new Decl.Sequence(d1,d2);
-		} else if(initialiser == null) {
+			return new Decl.Sequence(d1, d2);
+		} else if (initialiser == null) {
 			return new Decl.Variable(name, type, null);
 		} else {
 			throw new IllegalArgumentException("non-final static variables with initialisers not supported");
@@ -137,7 +137,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	public List<Decl.Parameter> constructParameters(WyilFile.Tuple<WyilFile.Decl.Variable> params) {
 		ArrayList<Decl.Parameter> ps = new ArrayList<>();
-		for(int i=0;i!=params.size();++i) {
+		for (int i = 0; i != params.size(); ++i) {
 			ps.add(constructParameter(params.get(i)));
 		}
 		return ps;
@@ -161,7 +161,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Stmt constructAssign(Assign stmt, List<Expr> lvals, List<Expr> rvals) {
-		if(lvals.size() != 1 || rvals.size() != 1) {
+		if (lvals.size() != 1 || rvals.size() != 1) {
 			throw new UnsupportedOperationException("Multiple assignments not supported (yet)");
 		}
 		return new Stmt.Assignment((LVal) lvals.get(0), rvals.get(0));
@@ -209,8 +209,24 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Stmt constructFor(For stmt, Pair<Expr, Expr> range, List<Expr> invariant, Stmt body) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		// Determine name of loop variable
+		String name = stmt.getVariable().getName().get();
+		Expr.VariableAccess var = new Expr.VariableAccess(name);
+		// Extract loop contents so it can be appended later
+		ArrayList<Stmt> loopBody = new ArrayList<>(((Stmt.Block)body).getAll());
+		// Declare index variable
+		// FIXME: could include invariant on this declaration to ensure within range
+		Stmt.VariableDeclarations decl = new Stmt.VariableDeclarations(name, BoogieFile.Type.Int);
+		// Initialise index variable with first value from range
+		Stmt.Assignment init = new Stmt.Assignment(var, range.first());
+		Expr condition = new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LT, var, range.second());
+		// Add variable increment for completeness
+		loopBody.add(new Stmt.Assignment(var,
+				new Expr.BinaryOperator(Expr.BinaryOperator.Kind.ADD, var, new Expr.Constant(1))));
+		// Construct the loop
+		Stmt.While loop = new Stmt.While(condition, invariant, new Stmt.Block(loopBody));
+		// Done.
+		return new Stmt.Sequence(decl, init, loop);
 	}
 
 	@Override
@@ -221,7 +237,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 	@Override
 	public Stmt constructInitialiser(Initialiser stmt, Expr initialiser) {
 		WyilFile.Tuple<Variable> vars = stmt.getVariables();
-		if(vars.size() != 1) {
+		if (vars.size() != 1) {
 			throw new UnsupportedOperationException("Multiple initialisers not supported (yet)");
 		}
 		String name = vars.get(0).getName().toString();
@@ -229,11 +245,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 		//
 		Stmt.VariableDeclarations decl = new Stmt.VariableDeclarations(name, type);
 		//
-		if(initialiser == null) {
+		if (initialiser == null) {
 			return decl;
 		} else {
-			Stmt.Assignment init = new Stmt.Assignment(new Expr.VariableAccess(name),initialiser);
-			return new Stmt.Sequence(decl,init);
+			Stmt.Assignment init = new Stmt.Assignment(new Expr.VariableAccess(name), initialiser);
+			return new Stmt.Sequence(decl, init);
 		}
 	}
 
@@ -297,7 +313,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Expr constructArrayAccessLVal(ArrayAccess expr, Expr source, Expr index) {
-		return new Expr.Access(source,index);
+		return new Expr.Access(source, index);
 	}
 
 	@Override
@@ -331,12 +347,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	@Override
 	public Expr constructArrayAccess(ArrayAccess expr, Expr source, Expr index) {
-		return new Expr.Access(source,index);
+		return new Expr.Access(source, index);
 	}
 
 	@Override
 	public Expr constructArrayLength(ArrayLength expr, Expr source) {
-		return new Expr.Invoke("length",source);
+		return new Expr.Invoke("length", source);
 	}
 
 	@Override
@@ -396,7 +412,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 	@Override
 	public Expr constructConstant(WyilFile.Expr.Constant expr) {
 		WyilFile.Value v = expr.getValue();
-		switch(v.getOpcode()) {
+		switch (v.getOpcode()) {
 		case WyilFile.ITEM_bool: {
 			boolean b = ((WyilFile.Value.Bool) v).get();
 			return b ? Expr.Constant.TRUE : Expr.Constant.FALSE;
@@ -516,11 +532,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 		List<Decl.Parameter> ps = new ArrayList<>();
 		List<Expr> clauses = new ArrayList<>();
 		for (int i = 0; i != params.size(); ++i) {
-			Pair<Expr,Expr> ith = ranges.get(i);
+			Pair<Expr, Expr> ith = ranges.get(i);
 			String name = params.get(i).getName().get();
 			ps.add(new Decl.Parameter(name, BoogieFile.Type.Int));
-			clauses.add(new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LTEQ, ith.first(), new Expr.VariableAccess(name)));
-			clauses.add(new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LT, new Expr.VariableAccess(name), ith.second()));
+			clauses.add(
+					new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LTEQ, ith.first(), new Expr.VariableAccess(name)));
+			clauses.add(
+					new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LT, new Expr.VariableAccess(name), ith.second()));
 		}
 		clauses.add(body);
 		return new Expr.Quantifier(false, new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, clauses), ps);
@@ -532,11 +550,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 		List<Decl.Parameter> ps = new ArrayList<>();
 		List<Expr> clauses = new ArrayList<>();
 		for (int i = 0; i != params.size(); ++i) {
-			Pair<Expr,Expr> ith = ranges.get(i);
+			Pair<Expr, Expr> ith = ranges.get(i);
 			String name = params.get(i).getName().get();
 			ps.add(new Decl.Parameter(name, BoogieFile.Type.Int));
-			clauses.add(new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LTEQ, ith.first(), new Expr.VariableAccess(name)));
-			clauses.add(new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LT, new Expr.VariableAccess(name), ith.second()));
+			clauses.add(
+					new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LTEQ, ith.first(), new Expr.VariableAccess(name)));
+			clauses.add(
+					new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LT, new Expr.VariableAccess(name), ith.second()));
 		}
 		Expr lhs = new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, clauses);
 		return new Expr.Quantifier(true, new Expr.BinaryOperator(Expr.BinaryOperator.Kind.IF, lhs, body), ps);
@@ -546,7 +566,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 	public Expr constructInvoke(Invoke expr, List<Expr> arguments) {
 		// FIXME: mangling required here
 		String name = expr.getLink().getName().toString();
-		return new Expr.Invoke(name,arguments);
+		return new Expr.Invoke(name, arguments);
 	}
 
 	@Override
@@ -603,7 +623,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 
 	public BoogieFile.Type constructType(WyilFile.Type type) {
 		// FIXME: this should be moved into AbstractTranslator.
-		switch(type.getOpcode()) {
+		switch (type.getOpcode()) {
 		case WyilFile.TYPE_bool:
 			return BoogieFile.Type.Bool;
 		case WyilFile.TYPE_int:
@@ -633,7 +653,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl,Stmt,Expr> {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
-
 
 	/**
 	 * Check whether a given (loop) statement contains a break or continue (which is

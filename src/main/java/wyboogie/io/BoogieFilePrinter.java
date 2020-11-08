@@ -296,6 +296,8 @@ public class BoogieFilePrinter {
 			writeNaryOperator((Expr.NaryOperator) e);
 		} else if(e instanceof Expr.Quantifier) {
 			writeQuantifier((Expr.Quantifier) e);
+		} else if(e instanceof Expr.Invoke) {
+			writeInvoke((Expr.Invoke) e);
 		} else if(e instanceof Expr.VariableAccess) {
 			writeVariableAccess((Expr.VariableAccess) e);
 		} else {
@@ -321,6 +323,19 @@ public class BoogieFilePrinter {
 			}
 			writeExpressionWithBraces(operands.get(i));
 		}
+	}
+	private void writeInvoke(Expr.Invoke e) {
+		out.print(e.getName());
+		out.print("(");
+		boolean firstTime = true;
+		for(Expr a : e.getArguments()) {
+			if(!firstTime) {
+				out.print(",");
+			}
+			firstTime = false;
+			writeExpression(a);
+		}
+		out.print(")");
 	}
 	private void writeQuantifier(Expr.Quantifier e) {
 		out.print("(");
