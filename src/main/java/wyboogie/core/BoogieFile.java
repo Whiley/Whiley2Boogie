@@ -321,17 +321,27 @@ public class BoogieFile {
 				return rhs;
 			}
 		}
+		
 		public static class Goto implements Stmt {
-			private final String label;
+			private final List<String> labels;
 
-			public Goto(String label) {
-				this.label = label;
+			public Goto(String... labels) {
+				this.labels = Arrays.asList(labels);
+			}
+			
+			public int size() {
+				return labels.size();
 			}
 
-			public String getLabel() {
-				return label;
+			public String get(int i) {
+				return labels.get(i);
+			}
+			
+			public List<String> getLabels() {
+				return labels;
 			}
 		}
+		
 		public static class Label implements Stmt {
 			private final String label;
 
@@ -545,7 +555,25 @@ public class BoogieFile {
 		}
 
 		public static class UnaryOperator implements Expr {
+			public enum Kind {
+				NEG
+			}
 
+			private final Kind kind;
+			private final Expr operand;
+			
+			public UnaryOperator(Kind kind, Expr operand) {
+				this.kind = kind;
+				this.operand = operand;
+			}
+			
+			public Kind getKind() {
+				return kind;
+			}
+			
+			public Expr getOperand() {
+				return operand;
+			}
 		}
 
 		public static class NaryOperator implements Expr {

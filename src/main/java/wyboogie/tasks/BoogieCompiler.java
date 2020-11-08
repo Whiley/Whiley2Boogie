@@ -21,6 +21,8 @@ import wyboogie.core.BoogieFile;
 import wyboogie.core.BoogieFile.Decl;
 import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.Stmt;
+import wyboogie.core.BoogieFile.Stmt.Goto;
+import wyboogie.core.BoogieFile.Stmt.Sequence;
 import wyboogie.core.BoogieFile.LVal;
 import wybs.lang.Build.Meter;
 import wyfs.util.Pair;
@@ -286,8 +288,30 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Stmt constructSwitch(Switch stmt, Expr condition, List<Pair<List<Expr>, Stmt>> cases) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		ArrayList<Stmt> stmts = new ArrayList<>();
+		String breakLabel = "SWITCH_" + stmt.getIndex() + "_BREAK";
+		// Construct case labels
+		String[] labels = new String[cases.size()];
+		for (int i = 0; i != labels.length; ++i) {
+			labels[i] = "SWITCH_" + stmt.getIndex() + "_" + i;
+		}
+		// Construct non-deterministic goto
+		stmts.add(new Stmt.Goto(labels));
+		// Construct cases
+		for (int i = 0; i != labels.length; ++i) {
+			Pair<List<Expr>, Stmt> ith = cases.get(i);
+			List<Expr> ith_first = ith.first();
+			ArrayList<Expr> labs = new ArrayList<>();
+			for (int j = 0; j != ith_first.size(); ++j) {
+				labs.add(new Expr.BinaryOperator(Expr.BinaryOperator.Kind.EQ, condition, ith_first.get(j)));
+			}
+			stmts.add(new Stmt.Label(labels[i]));
+			stmts.add(new Stmt.Assume(new Expr.NaryOperator(Expr.NaryOperator.Kind.OR, labs)));
+			stmts.add(ith.second());
+			stmts.add(new Stmt.Goto(breakLabel));
+		}
+		//
+		return new Stmt.Sequence(stmts);
 	}
 
 	@Override
@@ -465,8 +489,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructIntegerNegation(IntegerNegation expr, Expr operand) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.UnaryOperator(Expr.UnaryOperator.Kind.NEG, operand);
 	}
 
 	@Override

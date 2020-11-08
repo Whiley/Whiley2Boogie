@@ -221,7 +221,12 @@ public class BoogieFilePrinter {
 	private void writeGoto(int indent, Stmt.Goto s) {
 		tab(indent);
 		out.print("goto ");
-		out.print(s.getLabel());
+		for(int i=0;i!=s.size();++i) {
+			if(i != 0) {
+				out.print(", ");
+			}
+			out.print(s.get(i));	
+		}
 		out.println(";");
 	}
 	private void writeLabel(int indent, Stmt.Label s) {
@@ -298,6 +303,8 @@ public class BoogieFilePrinter {
 			writeQuantifier((Expr.Quantifier) e);
 		} else if(e instanceof Expr.Invoke) {
 			writeInvoke((Expr.Invoke) e);
+		} else if(e instanceof Expr.UnaryOperator) {
+			writeUnaryOperator((Expr.UnaryOperator) e);
 		} else if(e instanceof Expr.VariableAccess) {
 			writeVariableAccess((Expr.VariableAccess) e);
 		} else {
@@ -357,6 +364,11 @@ public class BoogieFilePrinter {
 		out.print(" :: ");
 		writeExpression(e.getBody());
 		out.print(")");
+	}
+
+	private void writeUnaryOperator(Expr.UnaryOperator e) {
+		out.print("-");
+		writeExpression(e.getOperand());
 	}
 	private void writeVariableAccess(Expr.VariableAccess e) {
 		out.write(e.getVariable());
