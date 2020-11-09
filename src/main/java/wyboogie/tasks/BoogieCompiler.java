@@ -15,14 +15,15 @@ package wyboogie.tasks;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import wyboogie.core.BoogieFile;
 import wyboogie.core.BoogieFile.Decl;
 import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.Stmt;
-import wyboogie.core.BoogieFile.Stmt.Goto;
-import wyboogie.core.BoogieFile.Stmt.Sequence;
 import wyboogie.core.BoogieFile.LVal;
 import wybs.lang.Build.Meter;
 import wyfs.util.Pair;
@@ -56,6 +57,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	public void visitModule(WyilFile wf) {
+		// Add general axioms
+		boogieFile.getDeclarations().addAll(constructAxioms(wf));		
 		// Translate local units
 		for (Unit unit : wf.getModule().getUnits()) {
 			for (WyilFile.Decl decl : unit.getDeclarations()) {
@@ -337,7 +340,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructArrayAccessLVal(ArrayAccess expr, Expr source, Expr index) {
-		return new Expr.Access(source, index);
+		return new Expr.DictionaryAccess(source, index);
 	}
 
 	@Override
@@ -371,7 +374,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructArrayAccess(ArrayAccess expr, Expr source, Expr index) {
-		return new Expr.Access(source, index);
+		return new Expr.DictionaryAccess(source, index);
 	}
 
 	@Override
@@ -617,14 +620,23 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructRecordAccess(RecordAccess expr, Expr source) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		Expr field = var("$" + expr.getField().get());
+		return new Expr.DictionaryAccess(source, field);
 	}
 
 	@Override
 	public Expr constructRecordInitialiser(RecordInitialiser expr, List<Expr> operands) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		WyilFile.Tuple<WyilFile.Identifier> fields = expr.getFields();
+		//
+		Expr rec = new Expr.VariableAccess("WRecord#Empty");
+		//
+		for (int i = 0; i != operands.size(); ++i) {
+			Expr ith = operands.get(i);
+			String field = "$" + fields.get(i).get();
+			rec = new Expr.DictionaryUpdate(rec, new Expr.VariableAccess(field), ith);
+		}
+		//
+		return rec;
 	}
 
 	@Override
@@ -655,6 +667,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			return constructNominalType((WyilFile.Type.Nominal) type);
 		case WyilFile.TYPE_array:
 			return constructArrayType((WyilFile.Type.Array) type);
+		case WyilFile.TYPE_record:
+			return constructRecordType((WyilFile.Type.Record) type);
 		default:
 			throw new IllegalArgumentException("unknown type encoutnered (" + type.getClass().getName() + ")");
 		}
@@ -662,9 +676,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	public BoogieFile.Type constructArrayType(WyilFile.Type.Array type) {
 		BoogieFile.Type t = constructType(type.getElement());
-		return new BoogieFile.Type.Map(BoogieFile.Type.Int, t);
+		return new BoogieFile.Type.Dictionary(BoogieFile.Type.Int, t);
 	}
-
+	
+	public BoogieFile.Type constructRecordType(WyilFile.Type.Record type) {
+		return new BoogieFile.Type.Dictionary(WField, WVal);
+	}
+	
 	public BoogieFile.Type constructNominalType(WyilFile.Type.Nominal type) {
 		// FIXME: mangling required here
 		String name = type.getLink().getName().toString();
@@ -675,6 +693,69 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	public Stmt applyImplicitCoercion(wyil.lang.WyilFile.Type target, wyil.lang.WyilFile.Type source, Stmt expr) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
+	}
+	
+	/**
+	 * Generate declarations for all axioms used within the Boogie translation.
+	 * 
+	 * @return
+	 */
+	private List<Decl> constructAxioms(WyilFile wf) {
+		ArrayList<Decl> axioms = new ArrayList<>();
+		//
+		axioms.add(new Decl.LineComment("=== Begin Preamble ==="));
+		// Define the top-level Whiley value which contains all others.
+		axioms.add(new Decl.TypeSynonym("WVal", null));
+		// Define the top-level Whiley type which contains all others.
+		axioms.add(new Decl.TypeSynonym("WType", null));
+		// Add void constant
+		axioms.add(new Decl.Constant(true, "WVoid", WVal));
+		// Add all int axioms
+		axioms.addAll(constructIntAxioms(wf));
+		// Add all record axioms
+		axioms.addAll(constructRecordAxioms(wf));
+		//
+		axioms.add(new Decl.LineComment("=== End Preamble ==="));
+		// Done
+		return axioms;
+	}
+	
+	/**
+	 * Construct axioms and functions relevant to integer types.
+	 * 
+	 * @param wf
+	 * @return
+	 */
+	private List<Decl> constructIntAxioms(WyilFile wf) {
+		Decl header = new Decl.LineComment("Integers");
+		Decl.Function fromInt = fun("fromInt", BoogieFile.Type.Int, WVal);
+		return Arrays.asList(header,fromInt);
+	}
+	
+	/**
+	 * Construct axioms relevant to record types. An import issue is to determine
+	 * the full set of field names which are in play.
+	 * 
+	 * @return
+	 */
+	private List<Decl> constructRecordAxioms(WyilFile wf) {
+		ArrayList<Decl> decls = new ArrayList<>();
+		decls.add(new Decl.LineComment("Fields"));
+		// Defines the type of all fields
+		decls.add(new Decl.TypeSynonym("WField", null));
+		// Add all known field names
+		for(String field : determineFieldNames(wf)) {
+			String name = "$" + field;
+			decls.add(new Decl.Constant(true, name, WField));
+		}
+		// 
+		decls.add(new Decl.LineComment("Records"));
+		// Defines the empty record (i.e. the base from which all other records are
+		// constructed).
+		decls.add(new Decl.Constant(true, "WRecord#Empty", WFieldWTypes));
+		decls.add(new Decl.Axiom(forall("f", WField, eq(get(var("WRecord#Empty"), var("f")), var("WVoid")))));
+		// Done
+		return decls;
 	}
 
 	/**
@@ -764,5 +845,58 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		} else {
 			return getEnclosingLoop(stmt.getParent(WyilFile.Stmt.class));
 		}
+	}
+	
+	/**
+	 * Determine the set of all field names used within a given WyilFile. This is
+	 * necessary as we must enumerate field names in order to use them. To achieve
+	 * this, we recurse the AST looking for all record types.
+	 * 
+	 * @param wf
+	 * @return
+	 */
+	private Set<String> determineFieldNames(WyilFile wf) {
+		Set<String> names = new HashSet<>();
+		//
+		for (Unit unit : wf.getModule().getUnits()) {
+			//
+			new AbstractVisitor(meter) {
+				public void visitTypeRecord(WyilFile.Type.Record t) {
+					// Continue visiting children
+					super.visitTypeRecord(t);
+					// Add all field names
+					for (WyilFile.Type.Field f : t.getFields()) {
+						names.add(f.getName().get());
+					}
+				}
+			}.visitUnit(unit);
+
+		}
+		return names;
+	}
+	
+	public static final BoogieFile.Type WVal = new BoogieFile.Type.Synonym("WVal");
+	public static final BoogieFile.Type WField = new BoogieFile.Type.Synonym("WField");
+	public static final BoogieFile.Type WType = new BoogieFile.Type.Synonym("WType");
+	public static final BoogieFile.Type WFieldWTypes = new BoogieFile.Type.Dictionary(WField, WVal);
+	
+	public static Expr.Quantifier forall(String name, BoogieFile.Type type, Expr body) {
+		return new Expr.Quantifier(true, body, new Decl.Parameter(name, type));
+	}
+	
+	public static Decl.Function fun(String name, BoogieFile.Type parameter, BoogieFile.Type returns) {		
+		return new Decl.Function(name, new Decl.Parameter(null, parameter), returns);
+	}
+	
+	public static Expr.BinaryOperator eq(Expr lhs, Expr rhs) {
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.EQ, lhs, rhs);
+	}
+	
+	public static Expr.DictionaryAccess get(Expr src, Expr index) {
+		return new Expr.DictionaryAccess(src, index);
+	}
+	
+	public static Expr.VariableAccess var(String name) {
+		return new Expr.VariableAccess(name);
 	}
 }

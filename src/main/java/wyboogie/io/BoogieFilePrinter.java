@@ -44,6 +44,8 @@ public class BoogieFilePrinter {
 			writeConstant(indent,(Decl.Constant) d);
 		} else if(d instanceof Decl.Function) {
 			writeFunction(indent,(Decl.Function) d);
+		} else if(d instanceof Decl.LineComment) {
+			writeLineComment(indent,(Decl.LineComment) d);
 		} else if(d instanceof Decl.Procedure) {
 			writeProcedure(indent,(Decl.Procedure) d);
 		} else if(d instanceof Decl.Sequence) {
@@ -67,6 +69,9 @@ public class BoogieFilePrinter {
 	private void writeConstant(int indent, Decl.Constant d) {
 		tab(indent);
 		out.print("const ");
+		if(d.isUnique()) {
+			out.print("unique ");
+		}
 		out.print(d.getName());
 		out.print(" : ");
 		writeType(d.getType());
@@ -75,7 +80,7 @@ public class BoogieFilePrinter {
 
 	private void writeFunction(int indent, Decl.Function d) {
 		tab(indent);
-		out.print("procedure ");
+		out.print("function ");
 		out.print(d.getName());
 		writeParameters(d.getParmeters());
 		out.print(" returns (");
@@ -93,6 +98,11 @@ public class BoogieFilePrinter {
 		}
 	}
 
+	private void writeLineComment(int indent, Decl.LineComment d) {
+		tab(indent);
+		out.println("// " + d.getMessage());
+	}
+	
 	private void writeProcedure(int indent, Decl.Procedure d) {
 		tab(indent);
 		out.print("procedure ");
@@ -130,8 +140,10 @@ public class BoogieFilePrinter {
 	}
 
 	private void writeParameter(Decl.Parameter parameter) {
-		out.print(parameter.getName());
-		out.print(" : ");
+		if (parameter.getName() != null) {
+			out.print(parameter.getName());
+			out.print(" : ");
+		}
 		writeType(parameter.getType());
 	}
 	private void writeSequence(int indent, Decl.Sequence s) {
@@ -293,7 +305,11 @@ public class BoogieFilePrinter {
 	}
 
 	private void writeExpression(Expr e) {
-		if(e instanceof Expr.BinaryOperator) {
+		if(e instanceof Expr.DictionaryAccess) {
+			writeDictionaryAccess((Expr.DictionaryAccess) e);
+		} else if(e instanceof Expr.DictionaryUpdate) {
+			writeDictionaryUpdate((Expr.DictionaryUpdate) e);
+		} else if(e instanceof Expr.BinaryOperator) {
 			writeBinaryOperator((Expr.BinaryOperator) e);
 		} else if(e instanceof Expr.Constant) {
 			writeConstant((Expr.Constant) e);
@@ -321,6 +337,23 @@ public class BoogieFilePrinter {
 	private void writeConstant(Expr.Constant e) {
 		out.write(e.getValue().toString());
 	}
+	
+	private void writeDictionaryAccess(Expr.DictionaryAccess e) {
+		writeExpression(e.getSource());
+		out.print("[");
+		writeExpression(e.getIndex());
+		out.print("]");
+	}
+	
+	private void writeDictionaryUpdate(Expr.DictionaryUpdate e) {
+		writeExpression(e.getSource());
+		out.print("[");
+		writeExpression(e.getIndex());
+		out.print(":=");
+		writeExpression(e.getValue());
+		out.print("]");
+	}
+	
 	private void writeNaryOperator(Expr.NaryOperator e) {
 		List<Expr> operands = e.getOperands();
 		//
@@ -382,8 +415,8 @@ public class BoogieFilePrinter {
 		} else if(t instanceof Type.Synonym) {
 			Type.Synonym s = (Type.Synonym) t;
 			out.print(s.getSynonym());
-		} else if(t instanceof Type.Map) {
-			Type.Map m = (Type.Map) t;
+		} else if(t instanceof Type.Dictionary) {
+			Type.Dictionary m = (Type.Dictionary) t;
 			out.print("[");
 			writeType(m.getKey());
 			out.print("]");

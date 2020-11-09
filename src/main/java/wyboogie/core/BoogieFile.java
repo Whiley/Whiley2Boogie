@@ -103,9 +103,31 @@ public class BoogieFile {
 			}
 		}
 
+		public static class LineComment implements Decl {
+			private final String message;
+
+			public LineComment(String message) {
+				this.message = message;
+			}
+
+			public String getMessage() {
+				return message;
+			}
+		}
+		
 		public static class Constant extends Parameter implements Decl {
+			private final boolean unique;
+			
 			public Constant(String name, Type type) {
 				super(name, type);
+				this.unique = false;
+			}
+			public Constant(boolean unique, String name, Type type) {
+				super(name, type);
+				this.unique = unique;
+			}			
+			public boolean isUnique() {
+				return unique;
 			}
 		}
 
@@ -115,6 +137,14 @@ public class BoogieFile {
 			private final Type returns;
 			private final Expr body;
 
+			public Function(String name, Parameter parameter, Type returns) {
+				this(name, Arrays.asList(parameter), returns, null);
+			}
+			
+			public Function(String name, Parameter parameter, Type returns, Expr body) {
+				this(name,Arrays.asList(parameter),returns,body);
+			}
+			
 			public Function(String name, List<Parameter> parameters, Type returns, Expr body) {
 				this.name = name;
 				this.parameters = parameters;
@@ -453,22 +483,32 @@ public class BoogieFile {
 	// =========================================================================
 
 	public interface Expr extends Stmt {
-
-		public static class Access implements LVal {
-			private final Expr source;
-			private final Expr index;
-
-			public Access(Expr source, Expr index) {
-				this.source = source;
-				this.index = index;
+		
+		public static class BinaryOperator implements Expr {
+			public enum Kind {
+				EQ, NEQ, LT, LTEQ, GT, GTEQ, IFF, IF, ADD, SUB, MUL, DIV, REM
 			}
 
-			public Expr getSource() {
-				return source;
+			private Kind kind;
+			private Expr lhs;
+			private Expr rhs;
+
+			public BinaryOperator(Kind kind, Expr lhs, Expr rhs) {
+				this.kind = kind;
+				this.lhs = lhs;
+				this.rhs = rhs;
 			}
 
-			public Expr getIndex() {
-				return index;
+			public Kind getKind() {
+				return kind;
+			}
+
+			public Expr getLeftHandSide() {
+				return lhs;
+			}
+
+			public Expr getRightHandSide() {
+				return rhs;
 			}
 		}
 
@@ -503,34 +543,48 @@ public class BoogieFile {
 			}
 		}
 
-		public static class BinaryOperator implements Expr {
-			public enum Kind {
-				EQ, NEQ, LT, LTEQ, GT, GTEQ, IFF, IF, ADD, SUB, MUL, DIV, REM
+		public static class DictionaryAccess implements LVal {
+			private final Expr source;
+			private final Expr index;
+
+			public DictionaryAccess(Expr source, Expr index) {
+				this.source = source;
+				this.index = index;
 			}
 
-			private Kind kind;
-			private Expr lhs;
-			private Expr rhs;
-
-			public BinaryOperator(Kind kind, Expr lhs, Expr rhs) {
-				this.kind = kind;
-				this.lhs = lhs;
-				this.rhs = rhs;
+			public Expr getSource() {
+				return source;
 			}
 
-			public Kind getKind() {
-				return kind;
-			}
-
-			public Expr getLeftHandSide() {
-				return lhs;
-			}
-
-			public Expr getRightHandSide() {
-				return rhs;
+			public Expr getIndex() {
+				return index;
 			}
 		}
 
+		public static class DictionaryUpdate implements LVal {
+			private final Expr source;
+			private final Expr index;
+			private final Expr value;
+
+			public DictionaryUpdate(Expr source, Expr index, Expr value) {
+				this.source = source;
+				this.index = index;
+				this.value = value;
+			}
+
+			public Expr getSource() {
+				return source;
+			}
+
+			public Expr getIndex() {
+				return index;
+			}
+
+			public Expr getValue() {
+				return value;
+			}
+		}
+		
 		public static class Invoke implements Expr {
 			private final String name;
 			private final List<Expr> arguments;
@@ -666,11 +720,11 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Map implements Type {
+		public static class Dictionary implements Type {
 			private final Type key;
 			private final Type value;
 
-			public Map(Type key, Type value) {
+			public Dictionary(Type key, Type value) {
 				this.key = key;
 				this.value = value;
 			}
