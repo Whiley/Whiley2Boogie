@@ -621,17 +621,18 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	@Override
 	public Expr constructRecordAccess(RecordAccess expr, Expr source) {
 		Expr field = var("$" + expr.getField().get());
-		return new Expr.DictionaryAccess(source, field);
+		return unbox(expr.getType(), new Expr.DictionaryAccess(source, field));
 	}
 
 	@Override
 	public Expr constructRecordInitialiser(RecordInitialiser expr, List<Expr> operands) {
+		WyilFile.Tuple<WyilFile.Expr> values = expr.getOperands();
 		WyilFile.Tuple<WyilFile.Identifier> fields = expr.getFields();
 		//
 		Expr rec = new Expr.VariableAccess("WRecord#Empty");
 		//
 		for (int i = 0; i != operands.size(); ++i) {
-			Expr ith = operands.get(i);
+			Expr ith = box(values.get(i).getType(), operands.get(i));
 			String field = "$" + fields.get(i).get();
 			rec = new Expr.DictionaryUpdate(rec, new Expr.VariableAccess(field), ith);
 		}
@@ -729,7 +730,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	private List<Decl> constructIntAxioms(WyilFile wf) {
 		Decl header = new Decl.LineComment("Integers");
 		Decl.Function fromInt = fun("fromInt", BoogieFile.Type.Int, WVal);
-		return Arrays.asList(header,fromInt);
+		Decl.Function toInt = fun("toInt", WVal, BoogieFile.Type.Int);
+		return Arrays.asList(header,fromInt,toInt);
 	}
 	
 	/**
@@ -845,6 +847,36 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		} else {
 			return getEnclosingLoop(stmt.getParent(WyilFile.Stmt.class));
 		}
+	}
+	
+	/**
+	 * Box a given expression into a <code>WVal</code> as necessary.
+	 * 
+	 * @param type
+	 * @param e
+	 * @return
+	 */
+	private static Expr box(WyilFile.Type type, Expr e) {
+		switch (type.getOpcode()) {
+		case WyilFile.TYPE_int:
+			return new Expr.Invoke("fromInt", e);
+		}
+		return e;
+	}
+	
+	/**
+	 * Unbox a given expression into a <code>WVal</code> as necessary.
+	 * 
+	 * @param type
+	 * @param e
+	 * @return
+	 */
+	private static Expr unbox(WyilFile.Type type, Expr e) {
+		switch (type.getOpcode()) {
+		case WyilFile.TYPE_int:
+			return new Expr.Invoke("toInt", e);
+		}
+		return e;
 	}
 	
 	/**
