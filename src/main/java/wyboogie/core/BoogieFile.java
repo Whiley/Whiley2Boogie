@@ -114,10 +114,10 @@ public class BoogieFile {
 				return message;
 			}
 		}
-		
+
 		public static class Constant extends Parameter implements Decl {
 			private final boolean unique;
-			
+
 			public Constant(String name, Type type) {
 				super(name, type);
 				this.unique = false;
@@ -125,7 +125,7 @@ public class BoogieFile {
 			public Constant(boolean unique, String name, Type type) {
 				super(name, type);
 				this.unique = unique;
-			}			
+			}
 			public boolean isUnique() {
 				return unique;
 			}
@@ -137,21 +137,24 @@ public class BoogieFile {
 			private final Type returns;
 			private final Expr body;
 
+			public Function(String name, Type parameter, Type returns) {
+				this(name, new Parameter(null,parameter),returns);
+			}
+
 			public Function(String name, Parameter parameter, Type returns) {
 				this(name, Arrays.asList(parameter), returns, null);
 			}
-			
+
 			public Function(String name, Parameter parameter, Type returns, Expr body) {
 				this(name,Arrays.asList(parameter),returns,body);
 			}
-			
+
 			public Function(String name, List<Parameter> parameters, Type returns, Expr body) {
 				this.name = name;
 				this.parameters = parameters;
 				this.returns = returns;
 				this.body = body;
 			}
-
 
 			public String getName() {
 				return name;
@@ -351,14 +354,14 @@ public class BoogieFile {
 				return rhs;
 			}
 		}
-		
+
 		public static class Goto implements Stmt {
 			private final List<String> labels;
 
 			public Goto(String... labels) {
 				this.labels = Arrays.asList(labels);
 			}
-			
+
 			public int size() {
 				return labels.size();
 			}
@@ -366,12 +369,12 @@ public class BoogieFile {
 			public String get(int i) {
 				return labels.get(i);
 			}
-			
+
 			public List<String> getLabels() {
 				return labels;
 			}
 		}
-		
+
 		public static class Label implements Stmt {
 			private final String label;
 
@@ -483,7 +486,7 @@ public class BoogieFile {
 	// =========================================================================
 
 	public interface Expr extends Stmt {
-		
+
 		public static class BinaryOperator implements Expr {
 			public enum Kind {
 				EQ, NEQ, LT, LTEQ, GT, GTEQ, IFF, IF, ADD, SUB, MUL, DIV, REM
@@ -584,7 +587,7 @@ public class BoogieFile {
 				return value;
 			}
 		}
-		
+
 		public static class Invoke implements Expr {
 			private final String name;
 			private final List<Expr> arguments;
@@ -615,16 +618,16 @@ public class BoogieFile {
 
 			private final Kind kind;
 			private final Expr operand;
-			
+
 			public UnaryOperator(Kind kind, Expr operand) {
 				this.kind = kind;
 				this.operand = operand;
 			}
-			
+
 			public Kind getKind() {
 				return kind;
 			}
-			
+
 			public Expr getOperand() {
 				return operand;
 			}
@@ -641,6 +644,11 @@ public class BoogieFile {
 			public NaryOperator(Kind kind, List<Expr> operands) {
 				this.kind = kind;
 				this.operands = operands;
+			}
+
+			public NaryOperator(Kind kind, Expr... operands) {
+				this.kind = kind;
+				this.operands = Arrays.asList(operands);
 			}
 
 			public Kind getKind() {

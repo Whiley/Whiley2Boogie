@@ -58,7 +58,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	public void visitModule(WyilFile wf) {
 		// Add general axioms
-		boogieFile.getDeclarations().addAll(constructAxioms(wf));		
+		boogieFile.getDeclarations().addAll(constructAxioms(wf));
 		// Translate local units
 		for (Unit unit : wf.getModule().getUnits()) {
 			for (WyilFile.Decl decl : unit.getDeclarations()) {
@@ -374,12 +374,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructArrayAccess(ArrayAccess expr, Expr source, Expr index) {
-		return new Expr.DictionaryAccess(source, index);
+		return unbox(expr.getType(),new Expr.DictionaryAccess(source, index));
 	}
 
 	@Override
 	public Expr constructArrayLength(ArrayLength expr, Expr source) {
-		return new Expr.Invoke("length", source);
+		return new Expr.Invoke("WArray#Length", source);
 	}
 
 	@Override
@@ -390,8 +390,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructArrayInitialiser(ArrayInitialiser expr, List<Expr> values) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		WyilFile.Type elementType = expr.getType().as(WyilFile.Type.Array.class).getElement();
+		Expr arr = invoke("WArray#Empty",constant(values.size()));
+		//
+		for (int i = 0; i != values.size(); ++i) {
+			Expr ith = box(elementType, values.get(i));
+			arr = new Expr.DictionaryUpdate(arr, new Expr.Constant(i), ith);
+		}
+		//
+		return arr;
 	}
 
 	@Override
@@ -467,6 +474,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructEqual(Equal expr, Expr lhs, Expr rhs) {
+		// Box operands for simplicity
+		lhs = box(expr.getFirstOperand().getType(),lhs);
+		rhs = box(expr.getSecondOperand().getType(),rhs);
+		// Done
 		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.EQ, lhs, rhs);
 	}
 
@@ -615,6 +626,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructNotEqual(NotEqual expr, Expr lhs, Expr rhs) {
+		// Box operands for simplicity
+		lhs = box(expr.getFirstOperand().getType(),lhs);
+		rhs = box(expr.getSecondOperand().getType(),rhs);
+		// Done
 		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.NEQ, lhs, rhs);
 	}
 
@@ -676,14 +691,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	public BoogieFile.Type constructArrayType(WyilFile.Type.Array type) {
-		BoogieFile.Type t = constructType(type.getElement());
-		return new BoogieFile.Type.Dictionary(BoogieFile.Type.Int, t);
+		return IntWVals;
 	}
-	
+
 	public BoogieFile.Type constructRecordType(WyilFile.Type.Record type) {
-		return new BoogieFile.Type.Dictionary(WField, WVal);
+		return WFieldWVals;
 	}
-	
+
 	public BoogieFile.Type constructNominalType(WyilFile.Type.Nominal type) {
 		// FIXME: mangling required here
 		String name = type.getLink().getName().toString();
@@ -695,10 +709,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
-	
+
 	/**
 	 * Generate declarations for all axioms used within the Boogie translation.
-	 * 
+	 *
 	 * @return
 	 */
 	private List<Decl> constructAxioms(WyilFile wf) {
@@ -713,6 +727,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		axioms.add(new Decl.Constant(true, "WVoid", WVal));
 		// Add all int axioms
 		axioms.addAll(constructIntAxioms(wf));
+		// Add all array axioms
+		axioms.addAll(constructArrayAxioms(wf));
 		// Add all record axioms
 		axioms.addAll(constructRecordAxioms(wf));
 		//
@@ -720,10 +736,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Done
 		return axioms;
 	}
-	
+
 	/**
 	 * Construct axioms and functions relevant to integer types.
-	 * 
+	 *
 	 * @param wf
 	 * @return
 	 */
@@ -731,13 +747,42 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		Decl header = new Decl.LineComment("Integers");
 		Decl.Function fromInt = fun("fromInt", BoogieFile.Type.Int, WVal);
 		Decl.Function toInt = fun("toInt", WVal, BoogieFile.Type.Int);
-		return Arrays.asList(header,fromInt,toInt);
+		// Establish connection between toInt and fromInt
+		Decl.Axiom axiom1 = new Decl.Axiom(
+				forall("i", BoogieFile.Type.Int, eq(invoke("toInt", invoke("fromInt", var("i"))), var("i"))));
+		return Arrays.asList(header,fromInt,toInt,axiom1);
 	}
-	
+
+	/**
+	 * Construct axioms relevant to array types.
+	 *
+	 * @return
+	 */
+	private List<Decl> constructArrayAxioms(WyilFile wf) {
+		// NOTE: we could reduce the amount of boxing / unboxing necessary by generating
+		// custom array types for each different array type encountered.
+		ArrayList<Decl> decls = new ArrayList<>();
+		decls.add(new Decl.LineComment("Arrays"));
+		decls.add(fun("WArray#Length", IntWVals, BoogieFile.Type.Int));
+		// Enforce array length is non-negative
+		decls.add(new Decl.Axiom(forall("a", IntWVals, lteq(constant(0), invoke("WArray#Length", var("a"))))));
+		// Empty arrays
+		decls.add(fun("WArray#Empty", BoogieFile.Type.Int, IntWVals));
+		// Ensure that all elements outside array length are void
+		decls.add(new Decl.Axiom(
+				forall("l", BoogieFile.Type.Int, "i", BoogieFile.Type.Int, or(and(lteq(constant(0), var("i")),lt(var("i"),var("l"))),
+						eq(get(invoke("WArray#Empty", var("l")), var("i")), var("WVoid"))))));
+		// Relate empty array with its length
+		decls.add(new Decl.Axiom(forall("a", IntWVals, "l", BoogieFile.Type.Int,
+				or(neq(invoke("WArray#Empty", var("l")), var("a")), eq(invoke("WArray#Length", var("a")), var("l"))))));
+		// Done
+		return decls;
+	}
+
 	/**
 	 * Construct axioms relevant to record types. An import issue is to determine
 	 * the full set of field names which are in play.
-	 * 
+	 *
 	 * @return
 	 */
 	private List<Decl> constructRecordAxioms(WyilFile wf) {
@@ -750,11 +795,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			String name = "$" + field;
 			decls.add(new Decl.Constant(true, name, WField));
 		}
-		// 
+		//
 		decls.add(new Decl.LineComment("Records"));
 		// Defines the empty record (i.e. the base from which all other records are
 		// constructed).
-		decls.add(new Decl.Constant(true, "WRecord#Empty", WFieldWTypes));
+		decls.add(new Decl.Constant(true, "WRecord#Empty", WFieldWVals));
 		decls.add(new Decl.Axiom(forall("f", WField, eq(get(var("WRecord#Empty"), var("f")), var("WVoid")))));
 		// Done
 		return decls;
@@ -848,10 +893,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			return getEnclosingLoop(stmt.getParent(WyilFile.Stmt.class));
 		}
 	}
-	
+
 	/**
 	 * Box a given expression into a <code>WVal</code> as necessary.
-	 * 
+	 *
 	 * @param type
 	 * @param e
 	 * @return
@@ -859,14 +904,16 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	private static Expr box(WyilFile.Type type, Expr e) {
 		switch (type.getOpcode()) {
 		case WyilFile.TYPE_int:
-			return new Expr.Invoke("fromInt", e);
+			return fromInt(e);
 		}
 		return e;
 	}
-	
+
 	/**
-	 * Unbox a given expression into a <code>WVal</code> as necessary.
-	 * 
+	 * Unbox a given expression into a <code>WVal</code> as necessary. This is
+	 * required, for example, when primitive values are moving into general
+	 * dictionaries.
+	 *
 	 * @param type
 	 * @param e
 	 * @return
@@ -874,16 +921,50 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	private static Expr unbox(WyilFile.Type type, Expr e) {
 		switch (type.getOpcode()) {
 		case WyilFile.TYPE_int:
-			return new Expr.Invoke("toInt", e);
+			return toInt(e);
 		}
 		return e;
 	}
-	
+
+	/**
+	 * Ensure that a given expression is in its primitive form. In some situations,
+	 * we can simplify the expression by removing a previous boxing call.
+	 *
+	 * @param e
+	 * @return
+	 */
+	private static Expr toInt(Expr e) {
+		if(e instanceof Expr.Invoke) {
+			Expr.Invoke i = (Expr.Invoke) e;
+			if(i.getName().equals("fromInt")) {
+				return i.getArguments().get(0);
+			}
+		}
+		return new Expr.Invoke("toInt", e);
+	}
+
+	/**
+	 * Ensure that a given expression is in its boxed form. In some situations,
+	 * we can simplify the expression by removing a previous unboxing call.
+	 *
+	 * @param e
+	 * @return
+	 */
+	private static Expr fromInt(Expr e) {
+		if(e instanceof Expr.Invoke) {
+			Expr.Invoke i = (Expr.Invoke) e;
+			if(i.getName().equals("toInt")) {
+				return i.getArguments().get(0);
+			}
+		}
+		return new Expr.Invoke("fromInt", e);
+	}
+
 	/**
 	 * Determine the set of all field names used within a given WyilFile. This is
 	 * necessary as we must enumerate field names in order to use them. To achieve
 	 * this, we recurse the AST looking for all record types.
-	 * 
+	 *
 	 * @param wf
 	 * @return
 	 */
@@ -893,6 +974,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		for (Unit unit : wf.getModule().getUnits()) {
 			//
 			new AbstractVisitor(meter) {
+				@Override
 				public void visitTypeRecord(WyilFile.Type.Record t) {
 					// Continue visiting children
 					super.visitTypeRecord(t);
@@ -906,29 +988,62 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		}
 		return names;
 	}
-	
+
 	public static final BoogieFile.Type WVal = new BoogieFile.Type.Synonym("WVal");
 	public static final BoogieFile.Type WField = new BoogieFile.Type.Synonym("WField");
 	public static final BoogieFile.Type WType = new BoogieFile.Type.Synonym("WType");
-	public static final BoogieFile.Type WFieldWTypes = new BoogieFile.Type.Dictionary(WField, WVal);
-	
+	public static final BoogieFile.Type IntWVals = new BoogieFile.Type.Dictionary(BoogieFile.Type.Int, WVal);
+	public static final BoogieFile.Type WFieldWVals = new BoogieFile.Type.Dictionary(WField, WVal);
+
 	public static Expr.Quantifier forall(String name, BoogieFile.Type type, Expr body) {
 		return new Expr.Quantifier(true, body, new Decl.Parameter(name, type));
 	}
-	
-	public static Decl.Function fun(String name, BoogieFile.Type parameter, BoogieFile.Type returns) {		
-		return new Decl.Function(name, new Decl.Parameter(null, parameter), returns);
+
+	public static Expr.Quantifier forall(String name1, BoogieFile.Type type1, String name2, BoogieFile.Type type2, Expr body) {
+		return new Expr.Quantifier(true, body, new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2));
 	}
-	
+
+	public static Decl.Function fun(String name, BoogieFile.Type parameter, BoogieFile.Type returns) {
+		return new Decl.Function(name, parameter, returns);
+	}
+
+	public static Expr.NaryOperator or(Expr... operands) {
+		return new Expr.NaryOperator(Expr.NaryOperator.Kind.OR, operands);
+	}
+
+	public static Expr.NaryOperator and(Expr... operands) {
+		return new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, operands);
+	}
+
 	public static Expr.BinaryOperator eq(Expr lhs, Expr rhs) {
 		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.EQ, lhs, rhs);
 	}
-	
+
+	public static Expr.BinaryOperator neq(Expr lhs, Expr rhs) {
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.NEQ, lhs, rhs);
+	}
+
+	public static Expr.BinaryOperator lteq(Expr lhs, Expr rhs) {
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LTEQ, lhs, rhs);
+	}
+
+	public static Expr.BinaryOperator lt(Expr lhs, Expr rhs) {
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LT, lhs, rhs);
+	}
+
 	public static Expr.DictionaryAccess get(Expr src, Expr index) {
 		return new Expr.DictionaryAccess(src, index);
 	}
-	
+
 	public static Expr.VariableAccess var(String name) {
 		return new Expr.VariableAccess(name);
+	}
+
+	public static Expr.Constant constant(int i) {
+		return new Expr.Constant(i);
+	}
+
+	public static Expr.Invoke invoke(String name, Expr parameter) {
+		return new Expr.Invoke(name, parameter);
 	}
 }
