@@ -36,6 +36,8 @@ import wyil.util.AbstractVisitor;
 import wyil.util.IncrementalSubtypingEnvironment;
 import wyil.util.Subtyping;
 import wyil.util.TypeMangler;
+import wyil.util.AbstractTranslator.EnclosingScope;
+import wyil.util.AbstractTranslator.Environment;
 
 public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	/**
@@ -50,6 +52,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	private final static Subtyping.Environment subtyping = new IncrementalSubtypingEnvironment();
 
 	private final BoogieFile boogieFile;
+
+	/**
+	 * This is used to generate those preconditions necessary for a given expression
+	 * to be considered well-formed. This is implemented as a field to work-around
+	 * the structure of <code>AbstractTranslator</code>.
+	 */
+	private final ArrayList<Expr> preconditions = new ArrayList<>();
 
 	public BoogieCompiler(Meter meter, BoogieFile target) {
 		super(meter, subtyping);
@@ -72,15 +81,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Decl constructImport(Import d) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Decl.Sequence();
 	}
 
 	@Override
 	public Decl constructType(Type d, List<Expr> invariant) {
-		// FIXME: mangling required here
 		WyilFile.Decl.Variable var = d.getVariableDeclaration();
-		String name = d.getName().get();
+		// Apply name mangling
+		String name = toMangledName(d);
 		Decl t = new Decl.TypeSynonym(name, constructType(var.getType()));
 		//
 		if (invariant.isEmpty()) {
@@ -97,8 +105,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	@Override
 	public Decl constructStaticVariable(StaticVariable d, Expr initialiser) {
 		BoogieFile.Type type = constructType(d.getType());
-		// FIXME: mangling required here.
-		String name = d.getName().get();
+		// Apply name mangling
+		String name = toMangledName(d);
 		//
 		if (d.getModifiers().match(WyilFile.Modifier.Final.class) != null) {
 			// Final static variables declared as constants with corresponding axiom
@@ -115,8 +123,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Decl constructProperty(Property d, List<Expr> clauses) {
-		// TODO: implement name mangling
-		String name = d.getName().toString();
+		// Apply name mangling
+		String name = toMangledName(d);
+		//
 		List<Decl.Parameter> parameters = constructParameters(d.getParameters());
 		Expr body = new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, clauses);
 		return new Decl.Function(name, parameters, BoogieFile.Type.Bool, body);
@@ -124,17 +133,32 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Decl constructFunction(Function d, List<Expr> precondition, List<Expr> postcondition, Stmt body) {
-		// TODO: implement name mangling
-		String name = d.getName().toString();
+		// Apply name mangling
+		String name = toMangledName(d);
 		List<Decl.Parameter> parameters = constructParameters(d.getParameters());
 		List<Decl.Parameter> returns = constructParameters(d.getReturns());
-		return new Decl.Procedure(name, parameters, returns, precondition, postcondition, (Stmt.Block) body);
+		ArrayList<Decl.Parameter> parametersAndReturns = new ArrayList<>();
+		parametersAndReturns.addAll(parameters);
+		parametersAndReturns.addAll(returns);
+		// FIXME: obviously broken for multiple returns!
+		BoogieFile.Type returnType = returns.get(0).getType();
+		// Construct function representation precondition
+		Decl.Function pre = new Decl.Function(name + "#pre", parameters, BoogieFile.Type.Bool, and(precondition));
+		// Construct function representation postcondition
+		Decl.Function post = new Decl.Function(name + "#post", parametersAndReturns, BoogieFile.Type.Bool, and(postcondition));
+		// Construct prototype which can be called from expressions.
+		Decl.Function prototype = new Decl.Function(name, parameters, returnType);
+		// Construct implementation which can be checked against its specification.
+		Decl.Procedure impl = new Decl.Procedure(name + "#impl", parameters, returns, precondition, postcondition,
+				(Stmt.Block) body);
+		// Done
+		return new Decl.Sequence(prototype, pre, post, impl);
 	}
 
 	@Override
 	public Decl constructMethod(Method d, List<Expr> precondition, List<Expr> postcondition, Stmt body) {
-		// TODO: implement name mangling
-		String name = d.getName().toString();
+		// Apply name mangling
+		String name = toMangledName(d);
 		List<Decl.Parameter> parameters = constructParameters(d.getParameters());
 		List<Decl.Parameter> returns = constructParameters(d.getReturns());
 		return new Decl.Procedure(name, parameters, returns, precondition, postcondition, (Stmt.Block) body);
@@ -161,7 +185,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Stmt constructAssert(Assert stmt, Expr condition) {
-		return new Stmt.Assert(condition);
+		return assertPreconditions(new Stmt.Assert(condition));
 	}
 
 	@Override
@@ -169,12 +193,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		if (lvals.size() != 1 || rvals.size() != 1) {
 			throw new UnsupportedOperationException("Multiple assignments not supported (yet)");
 		}
-		return new Stmt.Assignment((LVal) lvals.get(0), rvals.get(0));
+		return assertPreconditions(new Stmt.Assignment((LVal) lvals.get(0), rvals.get(0)));
 	}
 
 	@Override
 	public Stmt constructAssume(Assume stmt, Expr condition) {
-		return new Stmt.Assume(condition);
+		return assertPreconditions(new Stmt.Assume(condition));
 	}
 
 	@Override
@@ -254,6 +278,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			return decl;
 		} else {
 			Stmt.Assignment init = new Stmt.Assignment(new Expr.VariableAccess(name), initialiser);
+			//return assertPreconditions(new Stmt.Sequence(decl, init));
 			return new Stmt.Sequence(decl, init);
 		}
 	}
@@ -601,8 +626,19 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructInvoke(Invoke expr, List<Expr> arguments) {
-		// FIXME: mangling required here
-		String name = expr.getLink().getName().toString();
+		Callable c = expr.getLink().getTarget();
+		// Apply name mangling
+		String name = toMangledName(expr.getLink().getTarget());
+		// Add preconditions (if applicable)
+		if(c instanceof FunctionOrMethod) {
+			FunctionOrMethod fm = (FunctionOrMethod) c;
+			WyilFile.Tuple<WyilFile.Expr> requires = fm.getRequires();
+			// Sanity check whether actually is a precondition!
+			if(requires.size() > 0) {
+				preconditions.add(new Expr.Invoke(name + "#pre", arguments));
+			}
+		}
+		//
 		return new Expr.Invoke(name, arguments);
 	}
 
@@ -663,8 +699,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructStaticVariableAccess(StaticVariableAccess expr) {
-		// FIXME: name mangling required here
-		return new Expr.VariableAccess(expr.getLink().getName().toString().toString());
+		// Apply name mangling
+		String name = toMangledName(expr.getLink().getTarget());
+		// Done
+		return new Expr.VariableAccess(name);
 	}
 
 	@Override
@@ -989,6 +1027,76 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		return names;
 	}
 
+	private Stmt assertPreconditions(Stmt stmt) {
+		if (preconditions.size() > 0) {
+			ArrayList<Stmt> stmts = new ArrayList<>();
+			for (int i = 0; i != preconditions.size(); ++i) {
+				stmts.add(new Stmt.Assert(preconditions.get(i)));
+			}
+			preconditions.clear();
+			stmts.add(stmt);
+			return new Stmt.Sequence(stmts);
+		} else {
+			return stmt;
+		}
+	}
+
+	/**
+	 * Determine the appropriate mangled string for a given named declaration. This
+	 * is critical to ensuring that overloaded declarations do not clash.
+	 *
+	 * @param decl
+	 * @return
+	 */
+	private String toMangledName(Named<?> decl) {
+		// Determine whether this is an exported symbol or not
+		boolean exported = decl.getModifiers().match(WyilFile.Modifier.Export.class) != null;
+		// Construct base name
+		String name = decl.getQualifiedName().toString().replace("::", "$");
+		// Add type mangles for non-exported symbols
+		if(!exported && decl instanceof Method) {
+			// FIXME: this could be simplified if TypeMangler was updated to support void.
+			Method method = (Method) decl;
+			WyilFile.Type parameters = method.getType().getParameter();
+			WyilFile.Type returns = method.getType().getReturn();
+			name += getMangle(parameters);
+			name += getMangle(returns);
+		} else if(!exported && decl instanceof Callable) {
+			// FIXME: this could be simplified if TypeMangler was updated to support void.
+			Callable callable = (Callable) decl;
+			WyilFile.Type parameters = callable.getType().getParameter();
+			WyilFile.Type returns = callable.getType().getReturn();
+			name += getMangle(parameters);
+			name += getMangle(returns);
+		} else if(decl instanceof Type) {
+			name += "$type";
+		} else if(decl instanceof StaticVariable) {
+			name += "$static";
+		}
+		return name;
+	}
+
+	/**
+	 * Determine the mangle for a given set of types.
+	 *
+	 * @param type
+	 * @return
+	 */
+	private String getMangle(WyilFile.Type type) {
+		if (type.shape() == 0) {
+			return "$V";
+		} else {
+			return "$" + mangler.getMangle(type);
+		}
+	}
+
+	private String getMangle(WyilFile.Type... types) {
+		if (types.length == 0) {
+			return "$V";
+		} else {
+			return "$" + mangler.getMangle(types);
+		}
+	}
 	public static final BoogieFile.Type WVal = new BoogieFile.Type.Synonym("WVal");
 	public static final BoogieFile.Type WField = new BoogieFile.Type.Synonym("WField");
 	public static final BoogieFile.Type WType = new BoogieFile.Type.Synonym("WType");
@@ -1007,12 +1115,28 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		return new Decl.Function(name, parameter, returns);
 	}
 
-	public static Expr.NaryOperator or(Expr... operands) {
-		return new Expr.NaryOperator(Expr.NaryOperator.Kind.OR, operands);
+	public static Expr or(Expr... operands) {
+		if(operands.length == 0) {
+			return new Expr.Constant(false);
+		} else {
+			return new Expr.NaryOperator(Expr.NaryOperator.Kind.OR, operands);
+		}
 	}
 
-	public static Expr.NaryOperator and(Expr... operands) {
-		return new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, operands);
+	public static Expr and(List<Expr> operands) {
+		if(operands.size() == 0) {
+			return new Expr.Constant(true);
+		} else {
+			return new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, operands);
+		}
+	}
+
+	public static Expr and(Expr... operands) {
+		if(operands.length == 0) {
+			return new Expr.Constant(true);
+		} else {
+			return new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, operands);
+		}
 	}
 
 	public static Expr.BinaryOperator eq(Expr lhs, Expr rhs) {

@@ -21,6 +21,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 import wyboogie.io.BoogieFilePrinter;
@@ -147,6 +148,10 @@ public class BoogieFile {
 
 			public Function(String name, Parameter parameter, Type returns, Expr body) {
 				this(name,Arrays.asList(parameter),returns,body);
+			}
+
+			public Function(String name, List<Parameter> parameters, Type returns) {
+				this(name, parameters, returns, null);
 			}
 
 			public Function(String name, List<Parameter> parameters, Type returns, Expr body) {
