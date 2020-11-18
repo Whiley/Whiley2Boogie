@@ -25,18 +25,17 @@ import wyboogie.core.BoogieFile.Decl;
 import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.Stmt;
 import wyboogie.core.BoogieFile.LVal;
+import wyboogie.util.AbstractTranslator;
 import wybs.lang.Build.Meter;
 import wyfs.util.Pair;
 import wyil.lang.WyilFile;
 import wyil.lang.WyilFile.Decl.*;
 import wyil.lang.WyilFile.Expr.*;
 import wyil.lang.WyilFile.Stmt.*;
-import wyil.util.AbstractTranslator;
 import wyil.util.AbstractVisitor;
 import wyil.util.IncrementalSubtypingEnvironment;
 import wyil.util.Subtyping;
 import wyil.util.TypeMangler;
-import wyil.util.AbstractTranslator.EnclosingScope;
 import wyil.util.AbstractTranslator.Environment;
 
 public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
@@ -52,13 +51,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	private final static Subtyping.Environment subtyping = new IncrementalSubtypingEnvironment();
 
 	private final BoogieFile boogieFile;
-
-	/**
-	 * This is used to generate those preconditions necessary for a given expression
-	 * to be considered well-formed. This is implemented as a field to work-around
-	 * the structure of <code>AbstractTranslator</code>.
-	 */
-	private final ArrayList<Expr> preconditions = new ArrayList<>();
 
 	public BoogieCompiler(Meter meter, BoogieFile target) {
 		super(meter, subtyping);
@@ -185,7 +177,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Stmt constructAssert(Assert stmt, Expr condition) {
-		return assertPreconditions(new Stmt.Assert(condition));
+		return new Stmt.Assert(condition);
 	}
 
 	@Override
@@ -193,12 +185,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		if (lvals.size() != 1 || rvals.size() != 1) {
 			throw new UnsupportedOperationException("Multiple assignments not supported (yet)");
 		}
-		return assertPreconditions(new Stmt.Assignment((LVal) lvals.get(0), rvals.get(0)));
+		return new Stmt.Assignment((LVal) lvals.get(0), rvals.get(0));
 	}
 
 	@Override
 	public Stmt constructAssume(Assume stmt, Expr condition) {
-		return assertPreconditions(new Stmt.Assume(condition));
+		return new Stmt.Assume(condition);
 	}
 
 	@Override
@@ -552,6 +544,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
+	public List<Stmt> visitIntegerDivisionPrecondition(IntegerDivision expr, Environment environment) {
+		// Generate suitable preconditions.
+		List<Stmt> preconds = super.visitIntegerDivisionPrecondition(expr, environment);
+		Expr rhs = visitExpression(expr.getSecondOperand(), environment);
+		return append(preconds, new Stmt.Assert(neq(rhs, constant(0))));
+	}
+
+	@Override
 	public Expr constructIntegerRemainder(IntegerRemainder expr, Expr lhs, Expr rhs) {
 		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.REM, lhs, rhs);
 	}
@@ -629,15 +629,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		Callable c = expr.getLink().getTarget();
 		// Apply name mangling
 		String name = toMangledName(expr.getLink().getTarget());
-		// Add preconditions (if applicable)
-		if(c instanceof FunctionOrMethod) {
-			FunctionOrMethod fm = (FunctionOrMethod) c;
-			WyilFile.Tuple<WyilFile.Expr> requires = fm.getRequires();
-			// Sanity check whether actually is a precondition!
-			if(requires.size() > 0) {
-				preconditions.add(new Expr.Invoke(name + "#pre", arguments));
-			}
-		}
 		//
 		return new Expr.Invoke(name, arguments);
 	}
@@ -1025,20 +1016,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 		}
 		return names;
-	}
-
-	private Stmt assertPreconditions(Stmt stmt) {
-		if (preconditions.size() > 0) {
-			ArrayList<Stmt> stmts = new ArrayList<>();
-			for (int i = 0; i != preconditions.size(); ++i) {
-				stmts.add(new Stmt.Assert(preconditions.get(i)));
-			}
-			preconditions.clear();
-			stmts.add(stmt);
-			return new Stmt.Sequence(stmts);
-		} else {
-			return stmt;
-		}
 	}
 
 	/**
