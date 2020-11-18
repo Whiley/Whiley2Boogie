@@ -108,7 +108,10 @@ public abstract class AbstractTranslator<D,S,E extends S> extends wyil.util.Abst
 
 	@Override
 	public S visitDoWhile(Stmt.DoWhile stmt, Environment environment, EnclosingScope scope) {
-		return super.visitDoWhile(stmt,environment,scope);
+		// FIXME: this is broken
+		List<S> preconditions = visitExpressionPrecondition(stmt.getCondition(), environment);
+		System.out.println("BROKEN DO-WHILE PRECONDITIONS");
+		return constructSequence(preconditions, super.visitDoWhile(stmt,environment,scope));
 	}
 
 	@Override
@@ -127,8 +130,12 @@ public abstract class AbstractTranslator<D,S,E extends S> extends wyil.util.Abst
 
 	@Override
 	public S visitInitialiser(Stmt.Initialiser stmt, Environment environment) {
-		List<S> preconditions = visitExpressionPrecondition(stmt.getInitialiser(),environment);
-		return constructSequence(preconditions, super.visitInitialiser(stmt,environment));
+		if(stmt.hasInitialiser()) {
+			List<S> preconditions = visitExpressionPrecondition(stmt.getInitialiser(),environment);
+			return constructSequence(preconditions, super.visitInitialiser(stmt,environment));
+		} else {
+			return super.visitInitialiser(stmt,environment);
+		}
 	}
 
 	@Override
@@ -149,6 +156,7 @@ public abstract class AbstractTranslator<D,S,E extends S> extends wyil.util.Abst
 
 	@Override
 	public S visitWhile(Stmt.While stmt, Environment environment, EnclosingScope scope) {
+		// FIXME: this is broken
 		List<S> preconditions = visitExpressionPrecondition(stmt.getCondition(), environment);
 		System.out.println("BROKEN WHILE PRECONDITIONS");
 		return constructSequence(preconditions, super.visitWhile(stmt, environment, scope));

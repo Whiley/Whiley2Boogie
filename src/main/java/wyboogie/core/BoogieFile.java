@@ -451,6 +451,11 @@ public class BoogieFile {
 				this.stmts = new ArrayList<>(stmts);
 			}
 
+			public Sequence(Collection<Stmt> stmts, Stmt stmt) {
+				this.stmts = new ArrayList<>(stmts);
+				this.stmts.add(stmt);
+			}
+
 			public int size() {
 				return stmts.size();
 			}
@@ -494,7 +499,7 @@ public class BoogieFile {
 
 		public static class BinaryOperator implements Expr {
 			public enum Kind {
-				EQ, NEQ, LT, LTEQ, GT, GTEQ, IFF, IF, ADD, SUB, MUL, DIV, REM
+				EQ, NEQ, LT, LTEQ, GT, GTEQ, IFF, IF, ADD, SUB, MUL, IDIV, DIV, REM
 			}
 
 			private Kind kind;

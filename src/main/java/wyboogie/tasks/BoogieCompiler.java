@@ -356,6 +356,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
+	public Stmt constructSequence(List<Stmt> stmts, Stmt stmt) {
+		if(stmts.isEmpty()) {
+			return stmt;
+		} else {
+			return new Stmt.Sequence(stmts, stmt);
+		}
+	}
+
+	@Override
 	public Expr constructArrayAccessLVal(ArrayAccess expr, Expr source, Expr index) {
 		return new Expr.DictionaryAccess(source, index);
 	}
@@ -540,7 +549,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructIntegerDivision(IntegerDivision expr, Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.DIV, lhs, rhs);
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.IDIV, lhs, rhs);
 	}
 
 	@Override

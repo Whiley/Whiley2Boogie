@@ -102,7 +102,7 @@ public class BoogieFilePrinter {
 		tab(indent);
 		out.println("// " + d.getMessage());
 	}
-	
+
 	private void writeProcedure(int indent, Decl.Procedure d) {
 		tab(indent);
 		out.print("procedure ");
@@ -237,7 +237,7 @@ public class BoogieFilePrinter {
 			if(i != 0) {
 				out.print(", ");
 			}
-			out.print(s.get(i));	
+			out.print(s.get(i));
 		}
 		out.println(";");
 	}
@@ -337,14 +337,14 @@ public class BoogieFilePrinter {
 	private void writeConstant(Expr.Constant e) {
 		out.write(e.getValue().toString());
 	}
-	
+
 	private void writeDictionaryAccess(Expr.DictionaryAccess e) {
 		writeExpression(e.getSource());
 		out.print("[");
 		writeExpression(e.getIndex());
 		out.print("]");
 	}
-	
+
 	private void writeDictionaryUpdate(Expr.DictionaryUpdate e) {
 		writeExpression(e.getSource());
 		out.print("[");
@@ -353,7 +353,7 @@ public class BoogieFilePrinter {
 		writeExpression(e.getValue());
 		out.print("]");
 	}
-	
+
 	private void writeNaryOperator(Expr.NaryOperator e) {
 		List<Expr> operands = e.getOperands();
 		//
@@ -463,6 +463,9 @@ public class BoogieFilePrinter {
 			break;
 		case DIV:
 			out.print(" / ");
+			break;
+		case IDIV:
+			out.print(" div ");
 			break;
 		case REM:
 			out.print(" % ");
