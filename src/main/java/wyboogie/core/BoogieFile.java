@@ -184,14 +184,17 @@ public class BoogieFile {
 			private final List<Parameter> returns;
 			private final List<Expr> requires;
 			private final List<Expr> ensures;
-			private final Stmt.Block body;
+			private final List<Decl.Variable> locals;
+			private final Stmt body;
 
-			public Procedure(String name, List<Parameter> parameters, List<Parameter> returns, List<Expr> requires, List<Expr> ensures, Stmt.Block body) {
+			public Procedure(String name, List<Parameter> parameters, List<Parameter> returns, List<Expr> requires,
+					List<Expr> ensures, List<Decl.Variable> locals, Stmt body) {
 				this.name = name;
 				this.parameters = new ArrayList<>(parameters);
 				this.returns = new ArrayList<>(returns);
 				this.requires = new ArrayList<>(requires);
 				this.ensures = new ArrayList<>(ensures);
+				this.locals = locals;
 				this.body = body;
 			}
 
@@ -215,7 +218,11 @@ public class BoogieFile {
 				return ensures;
 			}
 
-			public Stmt.Block getBody() {
+			public List<Decl.Variable> getLocals() {
+				return locals;
+			}
+
+			public Stmt getBody() {
 				return body;
 			}
 		}
@@ -282,6 +289,10 @@ public class BoogieFile {
 		public static class Variable extends Parameter implements Decl {
 			private final Expr invariant;
 
+			public Variable(String name, Type type) {
+				this(name,type,null);
+			}
+
 			public Variable(String name, Type type, Expr initialiser) {
 				super(name, type);
 				this.invariant = initialiser;
@@ -294,29 +305,32 @@ public class BoogieFile {
 	};
 
 	// =========================================================================
+	// Block
+	// =========================================================================
+
+	public static class Block {
+		private final List<Decl.Variable> decls;
+		private final List<Stmt> stmts;
+
+		public Block(Collection<Decl.Variable> decls, Collection<Stmt> stmts) {
+			this.decls = new ArrayList<>(decls);
+			this.stmts = new ArrayList<>(stmts);
+		}
+
+		public List<Decl.Variable> getDeclarations() {
+			return decls;
+		}
+
+		public List<Stmt> getBody() {
+			return stmts;
+		}
+	}
+
+	// =========================================================================
 	// Statements
 	// =========================================================================
 
 	public interface Stmt {
-		public static class Block implements Stmt {
-			private final List<Stmt> stmts;
-
-			public Block(Collection<Stmt> stmts) {
-				this.stmts = new ArrayList<>(stmts);
-			}
-
-			public int size() {
-				return stmts.size();
-			}
-
-			public Stmt get(int i) {
-				return stmts.get(i);
-			}
-
-			public List<Stmt> getAll() {
-				return stmts;
-			}
-		}
 
 		public static class Assert implements Stmt {
 			private final Expr condition;
@@ -393,10 +407,10 @@ public class BoogieFile {
 		}
 		public static class IfElse implements Stmt {
 			private final Expr condition;
-			private final Stmt.Block trueBranch;
-			private final Stmt.Block falseBranch;
+			private final Stmt trueBranch;
+			private final Stmt falseBranch;
 
-			public IfElse(Expr condition, Stmt.Block trueBranch, Stmt.Block falseBranch) {
+			public IfElse(Expr condition, Stmt trueBranch, Stmt falseBranch) {
 				this.condition = condition;
 				this.trueBranch = trueBranch;
 				this.falseBranch = falseBranch;
@@ -406,20 +420,20 @@ public class BoogieFile {
 				return condition;
 			}
 
-			public Stmt.Block getTrueBranch() {
+			public Stmt getTrueBranch() {
 				return trueBranch;
 			}
 
-			public Stmt.Block getFalseBranch() {
+			public Stmt getFalseBranch() {
 				return falseBranch;
 			}
 		}
 		public static class While implements Stmt {
 			private final Expr condition;
 			private final List<Expr> invariant;
-			private final Stmt.Block body;
+			private final Stmt body;
 
-			public While(Expr condition, List<Expr> invariant, Stmt.Block body) {
+			public While(Expr condition, List<Expr> invariant, Stmt body) {
 				this.condition = condition;
 				this.invariant = invariant;
 				this.body = body;
@@ -433,7 +447,7 @@ public class BoogieFile {
 				return invariant;
 			}
 
-			public Stmt.Block getBody() {
+			public Stmt getBody() {
 				return body;
 			}
 		}
@@ -466,27 +480,6 @@ public class BoogieFile {
 
 			public List<Stmt> getAll() {
 				return stmts;
-			}
-		}
-		public static class VariableDeclarations implements Stmt {
-			private final List<String> names;
-			private final Type type;
-
-			public VariableDeclarations(String name, Type type) {
-				this(Arrays.asList(name),type);
-			}
-
-			public VariableDeclarations(List<String> names, Type type) {
-				this.names = names;
-				this.type = type;
-			}
-
-			public List<String> getNames() {
-				return names;
-			}
-
-			public Type getType() {
-				return type;
 			}
 		}
 	}

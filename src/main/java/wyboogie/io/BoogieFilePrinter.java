@@ -125,7 +125,15 @@ public class BoogieFilePrinter {
 			writeExpression(ensures.get(i));
 			out.println(";");
 		}
-		writeBlock(indent, d.getBody(), false);
+		tab(indent);
+		out.println("{");
+		List<Decl.Variable> locals = d.getLocals();
+		for(int i=0;i!=locals.size();++i) {
+			writeVariable(indent + 1, locals.get(i));
+		}
+		writeStmt(indent + 1, d.getBody());
+		tab(indent);
+		out.println("}");
 	}
 
 	private void writeParameters(List<Decl.Parameter> parameters) {
@@ -152,6 +160,7 @@ public class BoogieFilePrinter {
 		}
 	}
 	private void writeTypeSynonym(int indent, Decl.TypeSynonym d) {
+		tab(indent);
 		out.print("type ");
 		out.print(d.getName());
 		if(d.getSynonym() != null) {
@@ -161,10 +170,11 @@ public class BoogieFilePrinter {
 		out.println(";");
 	}
 	private void writeVariable(int indent, Decl.Variable d) {
-		out.print("const ");
+		tab(indent);
+		out.print("var ");
 		out.print(d.getName());
 		out.print(" : ");
-		out.print(d.getType());
+		writeType(d.getType());
 		if(d.getInvariant() != null) {
 			out.print(" where ");
 			writeExpression(d.getInvariant());
@@ -183,16 +193,12 @@ public class BoogieFilePrinter {
 			writeGoto(indent,(Stmt.Goto)s);
 		} else if(s instanceof Stmt.Label) {
 			writeLabel(indent,(Stmt.Label)s);
-		} else if(s instanceof Stmt.Block) {
-			writeBlock(indent, (Stmt.Block) s, false);
 		} else if(s instanceof Stmt.IfElse) {
 			writeIfElse(indent,(Stmt.IfElse)s);
 		} else if(s instanceof Stmt.Return) {
 			writeReturn(indent,(Stmt.Return)s);
 		} else if(s instanceof Stmt.Sequence) {
 			writeSequence(indent,(Stmt.Sequence)s);
-		} else if(s instanceof Stmt.VariableDeclarations) {
-			writeVariableDeclarations(indent,(Stmt.VariableDeclarations)s);
 		} else if(s instanceof Stmt.While) {
 			writeWhile(indent,(Stmt.While)s);
 		} else {
@@ -218,18 +224,6 @@ public class BoogieFilePrinter {
 		writeExpression(s.getCondition());
 		out.println(";");
 	}
-	private void writeBlock(int indent, Stmt.Block s, boolean inline) {
-		if(!inline) {
-			tab(indent);
-		}
-		out.println("{");
-		indent = indent + 1;
-		for(int i=0;i!=s.size();++i) {
-			writeStmt(indent,s.get(i));
-		}
-		tab(indent - 1);
-		out.println("}");
-	}
 	private void writeGoto(int indent, Stmt.Goto s) {
 		tab(indent);
 		out.print("goto ");
@@ -250,12 +244,13 @@ public class BoogieFilePrinter {
 		tab(indent);
 		out.print("if(");
 		writeExpression(s.getCondition());
-		out.print(") ");
-		writeBlock(indent,s.getTrueBranch(),true);
+		out.print(") {");
+		writeStmt(indent + 1, s.getTrueBranch());
 		if(s.getFalseBranch() != null) {
-			out.print(" else ");
-			writeBlock(indent,s.getFalseBranch(),true);
+			out.println("} else {");
+			writeStmt(indent + 1, s.getFalseBranch());
 		}
+		out.println("}");
 	}
 	private void writeReturn(int indent, Stmt.Return s) {
 		tab(indent);
@@ -278,21 +273,10 @@ public class BoogieFilePrinter {
 			writeExpression(invariant.get(i));
 			out.println(";");
 		}
-		writeBlock(indent, s.getBody(), false);
-	}
-	private void writeVariableDeclarations(int indent, Stmt.VariableDeclarations s) {
 		tab(indent);
-		out.print("var ");
-		List<String> names = s.getNames();
-		for(int i=0;i!=names.size();++i) {
-			if(i != 0) {
-				out.print(", ");
-			}
-			out.print(names.get(i));
-		}
-		out.print(" : ");
-		writeType(s.getType());
-		out.println(";");
+		out.println("{");
+		writeStmt(indent + 1, s.getBody());
+		out.println("}");
 	}
 	private void writeExpressionWithBraces(Expr e) {
 		if (e instanceof Expr.UnaryOperator || e instanceof Expr.BinaryOperator || e instanceof Expr.NaryOperator) {

@@ -16,6 +16,7 @@ package wyboogie.tasks;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -129,6 +130,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		String name = toMangledName(d);
 		List<Decl.Parameter> parameters = constructParameters(d.getParameters());
 		List<Decl.Parameter> returns = constructParameters(d.getReturns());
+		List<Decl.Variable> locals = constructLocals(d.getBody());
 		ArrayList<Decl.Parameter> parametersAndReturns = new ArrayList<>();
 		parametersAndReturns.addAll(parameters);
 		parametersAndReturns.addAll(returns);
@@ -142,7 +144,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		Decl.Function prototype = new Decl.Function(name, parameters, returnType);
 		// Construct implementation which can be checked against its specification.
 		Decl.Procedure impl = new Decl.Procedure(name + "#impl", parameters, returns, precondition, postcondition,
-				(Stmt.Block) body);
+				locals, body);
 		// Done
 		return new Decl.Sequence(prototype, pre, post, impl);
 	}
@@ -153,7 +155,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		String name = toMangledName(d);
 		List<Decl.Parameter> parameters = constructParameters(d.getParameters());
 		List<Decl.Parameter> returns = constructParameters(d.getReturns());
-		return new Decl.Procedure(name, parameters, returns, precondition, postcondition, (Stmt.Block) body);
+		List<Decl.Variable> locals = constructLocals(d.getBody());
+		return new Decl.Procedure(name, parameters, returns, precondition, postcondition, locals, body);
 	}
 
 	public List<Decl.Parameter> constructParameters(WyilFile.Tuple<WyilFile.Decl.Variable> params) {
@@ -169,6 +172,38 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		return new Decl.Parameter(ps.getName().get(), type);
 	}
 
+	/**
+	 * Determine all local variables declared within this block.
+	 *
+	 * @param blk
+	 * @return
+	 */
+	public List<Decl.Variable> constructLocals(Block blk) {
+		ArrayList<Decl.Variable> decls = new ArrayList<>();
+		new AbstractVisitor(meter) {
+			@Override
+			public void visitInitialiser(Initialiser stmt) {
+				WyilFile.Tuple<Variable> vars = stmt.getVariables();
+				if (vars.size() != 1) {
+					throw new UnsupportedOperationException("Multiple initialisers not supported (yet)");
+				}
+				String name = vars.get(0).getName().toString();
+				BoogieFile.Type type = constructType(vars.get(0).getType());
+				decls.add(new Decl.Variable(name, type));
+			}
+			@Override
+			public void visitDeclaration(WyilFile.Decl d) {
+				// Prevent unexpected traverals of declarations.
+			}
+			@Override
+			public void visitType(WyilFile.Type t) {
+				// Prevent unexpected traverals of types
+			}
+		}.visitBlock(blk);
+		// Done
+		return decls;
+	}
+
 	@Override
 	public Expr constructLambda(Lambda decl, Stmt body) {
 		// TODO Auto-generated method stub
@@ -176,26 +211,26 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public Stmt constructAssert(Assert stmt, Expr condition) {
-		return new Stmt.Assert(condition);
+	public Stmt constructAssert(Assert stmt, Expr condition, List<Expr> preconditions) {
+		return applyPreconditions(preconditions, new Stmt.Assert(condition));
 	}
 
 	@Override
-	public Stmt constructAssign(Assign stmt, List<Expr> lvals, List<Expr> rvals) {
+	public Stmt constructAssign(Assign stmt, List<Expr> lvals, List<Expr> rvals, List<Expr> preconditions) {
 		if (lvals.size() != 1 || rvals.size() != 1) {
 			throw new UnsupportedOperationException("Multiple assignments not supported (yet)");
 		}
-		return new Stmt.Assignment((LVal) lvals.get(0), rvals.get(0));
+		return applyPreconditions(preconditions, new Stmt.Assignment((LVal) lvals.get(0), rvals.get(0)));
 	}
 
 	@Override
-	public Stmt constructAssume(Assume stmt, Expr condition) {
-		return new Stmt.Assume(condition);
+	public Stmt constructAssume(Assume stmt, Expr condition, List<Expr> preconditions) {
+		return applyPreconditions(preconditions, new Stmt.Assume(condition));
 	}
 
 	@Override
 	public Stmt constructBlock(Block stmt, List<Stmt> stmts) {
-		return new Stmt.Block(stmts);
+		return new Stmt.Sequence(stmts);
 	}
 
 	@Override
@@ -213,13 +248,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public Stmt constructDebug(Debug stmt, Expr operand) {
-		return new Stmt.Assert(new Expr.Constant(true));
+	public Stmt constructDebug(Debug stmt, Expr operand, List<Expr> preconditions) {
+		return applyPreconditions(preconditions, new Stmt.Assert(new Expr.Constant(true)));
 	}
 
 	@Override
-	public Stmt constructDoWhile(DoWhile stmt, Stmt body, Expr condition, List<Expr> invariant) {
-		Stmt loop = new Stmt.While(condition, invariant, (Stmt.Block) body);
+	public Stmt constructDoWhile(DoWhile stmt, Stmt body, Expr condition, List<Expr> invariant, List<Expr> preconditions) {
+		Stmt loop = new Stmt.While(condition, invariant, body);
+		// FIXME: handle preconditions
 		return new Stmt.Sequence(body, loop);
 	}
 
@@ -229,15 +265,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public Stmt constructFor(For stmt, Pair<Expr, Expr> range, List<Expr> invariant, Stmt body) {
+	public Stmt constructFor(For stmt, Pair<Expr, Expr> range, List<Expr> invariant, Stmt body, List<Expr> preconditions) {
 		// Determine name of loop variable
 		String name = stmt.getVariable().getName().get();
 		Expr.VariableAccess var = new Expr.VariableAccess(name);
 		// Extract loop contents so it can be appended later
-		ArrayList<Stmt> loopBody = new ArrayList<>(((Stmt.Block)body).getAll());
-		// Declare index variable
-		// FIXME: could include invariant on this declaration to ensure within range
-		Stmt.VariableDeclarations decl = new Stmt.VariableDeclarations(name, BoogieFile.Type.Int);
+		ArrayList<Stmt> loopBody = new ArrayList<>();
+		loopBody.add(body);
 		// Initialise index variable with first value from range
 		Stmt.Assignment init = new Stmt.Assignment(var, range.first());
 		Expr condition = new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LT, var, range.second());
@@ -245,43 +279,41 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		loopBody.add(new Stmt.Assignment(var,
 				new Expr.BinaryOperator(Expr.BinaryOperator.Kind.ADD, var, new Expr.Constant(1))));
 		// Construct the loop
-		Stmt.While loop = new Stmt.While(condition, invariant, new Stmt.Block(loopBody));
+		Stmt.While loop = new Stmt.While(condition, invariant, new Stmt.Sequence(loopBody));
+		// FIXME: handle preconditions
 		// Done.
-		return new Stmt.Sequence(decl, init, loop);
+		return new Stmt.Sequence(init, loop);
 	}
 
 	@Override
-	public Stmt constructIfElse(IfElse stmt, Expr condition, Stmt trueBranch, Stmt falseBranch) {
-		return new Stmt.IfElse(condition, (Stmt.Block) trueBranch, (Stmt.Block) falseBranch);
+	public Stmt constructIfElse(IfElse stmt, Expr condition, Stmt trueBranch, Stmt falseBranch, List<Expr> preconditions) {
+		return applyPreconditions(preconditions, new Stmt.IfElse(condition, trueBranch, falseBranch));
 	}
 
 	@Override
-	public Stmt constructInitialiser(Initialiser stmt, Expr initialiser) {
+	public Stmt constructInitialiser(Initialiser stmt, Expr initialiser, List<Expr> preconditions) {
 		WyilFile.Tuple<Variable> vars = stmt.getVariables();
 		if (vars.size() != 1) {
 			throw new UnsupportedOperationException("Multiple initialisers not supported (yet)");
 		}
 		String name = vars.get(0).getName().toString();
-		BoogieFile.Type type = constructType(vars.get(0).getType());
-		//
-		Stmt.VariableDeclarations decl = new Stmt.VariableDeclarations(name, type);
 		//
 		if (initialiser == null) {
-			return decl;
+			return new Stmt.Sequence();
 		} else {
 			Stmt.Assignment init = new Stmt.Assignment(new Expr.VariableAccess(name), initialiser);
-			//return assertPreconditions(new Stmt.Sequence(decl, init));
-			return new Stmt.Sequence(decl, init);
+			// FIXME: need post condition!
+			return applyPreconditions(preconditions,init);
 		}
 	}
 
 	@Override
 	public Stmt constructNamedBlock(NamedBlock stmt, List<Stmt> stmts) {
-		return new Stmt.Block(stmts);
+		throw new IllegalArgumentException("GOT HERE");
 	}
 
 	@Override
-	public Stmt constructReturn(Return stmt, Expr ret) {
+	public Stmt constructReturn(Return stmt, Expr ret, List<Expr> preconditions) {
 		if (ret != null) {
 			// Identify enclosing function or method to figure out names of return
 			// variables.
@@ -294,7 +326,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 				String rv = returns.get(0).getName().get();
 				Stmt s1 = new Stmt.Assignment(new Expr.VariableAccess(rv), ret);
 				Stmt s2 = new Stmt.Return();
-				return new Stmt.Sequence(s1, s2);
+				return applyPreconditions(preconditions, new Stmt.Sequence(s1, s2));
 			}
 		} else {
 			return new Stmt.Return();
@@ -307,7 +339,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public Stmt constructSwitch(Switch stmt, Expr condition, List<Pair<List<Expr>, Stmt>> cases) {
+	public Stmt constructSwitch(Switch stmt, Expr condition, List<Pair<List<Expr>, Stmt>> cases, List<Expr> preconditions) {
 		ArrayList<Stmt> stmts = new ArrayList<>();
 		String breakLabel = "SWITCH_" + stmt.getIndex() + "_BREAK";
 		// Construct case labels
@@ -331,14 +363,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			stmts.add(new Stmt.Goto(breakLabel));
 		}
 		//
-		return new Stmt.Sequence(stmts);
+		return applyPreconditions(preconditions, new Stmt.Sequence(stmts));
 	}
 
 	@Override
-	public Stmt constructWhile(While stmt, Expr condition, List<Expr> invariant, Stmt body) {
+	public Stmt constructWhile(While stmt, Expr condition, List<Expr> invariant, Stmt body, List<Expr> preconditions) {
 		boolean needContinueLabel = containsContinueOrBreak(stmt, false);
 		boolean needBreakLabel = containsContinueOrBreak(stmt, true);
-		Stmt.While s = new Stmt.While(condition, invariant, (Stmt.Block) body);
+		Stmt.While s = new Stmt.While(condition, invariant, body);
+		// FIXME: handle preconditions
 		// Handle need for continue / break
 		if (needContinueLabel && needBreakLabel) {
 			Stmt.Label continueLabel = new Stmt.Label("CONTINUE_" + stmt.getIndex());
@@ -355,13 +388,21 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		}
 	}
 
-	@Override
-	public Stmt constructSequence(List<Stmt> stmts, Stmt stmt) {
-		if(stmts.isEmpty()) {
+	public Stmt applyPreconditions(List<Expr> preconditions, Stmt stmt) {
+		if(preconditions.isEmpty()) {
 			return stmt;
 		} else {
-			return new Stmt.Sequence(stmts, stmt);
+			List<Stmt> assertions = constructAssertions(preconditions);
+			return new Stmt.Sequence(assertions,stmt);
 		}
+	}
+
+	public List<Stmt> constructAssertions(List<Expr> exprs) {
+		ArrayList<Stmt> assertions = new ArrayList<>();
+		for(int i=0;i!=exprs.size();++i) {
+			assertions.add(new Stmt.Assert(exprs.get(i)));
+		}
+		return assertions;
 	}
 
 	@Override
@@ -553,14 +594,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public List<Stmt> visitIntegerDivisionPrecondition(IntegerDivision expr, Environment environment) {
-		// Generate suitable preconditions.
-		List<Stmt> preconds = super.visitIntegerDivisionPrecondition(expr, environment);
-		Expr rhs = visitExpression(expr.getSecondOperand(), environment);
-		return append(preconds, new Stmt.Assert(neq(rhs, constant(0))));
-	}
-
-	@Override
 	public Expr constructIntegerRemainder(IntegerRemainder expr, Expr lhs, Expr rhs) {
 		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.REM, lhs, rhs);
 	}
@@ -635,7 +668,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructInvoke(Invoke expr, List<Expr> arguments) {
-		Callable c = expr.getLink().getTarget();
 		// Apply name mangling
 		String name = toMangledName(expr.getLink().getTarget());
 		//
@@ -710,6 +742,37 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		return new Expr.VariableAccess(expr.getVariableDeclaration().getName().toString());
 	}
 
+	// =========================================================================================
+	// Preconditions
+	// =========================================================================================
+
+	@Override
+	public Expr constructArrayAccessPrecondition(ArrayAccess expr, Expr source, Expr index) {
+		Expr len = new Expr.Invoke("WArray#Length", source);
+		return and(lteq(constant(0),index),lt(index,len));
+	}
+
+	@Override
+	public Expr constructIntegerDivisionPrecondition(IntegerDivision expr, Expr lhs, Expr rhs) {
+		return neq(rhs, constant(0));
+	}
+
+	@Override
+	public Expr constructInvokePrecondition(Invoke expr, List<Expr> args) {
+		Callable c = expr.getLink().getTarget();
+		String name = toMangledName(c);
+		//
+		if(c instanceof FunctionOrMethod) {
+			return new Expr.Invoke(name + "#pre", args);
+		} else {
+			return null;
+		}
+	}
+
+	// =========================================================================================
+	// Types
+	// =========================================================================================
+
 	public BoogieFile.Type constructType(WyilFile.Type type) {
 		// FIXME: this should be moved into AbstractTranslator.
 		switch (type.getOpcode()) {
@@ -737,8 +800,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	public BoogieFile.Type constructNominalType(WyilFile.Type.Nominal type) {
-		// FIXME: mangling required here
-		String name = type.getLink().getName().toString();
+		// Apply name mangling
+		String name = toMangledName(type.getLink().getTarget());
+		// Done!
 		return new BoogieFile.Type.Synonym(name);
 	}
 
