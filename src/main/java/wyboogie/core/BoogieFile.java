@@ -24,6 +24,8 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
+import wyboogie.core.BoogieFile.Decl;
+import wyboogie.core.BoogieFile.Expr;
 import wyboogie.io.BoogieFilePrinter;
 import wyfs.lang.Content;
 import wyfs.lang.Path;
@@ -92,6 +94,30 @@ public class BoogieFile {
 
 	public interface Decl {
 
+		/**
+		 * <p>
+		 * Axioms are used to postulate properties of constants and functions, though
+		 * cannot refer to global variables. <i>Care must be taken to ensure a given set
+		 * of axioms are not inconsistent</i>. For example, <code>axiom false;</code> is
+		 * the simplest inconsistent axiom. If this is included in a Boogie program then
+		 * all asserts will verify regardless of whether they are correct or otherwise!
+		 * For example, the following program verifies:
+		 * </p>
+		 *
+		 * <pre>
+		 * axiom false;
+		 * procedure main() {
+		 *   assert 1 < 0;
+		 * }
+		 * </pre>
+		 *
+		 * <p>
+		 * Clearly, this does is not desirable!
+		 * </p>
+		 *
+		 * @author David J. Pearce
+		 *
+		 */
 		public static class Axiom implements Decl {
 			private final Expr operand;
 
@@ -104,6 +130,14 @@ public class BoogieFile {
 			}
 		}
 
+		/**
+		 * Allows a line comment to be included in a <code>BoogieFile</code>. This is
+		 * helpful for annotating generated declarations with helpful information about
+		 * them.
+		 *
+		 * @author David J. Pearce
+		 *
+		 */
 		public static class LineComment implements Decl {
 			private final String message;
 
@@ -116,17 +150,60 @@ public class BoogieFile {
 			}
 		}
 
+		/**
+		 * Represents a global (symbolic) constant value. Constants cannot overload, and
+		 * the name of each must be distinct from the others and from any global
+		 * variables. A constant can be marked <i>unique</i>, meaning it will not
+		 * compare equal with any other unique constant. For example, we have the
+		 * following:
+		 *
+		 * <pre>
+		 * const unique X : int;
+		 * const unique Y : int;
+		 * const V : int;
+		 *
+		 * procedure main() {
+		 *   assert X != Y;
+		 *   assert X != V;
+		 * }
+		 * </pre>
+		 *
+		 * Here, the first assertion holds whilst the second does not.
+		 *
+		 * @author David J. Pearce
+		 *
+		 */
 		public static class Constant extends Parameter implements Decl {
 			private final boolean unique;
 
+			/**
+			 * Construct a constant which is not unique.
+			 *
+			 * @param name Name of constant.
+			 * @param type Type of constant.
+			 */
 			public Constant(String name, Type type) {
 				super(name, type);
 				this.unique = false;
 			}
+
+			/**
+			 * Construct a constant which maybe unique.
+			 *
+			 * @param unique Flag to indicate whether constant is unique.
+			 * @param name   Name of constant.
+			 * @param type   Type of constant.
+			 */
 			public Constant(boolean unique, String name, Type type) {
 				super(name, type);
 				this.unique = unique;
 			}
+
+			/**
+			 * Check whether a given constant is unique or not.
+			 *
+			 * @return
+			 */
 			public boolean isUnique() {
 				return unique;
 			}
@@ -235,6 +312,13 @@ public class BoogieFile {
 			}
 		}
 
+		/**
+		 * an implementation declaration spells out a set of execution traces by giving
+		 * a body of code.
+		 *
+		 * @author djp
+		 *
+		 */
 		public static class Implementation implements Decl {
 			private final String name;
 			private final List<Parameter> parameters;
@@ -312,6 +396,14 @@ public class BoogieFile {
 			}
 		}
 
+		/**
+		 * A type synonym is simply an abbreviation for the given type; any use of it,
+		 * which syntactically looks like the use of a type constructor, is simply
+		 * replaced by the right- hand side Type in which:
+		 *
+		 * @author djp
+		 *
+		 */
 		public static class TypeSynonym implements Decl {
 			private final String name;
 			private final Type synonym;
@@ -347,28 +439,6 @@ public class BoogieFile {
 			}
 		}
 	};
-
-	// =========================================================================
-	// Block
-	// =========================================================================
-
-	public static class Block {
-		private final List<Decl.Variable> decls;
-		private final List<Stmt> stmts;
-
-		public Block(Collection<Decl.Variable> decls, Collection<Stmt> stmts) {
-			this.decls = new ArrayList<>(decls);
-			this.stmts = new ArrayList<>(stmts);
-		}
-
-		public List<Decl.Variable> getDeclarations() {
-			return decls;
-		}
-
-		public List<Stmt> getBody() {
-			return stmts;
-		}
-	}
 
 	// =========================================================================
 	// Statements
@@ -660,7 +730,8 @@ public class BoogieFile {
 
 		public static class UnaryOperator implements Expr {
 			public enum Kind {
-				NEG
+				NEG,
+				NOT
 			}
 
 			private final Kind kind;
@@ -792,5 +863,172 @@ public class BoogieFile {
 				return value;
 			}
 		}
+	}
+
+	// =======================================================
+	// Constructor API (for convenience)
+	// =======================================================
+
+	// Declarations
+
+	public static Decl.Function FUN(String name, BoogieFile.Type parameter, BoogieFile.Type returns) {
+		return new Decl.Function(name, parameter, returns);
+	}
+
+	public static Decl.Function FUN(String name, BoogieFile.Type param1, BoogieFile.Type param2, BoogieFile.Type returns) {
+		ArrayList<Decl.Parameter> parameters = new ArrayList<>();
+		parameters.add(new Decl.Parameter(null,param1));
+		parameters.add(new Decl.Parameter(null,param2));
+		return new Decl.Function(name, parameters, returns);
+	}
+
+	// Logical Operators
+
+	public static Expr AND(List<Expr> operands) {
+		if (operands.size() == 0) {
+			return new Expr.Constant(true);
+		} else {
+			return new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, operands);
+		}
+	}
+
+	public static Expr AND(Expr... operands) {
+		if (operands.length == 0) {
+			return new Expr.Constant(true);
+		} else {
+			return new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, operands);
+		}
+	}
+
+	public static Expr.Quantifier FORALL(String name, BoogieFile.Type type, Expr body) {
+		return new Expr.Quantifier(true, body, new Decl.Parameter(name, type));
+	}
+
+	public static Expr.Quantifier FORALL(String name1, BoogieFile.Type type1, String name2, BoogieFile.Type type2,
+			Expr body) {
+		return new Expr.Quantifier(true, body, new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2));
+	}
+
+	public static Expr.Quantifier FORALL(String name1, BoogieFile.Type type1, String name2, BoogieFile.Type type2,
+			String name3, BoogieFile.Type type3, Expr body) {
+		return new Expr.Quantifier(true, body, new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2),
+				new Decl.Parameter(name3, type3));
+	}
+
+	public static Expr.Quantifier FORALL(List<Decl.Parameter> parameters, Expr body) {
+		return new Expr.Quantifier(true, body, parameters);
+	}
+
+	public static Expr.BinaryOperator IFF(Expr lhs, Expr rhs) {
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.IFF, lhs, rhs);
+	}
+
+	public static Expr.BinaryOperator IMPLIES(Expr lhs, Expr rhs) {
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.IF, lhs, rhs);
+	}
+
+	public static Expr.UnaryOperator NOT(Expr lhs) {
+		// FIXME: could apply some simplification here.
+		return new Expr.UnaryOperator(Expr.UnaryOperator.Kind.NOT, lhs);
+	}
+
+	public static Expr OR(List<Expr> operands) {
+		if (operands.size() == 0) {
+			return new Expr.Constant(false);
+		} else {
+			return new Expr.NaryOperator(Expr.NaryOperator.Kind.OR, operands);
+		}
+	}
+
+	public static Expr OR(Expr... operands) {
+		if (operands.length == 0) {
+			return new Expr.Constant(false);
+		} else {
+			return new Expr.NaryOperator(Expr.NaryOperator.Kind.OR, operands);
+		}
+	}
+
+	// Relational Operators
+
+	public static Expr.BinaryOperator EQ(Expr lhs, Expr rhs) {
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.EQ, lhs, rhs);
+	}
+
+	public static Expr.BinaryOperator NEQ(Expr lhs, Expr rhs) {
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.NEQ, lhs, rhs);
+	}
+
+	public static Expr.BinaryOperator GTEQ(Expr lhs, Expr rhs) {
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.GTEQ, lhs, rhs);
+	}
+
+	public static Expr.BinaryOperator GT(Expr lhs, Expr rhs) {
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.GT, lhs, rhs);
+	}
+
+	public static Expr.BinaryOperator LTEQ(Expr lhs, Expr rhs) {
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LTEQ, lhs, rhs);
+	}
+
+	public static Expr.BinaryOperator LT(Expr lhs, Expr rhs) {
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LT, lhs, rhs);
+	}
+
+	// Arithmetic Operators
+	public static Expr.BinaryOperator ADD(Expr lhs, Expr rhs) {
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.ADD, lhs, rhs);
+	}
+
+	public static Expr.UnaryOperator NEG(Expr lhs) {
+		return new Expr.UnaryOperator(Expr.UnaryOperator.Kind.NEG, lhs);
+	}
+
+	public static Expr.BinaryOperator SUB(Expr lhs, Expr rhs) {
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.SUB, lhs, rhs);
+	}
+
+	public static Expr.BinaryOperator MUL(Expr lhs, Expr rhs) {
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.MUL, lhs, rhs);
+	}
+
+	public static Expr.BinaryOperator DIV(Expr lhs, Expr rhs) {
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.DIV, lhs, rhs);
+	}
+
+	public static Expr.BinaryOperator IDIV(Expr lhs, Expr rhs) {
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.IDIV, lhs, rhs);
+	}
+
+	public static Expr.BinaryOperator REM(Expr lhs, Expr rhs) {
+		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.REM, lhs, rhs);
+	}
+	// Dictionaries
+
+	public static Expr.DictionaryAccess GET(Expr src, Expr index) {
+		return new Expr.DictionaryAccess(src, index);
+	}
+
+	public static Expr.DictionaryUpdate PUT(Expr src, Expr index, Expr value) {
+		return new Expr.DictionaryUpdate(src, index, value);
+	}
+
+	// Misc
+	public static Expr.Constant CONST(boolean b) {
+		return new Expr.Constant(b);
+	}
+	public static Expr.Constant CONST(int i) {
+		return new Expr.Constant(i);
+	}
+	public static Expr.Constant CONST(BigInteger i) {
+		return new Expr.Constant(i);
+	}
+	public static Expr.Invoke CALL(String name, Expr... parameters) {
+		return new Expr.Invoke(name, parameters);
+	}
+	public static Expr.Invoke CALL(String name, List<Expr> parameters) {
+		return new Expr.Invoke(name, parameters);
+	}
+	public static Expr.VariableAccess VAR(String name) {
+		return new Expr.VariableAccess(name);
 	}
 }

@@ -1,11 +1,23 @@
+# Emacs files
+*~
+
+# Whiley Files
+*.wyil
+*.wyal
+
+# Boogie Files
+*.bpl
+
 # Compiled class file
 *.class
 
 # Log file
 *.log
 
-# BlueJ files
-*.ctxt
+# Eclipse files
+.classpath
+.project
+.settings/
 
 # Mobile Tools for Java (J2ME)
 .mtj.tmp/

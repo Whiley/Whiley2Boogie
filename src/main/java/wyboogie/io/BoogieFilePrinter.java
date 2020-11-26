@@ -419,8 +419,18 @@ public class BoogieFilePrinter {
 	}
 
 	private void writeUnaryOperator(Expr.UnaryOperator e) {
-		out.print("-");
-		writeExpression(e.getOperand());
+		switch(e.getKind()) {
+		case NEG:
+			out.print("-");
+			writeExpression(e.getOperand());
+			break;
+		case NOT:
+			out.print("!");
+			writeExpression(e.getOperand());
+			break;
+		default:
+			throw new IllegalArgumentException("unknown unary operator encountered (" + e.getClass().getName() + ")");
+		}
 	}
 	private void writeVariableAccess(Expr.VariableAccess e) {
 		out.write(e.getVariable());

@@ -16,32 +16,25 @@ package wyboogie.tasks;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 
-import javax.lang.model.element.Modifier;
-
+import static wyboogie.core.BoogieFile.*;
 import wyboogie.core.BoogieFile;
 import wyboogie.core.BoogieFile.Decl;
 import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.Stmt;
-import wyboogie.core.BoogieFile.Stmt.Sequence;
 import wyboogie.core.BoogieFile.LVal;
 import wyboogie.util.AbstractTranslator;
 import wybs.lang.Build.Meter;
+import wyfs.util.ArrayUtils;
 import wyfs.util.Pair;
 import wyil.lang.WyilFile;
-import wyil.lang.WyilFile.Decl.*;
-import wyil.lang.WyilFile.Expr.*;
-import wyil.lang.WyilFile.Stmt.*;
 import wyil.util.AbstractVisitor;
 import wyil.util.IncrementalSubtypingEnvironment;
 import wyil.util.Subtyping;
 import wyil.util.TypeMangler;
-import wyil.util.AbstractTranslator.Environment;
 
 public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	/**
@@ -66,7 +59,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Add general axioms
 		boogieFile.getDeclarations().addAll(constructAxioms(wf));
 		// Translate local units
-		for (Unit unit : wf.getModule().getUnits()) {
+		for (WyilFile.Decl.Unit unit : wf.getModule().getUnits()) {
 			for (WyilFile.Decl decl : unit.getDeclarations()) {
 				BoogieFile.Decl d = visitDeclaration(decl);
 				if (d != null) {
@@ -77,12 +70,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public Decl constructImport(Import d) {
+	public Decl constructImport(WyilFile.Decl.Import d) {
 		return new Decl.Sequence();
 	}
 
 	@Override
-	public Decl constructType(Type d, List<Expr> invariant) {
+	public Decl constructType(WyilFile.Decl.Type d, List<Expr> invariant) {
 		WyilFile.Decl.Variable var = d.getVariableDeclaration();
 		// Apply name mangling
 		String name = toMangledName(d);
@@ -100,7 +93,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public Decl constructStaticVariable(StaticVariable d, Expr initialiser) {
+	public Decl constructStaticVariable(WyilFile.Decl.StaticVariable d, Expr initialiser) {
 		BoogieFile.Type type = constructType(d.getType());
 		// Apply name mangling
 		String name = toMangledName(d);
@@ -119,7 +112,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public Decl constructProperty(Property d, List<Expr> clauses) {
+	public Decl constructProperty(WyilFile.Decl.Property d, List<Expr> clauses) {
 		// Apply name mangling
 		String name = toMangledName(d);
 		//
@@ -129,38 +122,16 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public Decl constructFunction(Function d, List<Expr> precondition, List<Expr> postcondition, Stmt body) {
-		// Apply name mangling
-		String name = toMangledName(d);
-		List<Decl.Parameter> parameters = constructParameters(d.getParameters());
-		List<Decl.Parameter> returns = constructParameters(d.getReturns());
-		ArrayList<Decl.Parameter> parametersAndReturns = new ArrayList<>();
-		parametersAndReturns.addAll(parameters);
-		parametersAndReturns.addAll(returns);
-		// FIXME: obviously broken for multiple returns!
-		BoogieFile.Type returnType = returns.get(0).getType();
-		// Construct function representation precondition
-		Decl.Function pre = new Decl.Function(name + "#pre", parameters, BoogieFile.Type.Bool, and(precondition));
-		// Construct function representation postcondition
-		Decl.Function post = new Decl.Function(name + "#post", parametersAndReturns, BoogieFile.Type.Bool, and(postcondition));
-		// Construct prototype which can be called from expressions.
-		Decl.Function prototype = new Decl.Function(name, parameters, returnType);
-		// Construct procedure prototype
-		Decl proc = new Decl.Procedure(name + "#impl", parameters, returns, precondition, postcondition);
-		// Determine local variables
-		List<Decl.Variable> locals = constructLocals(d.getBody());
-		// Construct implementation (if applicable)
-		List<Decl.Parameter> shadows = constructShadowParameters(d.getParameters(),parameters);
-		//
-		body = addShadowAssignments(locals, body, parameters, shadows);
-		// Construct implementation which can be checked against its specification.
-		Decl impl = new Decl.Implementation(name + "#impl", shadows, returns, locals, body);
-		// Done
-		return new Decl.Sequence(prototype, pre, post, proc, impl);
+	public Decl constructFunction(WyilFile.Decl.Function d, List<Expr> precondition, List<Expr> postcondition, Stmt body) {
+		return constructFunctionOrMethod(d,precondition,postcondition,body);
 	}
 
 	@Override
-	public Decl constructMethod(Method d, List<Expr> precondition, List<Expr> postcondition, Stmt body) {
+	public Decl constructMethod(WyilFile.Decl.Method d, List<Expr> precondition, List<Expr> postcondition, Stmt body) {
+		return constructFunctionOrMethod(d,precondition,postcondition,body);
+	}
+
+	public Decl constructFunctionOrMethod(WyilFile.Decl.FunctionOrMethod d, List<Expr> precondition, List<Expr> postcondition, Stmt body) {
 		// Apply name mangling
 		String name = toMangledName(d);
 		List<Decl.Parameter> parameters = constructParameters(d.getParameters());
@@ -171,9 +142,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// FIXME: obviously broken for multiple returns!
 		BoogieFile.Type returnType = returns.isEmpty() ? WVal : returns.get(0).getType();
 		// Construct function representation precondition
-		Decl.Function pre = new Decl.Function(name + "#pre", parameters, BoogieFile.Type.Bool, and(precondition));
+		Decl.Function pre = new Decl.Function(name + "#pre", parameters, BoogieFile.Type.Bool, AND(precondition));
 		// Construct function representation postcondition
-		Decl.Function post = new Decl.Function(name + "#post", parametersAndReturns, BoogieFile.Type.Bool, and(postcondition));
+		Decl.Function post = new Decl.Function(name + "#post", parametersAndReturns, BoogieFile.Type.Bool, AND(postcondition));
 		// Construct prototype which can be called from expressions.
 		Decl.Function prototype = new Decl.Function(name, parameters, returnType);
 		// Construct procedure prototype
@@ -186,10 +157,24 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		body = addShadowAssignments(locals, body, parameters, shadows);
 		// Construct implementation which can be checked against its specification.
 		Decl impl = new Decl.Implementation(name + "#impl", shadows, returns, locals, body);
-		// Done
-		return new Decl.Sequence(prototype, pre, post, proc, impl);
+		if(returns.size() > 0) {
+			// Construct axiom linking post-condition with prototype.
+			Decl axiom = constructPostconditionAxiom(name, parameters, returns);
+			return new Decl.Sequence(prototype, pre, post, proc, impl, axiom);
+		} else {
+			// Done
+			return new Decl.Sequence(prototype, pre, post, proc, impl);
+		}
 	}
 
+	/**
+	 * Convert a sequence of Wyil parameter declarations into a sequence of Boogie
+	 * parameter declarations. This requires converting the Wyil type to its
+	 * corresponding Boogie type.
+	 *
+	 * @param params
+	 * @return
+	 */
 	public List<Decl.Parameter> constructParameters(WyilFile.Tuple<WyilFile.Decl.Variable> params) {
 		ArrayList<Decl.Parameter> ps = new ArrayList<>();
 		for (int i = 0; i != params.size(); ++i) {
@@ -198,6 +183,18 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		return ps;
 	}
 
+	/**
+	 * Construct the list of parameters to use in the implementation. This differs
+	 * from that used in the protype / procedure declaration because it must account
+	 * for <i>shadows</i>. These arise because Whiley allows parameters to be
+	 * mutated, where as Boogie does not. To work around this, we have shadow
+	 * parameters (i.e. with different names) which are then assigned to local
+	 * variables (which can be modified).
+	 *
+	 * @param params
+	 * @param parameters
+	 * @return
+	 */
 	public List<Decl.Parameter> constructShadowParameters(WyilFile.Tuple<WyilFile.Decl.Variable> params,
 			List<Decl.Parameter> parameters) {
 		ArrayList<Decl.Parameter> ps = new ArrayList<>();
@@ -213,15 +210,40 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		return ps;
 	}
 
+	/**
+	 * Check whether a given variable is marked as final or not. This is useful to
+	 * avoid shadow variables in some case.
+	 *
+	 * @param var
+	 * @return
+	 */
 	public boolean isFinal(WyilFile.Decl.Variable var) {
 		return var.getModifiers().match(WyilFile.Modifier.Final.class) != null;
 	}
 
+	/**
+	 * Convert a Wyil parameter declaration into a corresponding Boogie one which,
+	 * in turn, requires converting their types.
+	 *
+	 * @param ps
+	 * @return
+	 */
 	public Decl.Parameter constructParameter(WyilFile.Decl.Variable ps) {
 		BoogieFile.Type type = constructType(ps.getType());
 		return new Decl.Parameter(ps.getName().get(), type);
 	}
 
+	/**
+	 * Add the list of assignments for the shadow parameters to a given function or
+	 * method body. Basically, for every shadow parameter, there is one assignment
+	 * to its corresponding local variable.
+	 *
+	 * @param locals
+	 * @param body
+	 * @param parameters
+	 * @param implementation
+	 * @return
+	 */
 	public Stmt addShadowAssignments(List<Decl.Variable> locals, Stmt body, List<Decl.Parameter> parameters,
 			List<Decl.Parameter> implementation) {
 		// Handle parameter shadows
@@ -240,18 +262,20 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	/**
-	 * Determine all local variables declared within this block.
+	 * Determine the set of local variables declared within this block. This is
+	 * necessary as Boogie, unlike Whiley, requires that all local variables are
+	 * declared up front (like C does).
 	 *
 	 * @param blk
 	 * @return
 	 */
-	public List<Decl.Variable> constructLocals(Block blk) {
+	public List<Decl.Variable> constructLocals(WyilFile.Stmt.Block blk) {
 		ArrayList<Decl.Variable> decls = new ArrayList<>();
 		// Handle local variables
 		new AbstractVisitor(meter) {
 			@Override
-			public void visitInitialiser(Initialiser stmt) {
-				WyilFile.Tuple<Variable> vars = stmt.getVariables();
+			public void visitInitialiser(WyilFile.Stmt.Initialiser stmt) {
+				WyilFile.Tuple<WyilFile.Decl.Variable> vars = stmt.getVariables();
 				if (vars.size() != 1) {
 					throw new UnsupportedOperationException("Multiple initialisers not supported (yet)");
 				}
@@ -274,19 +298,48 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		return decls;
 	}
 
+	/**
+	 * Construct the "postcondition axiom" which relates a given function prototype
+	 * to its postcondition. Without this, when an invocation is made to that
+	 * prototype, Boogie will not be aware of what the postcondition implies.
+	 *
+	 * @param prototype
+	 * @param parameters
+	 * @return
+	 */
+	public Decl.Axiom constructPostconditionAxiom(String name, List<Decl.Parameter> parameters,
+			List<Decl.Parameter> returns) {
+		//
+		if (returns.size() != 1) {
+			throw new IllegalArgumentException("multiple returns not supported");
+		} else if (parameters.size() == 0) {
+			// Easy case, since we don't even need a quantifier.
+			return new Decl.Axiom(CALL(name + "#post", CALL(name)));
+		} else {
+			// A universal quantifier is required!
+			Expr[] pargs = new Expr[parameters.size()];
+			for (int i = 0; i != pargs.length; ++i) {
+				pargs[i] = VAR(parameters.get(i).getName());
+			}
+			// Construct the axiom
+			return new Decl.Axiom(FORALL(parameters, IMPLIES(CALL(name + "#pre", pargs),
+					CALL(name + "#post", ArrayUtils.append(pargs, CALL(name, pargs))))));
+		}
+	}
+
 	@Override
-	public Expr constructLambda(Lambda decl, Stmt body) {
+	public Expr constructLambda(WyilFile.Decl.Lambda decl, Stmt body) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Stmt constructAssert(Assert stmt, Expr condition, List<Expr> preconditions) {
+	public Stmt constructAssert(WyilFile.Stmt.Assert stmt, Expr condition, List<Expr> preconditions) {
 		return applyPreconditions(preconditions, new Stmt.Assert(condition));
 	}
 
 	@Override
-	public Stmt constructAssign(Assign stmt, List<Expr> lvals, List<Expr> rvals, List<Expr> preconditions) {
+	public Stmt constructAssign(WyilFile.Stmt.Assign stmt, List<Expr> lvals, List<Expr> rvals, List<Expr> preconditions) {
 		if (lvals.size() != 1 || rvals.size() != 1) {
 			throw new UnsupportedOperationException("Multiple assignments not supported (yet)");
 		}
@@ -297,36 +350,36 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public Stmt constructAssume(Assume stmt, Expr condition, List<Expr> preconditions) {
+	public Stmt constructAssume(WyilFile.Stmt.Assume stmt, Expr condition, List<Expr> preconditions) {
 		return applyPreconditions(preconditions, new Stmt.Assume(condition));
 	}
 
 	@Override
-	public Stmt constructBlock(Block stmt, List<Stmt> stmts) {
+	public Stmt constructBlock(WyilFile.Stmt.Block stmt, List<Stmt> stmts) {
 		return new Stmt.Sequence(stmts);
 	}
 
 	@Override
-	public Stmt constructBreak(Break stmt) {
+	public Stmt constructBreak(WyilFile.Stmt.Break stmt) {
 		WyilFile.Stmt loop = getEnclosingLoop(stmt);
 		String label = "BREAK_" + loop.getIndex();
 		return new Stmt.Goto(label);
 	}
 
 	@Override
-	public Stmt constructContinue(Continue stmt) {
+	public Stmt constructContinue(WyilFile.Stmt.Continue stmt) {
 		WyilFile.Stmt loop = getEnclosingLoop(stmt);
 		String label = "CONTINUE_" + loop.getIndex();
 		return new Stmt.Goto(label);
 	}
 
 	@Override
-	public Stmt constructDebug(Debug stmt, Expr operand, List<Expr> preconditions) {
-		return applyPreconditions(preconditions, new Stmt.Assert(new Expr.Constant(true)));
+	public Stmt constructDebug(WyilFile.Stmt.Debug stmt, Expr operand, List<Expr> preconditions) {
+		return applyPreconditions(preconditions, new Stmt.Assert(CONST(true)));
 	}
 
 	@Override
-	public Stmt constructDoWhile(DoWhile stmt, Stmt body, Expr condition, List<Expr> invariant,
+	public Stmt constructDoWhile(WyilFile.Stmt.DoWhile stmt, Stmt body, Expr condition, List<Expr> invariant,
 			List<Expr> preconditions) {
 		Stmt loop = new Stmt.While(condition, invariant, body);
 		// FIXME: handle preconditions
@@ -334,12 +387,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public Stmt constructFail(Fail stmt) {
-		return new Stmt.Assert(new Expr.Constant(false));
+	public Stmt constructFail(WyilFile.Stmt.Fail stmt) {
+		return new Stmt.Assert(CONST(false));
 	}
 
 	@Override
-	public Stmt constructFor(For stmt, Pair<Expr, Expr> range, List<Expr> invariant, Stmt body,
+	public Stmt constructFor(WyilFile.Stmt.For stmt, Pair<Expr, Expr> range, List<Expr> invariant, Stmt body,
 			List<Expr> preconditions) {
 		// Determine name of loop variable
 		String name = stmt.getVariable().getName().get();
@@ -349,10 +402,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		loopBody.add(body);
 		// Initialise index variable with first value from range
 		Stmt.Assignment init = new Stmt.Assignment(var, range.first());
-		Expr condition = new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LT, var, range.second());
+		Expr condition = LT(var, range.second());
 		// Add variable increment for completeness
-		loopBody.add(new Stmt.Assignment(var,
-				new Expr.BinaryOperator(Expr.BinaryOperator.Kind.ADD, var, new Expr.Constant(1))));
+		loopBody.add(new Stmt.Assignment(var, ADD(var, CONST(1))));
 		// Construct the loop
 		Stmt.While loop = new Stmt.While(condition, invariant, new Stmt.Sequence(loopBody));
 		// FIXME: handle preconditions
@@ -361,14 +413,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public Stmt constructIfElse(IfElse stmt, Expr condition, Stmt trueBranch, Stmt falseBranch,
+	public Stmt constructIfElse(WyilFile.Stmt.IfElse stmt, Expr condition, Stmt trueBranch, Stmt falseBranch,
 			List<Expr> preconditions) {
 		return applyPreconditions(preconditions, new Stmt.IfElse(condition, trueBranch, falseBranch));
 	}
 
 	@Override
-	public Stmt constructInitialiser(Initialiser stmt, Expr initialiser, List<Expr> preconditions) {
-		WyilFile.Tuple<Variable> vars = stmt.getVariables();
+	public Stmt constructInitialiser(WyilFile.Stmt.Initialiser stmt, Expr initialiser, List<Expr> preconditions) {
+		WyilFile.Tuple<WyilFile.Decl.Variable> vars = stmt.getVariables();
 		if (vars.size() != 1) {
 			throw new UnsupportedOperationException("Multiple initialisers not supported (yet)");
 		}
@@ -384,23 +436,23 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public Stmt constructNamedBlock(NamedBlock stmt, List<Stmt> stmts) {
+	public Stmt constructNamedBlock(WyilFile.Stmt.NamedBlock stmt, List<Stmt> stmts) {
 		throw new IllegalArgumentException("GOT HERE");
 	}
 
 	@Override
-	public Stmt constructReturn(Return stmt, Expr ret, List<Expr> preconditions) {
+	public Stmt constructReturn(WyilFile.Stmt.Return stmt, Expr ret, List<Expr> preconditions) {
 		if (ret != null) {
 			// Identify enclosing function or method to figure out names of return
 			// variables.
-			Callable enclosing = stmt.getAncestor(WyilFile.Decl.FunctionOrMethod.class);
-			WyilFile.Tuple<Variable> returns = enclosing.getReturns();
+			WyilFile.Decl.Callable enclosing = stmt.getAncestor(WyilFile.Decl.FunctionOrMethod.class);
+			WyilFile.Tuple<WyilFile.Decl.Variable> returns = enclosing.getReturns();
 			if (returns.size() != 1) {
 				// TODO: implement this!
 				throw new IllegalArgumentException("Missing support for multiple returns");
 			} else {
 				String rv = returns.get(0).getName().get();
-				Stmt s1 = new Stmt.Assignment(new Expr.VariableAccess(rv), ret);
+				Stmt s1 = new Stmt.Assignment(VAR(rv), ret);
 				Stmt s2 = new Stmt.Return();
 				return applyPreconditions(preconditions, new Stmt.Sequence(s1, s2));
 			}
@@ -410,12 +462,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public Stmt constructSkip(Skip stmt) {
+	public Stmt constructSkip(WyilFile.Stmt.Skip stmt) {
 		return new Stmt.Assert(new Expr.Constant(true));
 	}
 
 	@Override
-	public Stmt constructSwitch(Switch stmt, Expr condition, List<Pair<List<Expr>, Stmt>> cases,
+	public Stmt constructSwitch(WyilFile.Stmt.Switch stmt, Expr condition, List<Pair<List<Expr>, Stmt>> cases,
 			List<Expr> preconditions) {
 		ArrayList<Stmt> stmts = new ArrayList<>();
 		String breakLabel = "SWITCH_" + stmt.getIndex() + "_BREAK";
@@ -432,10 +484,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			List<Expr> ith_first = ith.first();
 			ArrayList<Expr> labs = new ArrayList<>();
 			for (int j = 0; j != ith_first.size(); ++j) {
-				labs.add(new Expr.BinaryOperator(Expr.BinaryOperator.Kind.EQ, condition, ith_first.get(j)));
+				labs.add(EQ(condition, ith_first.get(j)));
 			}
 			stmts.add(new Stmt.Label(labels[i]));
-			stmts.add(new Stmt.Assume(new Expr.NaryOperator(Expr.NaryOperator.Kind.OR, labs)));
+			stmts.add(new Stmt.Assume(OR(labs)));
 			stmts.add(ith.second());
 			stmts.add(new Stmt.Goto(breakLabel));
 		}
@@ -444,7 +496,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public Stmt constructWhile(While stmt, Expr condition, List<Expr> invariant, Stmt body, List<Expr> preconditions) {
+	public Stmt constructWhile(WyilFile.Stmt.While stmt, Expr condition, List<Expr> invariant, Stmt body, List<Expr> preconditions) {
 		boolean needContinueLabel = containsContinueOrBreak(stmt, false);
 		boolean needBreakLabel = containsContinueOrBreak(stmt, true);
 		Stmt.While s = new Stmt.While(condition, invariant, body);
@@ -483,60 +535,60 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public Expr constructArrayAccessLVal(ArrayAccess expr, Expr source, Expr index) {
+	public Expr constructArrayAccessLVal(WyilFile.Expr.ArrayAccess expr, Expr source, Expr index) {
 		return new Expr.DictionaryAccess(source, index);
 	}
 
 	@Override
-	public Expr constructDereferenceLVal(Dereference expr, Expr operand) {
+	public Expr constructDereferenceLVal(WyilFile.Expr.Dereference expr, Expr operand) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Expr constructFieldDereferenceLVal(FieldDereference expr, Expr operand) {
+	public Expr constructFieldDereferenceLVal(WyilFile.Expr.FieldDereference expr, Expr operand) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Expr constructRecordAccessLVal(RecordAccess expr, Expr source) {
+	public Expr constructRecordAccessLVal(WyilFile.Expr.RecordAccess expr, Expr source) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Expr constructTupleInitialiserLVal(TupleInitialiser expr, List<Expr> source) {
+	public Expr constructTupleInitialiserLVal(WyilFile.Expr.TupleInitialiser expr, List<Expr> source) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Expr constructVariableAccessLVal(VariableAccess expr) {
+	public Expr constructVariableAccessLVal(WyilFile.Expr.VariableAccess expr) {
 		return constructVariableAccess(expr);
 	}
 
 	@Override
-	public Expr constructArrayAccess(ArrayAccess expr, Expr source, Expr index) {
+	public Expr constructArrayAccess(WyilFile.Expr.ArrayAccess expr, Expr source, Expr index) {
 		return unbox(expr.getType(), new Expr.DictionaryAccess(source, index));
 	}
 
 	@Override
-	public Expr constructArrayLength(ArrayLength expr, Expr source) {
-		return new Expr.Invoke("WArray#Length", source);
+	public Expr constructArrayLength(WyilFile.Expr.ArrayLength expr, Expr source) {
+		return CALL("WArray#Length", source);
 	}
 
 	@Override
-	public Expr constructArrayGenerator(ArrayGenerator expr, Expr value, Expr length) {
+	public Expr constructArrayGenerator(WyilFile.Expr.ArrayGenerator expr, Expr value, Expr length) {
 		WyilFile.Type vt = expr.getFirstOperand().getType();
 		WyilFile.Type lt = expr.getSecondOperand().getType();
-		return new Expr.Invoke("WArray#Generator", box(vt, value), cast(WyilFile.Type.Int, lt, length));
+		return CALL("WArray#Generator", box(vt, value), cast(WyilFile.Type.Int, lt, length));
 	}
 
 	@Override
-	public Expr constructArrayInitialiser(ArrayInitialiser expr, List<Expr> values) {
+	public Expr constructArrayInitialiser(WyilFile.Expr.ArrayInitialiser expr, List<Expr> values) {
 		WyilFile.Type elementType = expr.getType().as(WyilFile.Type.Array.class).getElement();
-		Expr arr = invoke("WArray#Empty", constant(values.size()));
+		Expr arr = CALL("WArray#Empty", CONST(values.size()));
 		//
 		for (int i = 0; i != values.size(); ++i) {
 			WyilFile.Type type = expr.getOperands().get(i).getType();
@@ -548,43 +600,43 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public Expr constructBitwiseComplement(BitwiseComplement expr, Expr operand) {
+	public Expr constructBitwiseComplement(WyilFile.Expr.BitwiseComplement expr, Expr operand) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Expr constructBitwiseAnd(BitwiseAnd expr, List<Expr> operands) {
+	public Expr constructBitwiseAnd(WyilFile.Expr.BitwiseAnd expr, List<Expr> operands) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Expr constructBitwiseOr(BitwiseOr expr, List<Expr> operands) {
+	public Expr constructBitwiseOr(WyilFile.Expr.BitwiseOr expr, List<Expr> operands) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Expr constructBitwiseXor(BitwiseXor expr, List<Expr> operands) {
+	public Expr constructBitwiseXor(WyilFile.Expr.BitwiseXor expr, List<Expr> operands) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Expr constructBitwiseShiftLeft(BitwiseShiftLeft expr, Expr lhs, Expr rhs) {
+	public Expr constructBitwiseShiftLeft(WyilFile.Expr.BitwiseShiftLeft expr, Expr lhs, Expr rhs) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Expr constructBitwiseShiftRight(BitwiseShiftRight expr, Expr lhs, Expr rhs) {
+	public Expr constructBitwiseShiftRight(WyilFile.Expr.BitwiseShiftRight expr, Expr lhs, Expr rhs) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Expr constructCast(Cast expr, Expr operand) {
+	public Expr constructCast(WyilFile.Expr.Cast expr, Expr operand) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
@@ -602,11 +654,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		}
 		case WyilFile.ITEM_int: {
 			BigInteger i = ((WyilFile.Value.Int) v).get();
-			return new Expr.Constant(i);
+			return CONST(i);
 		}
 		case WyilFile.ITEM_utf8: {
 			byte[] bytes = ((WyilFile.Value.UTF8) v).get();
-			Expr arr = invoke("WArray#Empty", constant(bytes.length));
+			Expr arr = CALL("WArray#Empty", CONST(bytes.length));
 			//
 			for (int i = 0; i != bytes.length; ++i) {
 				Expr ith = fromInt(new Expr.Constant(bytes[i]));
@@ -620,218 +672,212 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public Expr constructDereference(Dereference expr, Expr operand) {
+	public Expr constructDereference(WyilFile.Expr.Dereference expr, Expr operand) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Expr constructFieldDereference(FieldDereference expr, Expr operand) {
+	public Expr constructFieldDereference(WyilFile.Expr.FieldDereference expr, Expr operand) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Expr constructEqual(Equal expr, Expr lhs, Expr rhs) {
+	public Expr constructEqual(WyilFile.Expr.Equal expr, Expr lhs, Expr rhs) {
 		// Box operands for simplicity
 		lhs = box(expr.getFirstOperand().getType(), lhs);
 		rhs = box(expr.getSecondOperand().getType(), rhs);
 		// Done
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.EQ, lhs, rhs);
+		return EQ(lhs, rhs);
 	}
 
 	@Override
-	public Expr constructIntegerLessThan(IntegerLessThan expr, Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LT, lhs, rhs);
+	public Expr constructIntegerLessThan(WyilFile.Expr.IntegerLessThan expr, Expr lhs, Expr rhs) {
+		return LT(lhs, rhs);
 	}
 
 	@Override
-	public Expr constructIntegerLessThanOrEqual(IntegerLessThanOrEqual expr, Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LTEQ, lhs, rhs);
+	public Expr constructIntegerLessThanOrEqual(WyilFile.Expr.IntegerLessThanOrEqual expr, Expr lhs, Expr rhs) {
+		return LTEQ(lhs, rhs);
 	}
 
 	@Override
-	public Expr constructIntegerGreaterThan(IntegerGreaterThan expr, Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.GT, lhs, rhs);
+	public Expr constructIntegerGreaterThan(WyilFile.Expr.IntegerGreaterThan expr, Expr lhs, Expr rhs) {
+		return GT(lhs, rhs);
 	}
 
 	@Override
-	public Expr constructIntegerGreaterThanOrEqual(IntegerGreaterThanOrEqual expr, Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.GTEQ, lhs, rhs);
+	public Expr constructIntegerGreaterThanOrEqual(WyilFile.Expr.IntegerGreaterThanOrEqual expr, Expr lhs, Expr rhs) {
+		return GTEQ(lhs, rhs);
 	}
 
 	@Override
-	public Expr constructIntegerNegation(IntegerNegation expr, Expr operand) {
-		return new Expr.UnaryOperator(Expr.UnaryOperator.Kind.NEG, operand);
+	public Expr constructIntegerNegation(WyilFile.Expr.IntegerNegation expr, Expr operand) {
+		return NEG(operand);
 	}
 
 	@Override
-	public Expr constructIntegerAddition(IntegerAddition expr, Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.ADD, lhs, rhs);
+	public Expr constructIntegerAddition(WyilFile.Expr.IntegerAddition expr, Expr lhs, Expr rhs) {
+		return ADD(lhs, rhs);
 	}
 
 	@Override
-	public Expr constructIntegerSubtraction(IntegerSubtraction expr, Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.SUB, lhs, rhs);
+	public Expr constructIntegerSubtraction(WyilFile.Expr.IntegerSubtraction expr, Expr lhs, Expr rhs) {
+		return SUB(lhs, rhs);
 	}
 
 	@Override
-	public Expr constructIntegerMultiplication(IntegerMultiplication expr, Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.MUL, lhs, rhs);
+	public Expr constructIntegerMultiplication(WyilFile.Expr.IntegerMultiplication expr, Expr lhs, Expr rhs) {
+		return MUL(lhs, rhs);
 	}
 
 	@Override
-	public Expr constructIntegerDivision(IntegerDivision expr, Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.IDIV, lhs, rhs);
+	public Expr constructIntegerDivision(WyilFile.Expr.IntegerDivision expr, Expr lhs, Expr rhs) {
+		return IDIV(lhs, rhs);
 	}
 
 	@Override
-	public Expr constructIntegerRemainder(IntegerRemainder expr, Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.REM, lhs, rhs);
+	public Expr constructIntegerRemainder(WyilFile.Expr.IntegerRemainder expr, Expr lhs, Expr rhs) {
+		return REM(lhs, rhs);
 	}
 
 	@Override
-	public Expr constructIs(Is expr, Expr operand) {
+	public Expr constructIs(WyilFile.Expr.Is expr, Expr operand) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Expr constructLogicalAnd(LogicalAnd expr, List<Expr> operands) {
-		return new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, operands);
+	public Expr constructLogicalAnd(WyilFile.Expr.LogicalAnd expr, List<Expr> operands) {
+		return AND(operands);
 	}
 
 	@Override
-	public Expr constructLogicalImplication(LogicalImplication expr, Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.IF, lhs, rhs);
+	public Expr constructLogicalImplication(WyilFile.Expr.LogicalImplication expr, Expr lhs, Expr rhs) {
+		return IMPLIES(lhs, rhs);
 	}
 
 	@Override
-	public Expr constructLogicalIff(LogicalIff expr, Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.IFF, lhs, rhs);
+	public Expr constructLogicalIff(WyilFile.Expr.LogicalIff expr, Expr lhs, Expr rhs) {
+		return IFF(lhs, rhs);
 	}
 
 	@Override
-	public Expr constructLogicalNot(LogicalNot expr, Expr operand) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+	public Expr constructLogicalNot(WyilFile.Expr.LogicalNot expr, Expr operand) {
+		return NOT(operand);
 	}
 
 	@Override
-	public Expr constructLogicalOr(LogicalOr expr, List<Expr> operands) {
-		return new Expr.NaryOperator(Expr.NaryOperator.Kind.OR, operands);
+	public Expr constructLogicalOr(WyilFile.Expr.LogicalOr expr, List<Expr> operands) {
+		return OR(operands);
 	}
 
 	@Override
-	public Expr constructExistentialQuantifier(ExistentialQuantifier expr, List<Pair<Expr, Expr>> ranges, Expr body) {
-		WyilFile.Tuple<StaticVariable> params = expr.getParameters();
+	public Expr constructExistentialQuantifier(WyilFile.Expr.ExistentialQuantifier expr, List<Pair<Expr, Expr>> ranges, Expr body) {
+		WyilFile.Tuple<WyilFile.Decl.StaticVariable> params = expr.getParameters();
 		List<Decl.Parameter> ps = new ArrayList<>();
 		List<Expr> clauses = new ArrayList<>();
 		for (int i = 0; i != params.size(); ++i) {
 			Pair<Expr, Expr> ith = ranges.get(i);
 			String name = params.get(i).getName().get();
 			ps.add(new Decl.Parameter(name, BoogieFile.Type.Int));
-			clauses.add(
-					new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LTEQ, ith.first(), new Expr.VariableAccess(name)));
-			clauses.add(
-					new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LT, new Expr.VariableAccess(name), ith.second()));
+			clauses.add(LTEQ(ith.first(), VAR(name)));
+			clauses.add(LT(VAR(name), ith.second()));
 		}
 		clauses.add(body);
-		return new Expr.Quantifier(false, new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, clauses), ps);
+		return new Expr.Quantifier(false, AND(clauses), ps);
 	}
 
 	@Override
-	public Expr constructUniversalQuantifier(UniversalQuantifier expr, List<Pair<Expr, Expr>> ranges, Expr body) {
-		WyilFile.Tuple<StaticVariable> params = expr.getParameters();
+	public Expr constructUniversalQuantifier(WyilFile.Expr.UniversalQuantifier expr, List<Pair<Expr, Expr>> ranges, Expr body) {
+		WyilFile.Tuple<WyilFile.Decl.StaticVariable> params = expr.getParameters();
 		List<Decl.Parameter> ps = new ArrayList<>();
 		List<Expr> clauses = new ArrayList<>();
 		for (int i = 0; i != params.size(); ++i) {
 			Pair<Expr, Expr> ith = ranges.get(i);
 			String name = params.get(i).getName().get();
 			ps.add(new Decl.Parameter(name, BoogieFile.Type.Int));
-			clauses.add(
-					new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LTEQ, ith.first(), new Expr.VariableAccess(name)));
-			clauses.add(
-					new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LT, new Expr.VariableAccess(name), ith.second()));
+			clauses.add(LTEQ(ith.first(), VAR(name)));
+			clauses.add(LT(VAR(name), ith.second()));
 		}
-		Expr lhs = new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, clauses);
-		return new Expr.Quantifier(true, new Expr.BinaryOperator(Expr.BinaryOperator.Kind.IF, lhs, body), ps);
+		return new Expr.Quantifier(true, IMPLIES(AND(clauses),body), ps);
 	}
 
 	@Override
-	public Expr constructInvoke(Invoke expr, List<Expr> arguments) {
+	public Expr constructInvoke(WyilFile.Expr.Invoke expr, List<Expr> arguments) {
 		// Apply name mangling
 		String name = toMangledName(expr.getLink().getTarget());
 		//
-		return new Expr.Invoke(name, arguments);
+		return CALL(name, arguments);
 	}
 
 	@Override
-	public Expr constructIndirectInvoke(IndirectInvoke expr, Expr source, List<Expr> arguments) {
+	public Expr constructIndirectInvoke(WyilFile.Expr.IndirectInvoke expr, Expr source, List<Expr> arguments) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Expr constructLambdaAccess(LambdaAccess expr) {
+	public Expr constructLambdaAccess(WyilFile.Expr.LambdaAccess expr) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Expr constructNew(New expr, Expr operand) {
+	public Expr constructNew(WyilFile.Expr.New expr, Expr operand) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Expr constructNotEqual(NotEqual expr, Expr lhs, Expr rhs) {
+	public Expr constructNotEqual(WyilFile.Expr.NotEqual expr, Expr lhs, Expr rhs) {
 		// Box operands for simplicity
 		lhs = box(expr.getFirstOperand().getType(), lhs);
 		rhs = box(expr.getSecondOperand().getType(), rhs);
 		// Done
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.NEQ, lhs, rhs);
+		return NEQ(lhs, rhs);
 	}
 
 	@Override
-	public Expr constructRecordAccess(RecordAccess expr, Expr source) {
-		Expr field = var("$" + expr.getField().get());
+	public Expr constructRecordAccess(WyilFile.Expr.RecordAccess expr, Expr source) {
+		Expr field = VAR("$" + expr.getField().get());
 		return unbox(expr.getType(), new Expr.DictionaryAccess(source, field));
 	}
 
 	@Override
-	public Expr constructRecordInitialiser(RecordInitialiser expr, List<Expr> operands) {
+	public Expr constructRecordInitialiser(WyilFile.Expr.RecordInitialiser expr, List<Expr> operands) {
 		WyilFile.Tuple<WyilFile.Expr> values = expr.getOperands();
 		WyilFile.Tuple<WyilFile.Identifier> fields = expr.getFields();
 		//
-		Expr rec = new Expr.VariableAccess("WRecord#Empty");
+		Expr rec = VAR("WRecord#Empty");
 		//
 		for (int i = 0; i != operands.size(); ++i) {
 			Expr ith = box(values.get(i).getType(), operands.get(i));
 			String field = "$" + fields.get(i).get();
-			rec = new Expr.DictionaryUpdate(rec, new Expr.VariableAccess(field), ith);
+			rec = new Expr.DictionaryUpdate(rec, VAR(field), ith);
 		}
 		//
 		return rec;
 	}
 
 	@Override
-	public Expr constructTupleInitialiser(TupleInitialiser expr, List<Expr> operands) {
+	public Expr constructTupleInitialiser(WyilFile.Expr.TupleInitialiser expr, List<Expr> operands) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
 
 	@Override
-	public Expr constructStaticVariableAccess(StaticVariableAccess expr) {
+	public Expr constructStaticVariableAccess(WyilFile.Expr.StaticVariableAccess expr) {
 		// Apply name mangling
 		String name = toMangledName(expr.getLink().getTarget());
 		// Done
-		return new Expr.VariableAccess(name);
+		return VAR(name);
 	}
 
 	@Override
-	public Expr constructVariableAccess(VariableAccess expr) {
-		return new Expr.VariableAccess(expr.getVariableDeclaration().getName().toString());
+	public Expr constructVariableAccess(WyilFile.Expr.VariableAccess expr) {
+		return VAR(expr.getVariableDeclaration().getName().toString());
 	}
 
 	// =========================================================================================
@@ -839,23 +885,22 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	// =========================================================================================
 
 	@Override
-	public Expr constructArrayAccessPrecondition(ArrayAccess expr, Expr source, Expr index) {
-		Expr len = new Expr.Invoke("WArray#Length", source);
-		return and(lteq(constant(0), index), lt(index, len));
+	public Expr constructArrayAccessPrecondition(WyilFile.Expr.ArrayAccess expr, Expr source, Expr index) {
+		return AND(LTEQ(CONST(0), index), LT(index, CALL("WArray#Length", source)));
 	}
 
 	@Override
-	public Expr constructIntegerDivisionPrecondition(IntegerDivision expr, Expr lhs, Expr rhs) {
-		return neq(rhs, constant(0));
+	public Expr constructIntegerDivisionPrecondition(WyilFile.Expr.IntegerDivision expr, Expr lhs, Expr rhs) {
+		return NEQ(rhs, CONST(0));
 	}
 
 	@Override
-	public Expr constructInvokePrecondition(Invoke expr, List<Expr> args) {
-		Callable c = expr.getLink().getTarget();
+	public Expr constructInvokePrecondition(WyilFile.Expr.Invoke expr, List<Expr> args) {
+		WyilFile.Decl.Callable c = expr.getLink().getTarget();
 		String name = toMangledName(c);
 		//
-		if (c instanceof FunctionOrMethod) {
-			return new Expr.Invoke(name + "#pre", args);
+		if (c instanceof WyilFile.Decl.FunctionOrMethod) {
+			return CALL(name + "#pre", args);
 		} else {
 			return null;
 		}
@@ -947,11 +992,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 */
 	private List<Decl> constructIntAxioms(WyilFile wf) {
 		Decl header = new Decl.LineComment("Integers");
-		Decl.Function fromInt = fun("fromInt", BoogieFile.Type.Int, WVal);
-		Decl.Function toInt = fun("toInt", WVal, BoogieFile.Type.Int);
+		Decl.Function fromInt = FUN("fromInt", BoogieFile.Type.Int, WVal);
+		Decl.Function toInt = FUN("toInt", WVal, BoogieFile.Type.Int);
 		// Establish connection between toInt and fromInt
 		Decl.Axiom axiom1 = new Decl.Axiom(
-				forall("i", BoogieFile.Type.Int, eq(invoke("toInt", invoke("fromInt", var("i"))), var("i"))));
+				FORALL("i", BoogieFile.Type.Int, EQ(CALL("toInt", CALL("fromInt", VAR("i"))), VAR("i"))));
 		return Arrays.asList(header, fromInt, toInt, axiom1);
 	}
 
@@ -965,33 +1010,33 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// custom array types for each different array type encountered.
 		ArrayList<Decl> decls = new ArrayList<>();
 		decls.add(new Decl.LineComment("Arrays"));
-		decls.add(fun("WArray#Length", IntWVals, BoogieFile.Type.Int));
+		decls.add(FUN("WArray#Length", IntWVals, BoogieFile.Type.Int));
 		// Enforce array length is non-negative
-		decls.add(new Decl.Axiom(forall("a", IntWVals, lteq(constant(0), invoke("WArray#Length", var("a"))))));
+		decls.add(new Decl.Axiom(FORALL("a", IntWVals, LTEQ(CONST(0), CALL("WArray#Length", VAR("a"))))));
 		// Empty arrays
-		decls.add(fun("WArray#Empty", BoogieFile.Type.Int, IntWVals));
-		decls.add(fun("WArray#Generator", WVal, BoogieFile.Type.Int, IntWVals));
+		decls.add(FUN("WArray#Empty", BoogieFile.Type.Int, IntWVals));
+		decls.add(FUN("WArray#Generator", WVal, BoogieFile.Type.Int, IntWVals));
 		// Ensure that all elements outside array length are void
-		decls.add(new Decl.Axiom(forall("l", BoogieFile.Type.Int, "i", BoogieFile.Type.Int,
-				or(and(lteq(constant(0), var("i")), lt(var("i"), var("l"))),
-						eq(get(invoke("WArray#Empty", var("l")), var("i")), var("WVoid"))))));
+		decls.add(new Decl.Axiom(FORALL("l", BoogieFile.Type.Int, "i", BoogieFile.Type.Int,
+				OR(AND(LTEQ(CONST(0), VAR("i")), LT(VAR("i"), VAR("l"))),
+						EQ(GET(CALL("WArray#Empty", VAR("l")), VAR("i")), VAR("WVoid"))))));
 		// Relate empty array with its length
-		decls.add(new Decl.Axiom(forall("a", IntWVals, "l", BoogieFile.Type.Int,
-				or(neq(invoke("WArray#Empty", var("l")), var("a")), eq(invoke("WArray#Length", var("a")), var("l"))))));
+		decls.add(new Decl.Axiom(FORALL("a", IntWVals, "l", BoogieFile.Type.Int,
+				OR(NEQ(CALL("WArray#Empty", VAR("l")), VAR("a")), EQ(CALL("WArray#Length", VAR("a")), VAR("l"))))));
 		// Ensure that all elements inside generator length are void
-		decls.add(new Decl.Axiom(forall("v", WVal, "l", BoogieFile.Type.Int, "i", BoogieFile.Type.Int,
-				or(lt(var("i"),constant(0)), lteq(var("l"), var("i")),
-						eq(get(invoke("WArray#Generator", var("v"), var("l")), var("i")), var("v"))))));
+		decls.add(new Decl.Axiom(FORALL("v", WVal, "l", BoogieFile.Type.Int, "i", BoogieFile.Type.Int,
+				OR(LT(VAR("i"),CONST(0)), LTEQ(VAR("l"), VAR("i")),
+						EQ(GET(CALL("WArray#Generator", VAR("v"), VAR("l")), VAR("i")), VAR("v"))))));
 		// Ensure that all elements outside generator length are void
-		decls.add(new Decl.Axiom(forall("v", WVal, "l", BoogieFile.Type.Int, "i", BoogieFile.Type.Int,
-				or(and(lteq(constant(0), var("i")), lt(var("i"), var("l"))),
-						eq(get(invoke("WArray#Generator", var("v"), var("l")), var("i")), var("WVoid"))))));
+		decls.add(new Decl.Axiom(FORALL("v", WVal, "l", BoogieFile.Type.Int, "i", BoogieFile.Type.Int,
+				OR(AND(LTEQ(CONST(0), VAR("i")), LT(VAR("i"), VAR("l"))),
+						EQ(GET(CALL("WArray#Generator", VAR("v"), VAR("l")), VAR("i")), VAR("WVoid"))))));
 			// Relate array generator with its length
-		decls.add(new Decl.Axiom(forall("a", IntWVals, "v", WVal, "l", BoogieFile.Type.Int,
-				or(neq(invoke("WArray#Generator", var("v"), var("l")), var("a")), eq(invoke("WArray#Length", var("a")), var("l"))))));
+		decls.add(new Decl.Axiom(FORALL("a", IntWVals, "v", WVal, "l", BoogieFile.Type.Int,
+				OR(NEQ(CALL("WArray#Generator", VAR("v"), VAR("l")), VAR("a")), EQ(CALL("WArray#Length", VAR("a")), VAR("l"))))));
 		// Relate updated array with its length
-		decls.add(new Decl.Axiom(forall("a", IntWVals, "i", BoogieFile.Type.Int, "v", WVal,
-				eq(invoke("WArray#Length", var("a")), invoke("WArray#Length", put(var("a"), var("i"), var("v")))))));
+		decls.add(new Decl.Axiom(FORALL("a", IntWVals, "i", BoogieFile.Type.Int, "v", WVal,
+				EQ(CALL("WArray#Length", VAR("a")), CALL("WArray#Length", PUT(VAR("a"), VAR("i"), VAR("v")))))));
 		// Done
 		return decls;
 	}
@@ -1017,7 +1062,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Defines the empty record (i.e. the base from which all other records are
 		// constructed).
 		decls.add(new Decl.Constant(true, "WRecord#Empty", WFieldWVals));
-		decls.add(new Decl.Axiom(forall("f", WField, eq(get(var("WRecord#Empty"), var("f")), var("WVoid")))));
+		decls.add(new Decl.Axiom(FORALL("f", WField, EQ(GET(VAR("WRecord#Empty"), VAR("f")), VAR("WVoid")))));
 		// Done
 		return decls;
 	}
@@ -1198,7 +1243,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	private Set<String> determineFieldNames(WyilFile wf) {
 		Set<String> names = new HashSet<>();
 		//
-		for (Unit unit : wf.getModule().getUnits()) {
+		for (WyilFile.Decl.Unit unit : wf.getModule().getUnits()) {
 			//
 			new AbstractVisitor(meter) {
 				@Override
@@ -1223,29 +1268,29 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * @param decl
 	 * @return
 	 */
-	private String toMangledName(Named<?> decl) {
+	private String toMangledName(WyilFile.Decl.Named<?> decl) {
 		// Determine whether this is an exported symbol or not
 		boolean exported = decl.getModifiers().match(WyilFile.Modifier.Export.class) != null;
 		// Construct base name
 		String name = decl.getQualifiedName().toString().replace("::", "$");
 		// Add type mangles for non-exported symbols
-		if (!exported && decl instanceof Method) {
+		if (!exported && decl instanceof WyilFile.Decl.Method) {
 			// FIXME: this could be simplified if TypeMangler was updated to support void.
-			Method method = (Method) decl;
+			WyilFile.Decl.Method method = (WyilFile.Decl.Method) decl;
 			WyilFile.Type parameters = method.getType().getParameter();
 			WyilFile.Type returns = method.getType().getReturn();
 			name += getMangle(parameters);
 			name += getMangle(returns);
-		} else if (!exported && decl instanceof Callable) {
+		} else if (!exported && decl instanceof WyilFile.Decl.Callable) {
 			// FIXME: this could be simplified if TypeMangler was updated to support void.
-			Callable callable = (Callable) decl;
+			WyilFile.Decl.Callable callable = (WyilFile.Decl.Callable) decl;
 			WyilFile.Type parameters = callable.getType().getParameter();
 			WyilFile.Type returns = callable.getType().getReturn();
 			name += getMangle(parameters);
 			name += getMangle(returns);
-		} else if (decl instanceof Type) {
+		} else if (decl instanceof WyilFile.Decl.Type) {
 			name += "$type";
-		} else if (decl instanceof StaticVariable) {
+		} else if (decl instanceof WyilFile.Decl.StaticVariable) {
 			name += "$static";
 		}
 		return name;
@@ -1280,89 +1325,4 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	public static final BoogieFile.Type IntWVals = new BoogieFile.Type.Dictionary(BoogieFile.Type.Int, WVal);
 	public static final BoogieFile.Type WFieldWVals = new BoogieFile.Type.Dictionary(WField, WVal);
 
-	public static Expr.Quantifier forall(String name, BoogieFile.Type type, Expr body) {
-		return new Expr.Quantifier(true, body, new Decl.Parameter(name, type));
-	}
-
-	public static Expr.Quantifier forall(String name1, BoogieFile.Type type1, String name2, BoogieFile.Type type2,
-			Expr body) {
-		return new Expr.Quantifier(true, body, new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2));
-	}
-
-	public static Expr.Quantifier forall(String name1, BoogieFile.Type type1, String name2, BoogieFile.Type type2,
-			String name3, BoogieFile.Type type3, Expr body) {
-		return new Expr.Quantifier(true, body, new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2),
-				new Decl.Parameter(name3, type3));
-	}
-
-	public static Decl.Function fun(String name, BoogieFile.Type parameter, BoogieFile.Type returns) {
-		return new Decl.Function(name, parameter, returns);
-	}
-
-	public static Decl.Function fun(String name, BoogieFile.Type param1, BoogieFile.Type param2, BoogieFile.Type returns) {
-		ArrayList<Decl.Parameter> parameters = new ArrayList<>();
-		parameters.add(new Decl.Parameter(null,param1));
-		parameters.add(new Decl.Parameter(null,param2));
-		return new Decl.Function(name, parameters, returns);
-	}
-
-	public static Expr or(Expr... operands) {
-		if (operands.length == 0) {
-			return new Expr.Constant(false);
-		} else {
-			return new Expr.NaryOperator(Expr.NaryOperator.Kind.OR, operands);
-		}
-	}
-
-	public static Expr and(List<Expr> operands) {
-		if (operands.size() == 0) {
-			return new Expr.Constant(true);
-		} else {
-			return new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, operands);
-		}
-	}
-
-	public static Expr and(Expr... operands) {
-		if (operands.length == 0) {
-			return new Expr.Constant(true);
-		} else {
-			return new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, operands);
-		}
-	}
-
-	public static Expr.BinaryOperator eq(Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.EQ, lhs, rhs);
-	}
-
-	public static Expr.BinaryOperator neq(Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.NEQ, lhs, rhs);
-	}
-
-	public static Expr.BinaryOperator lteq(Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LTEQ, lhs, rhs);
-	}
-
-	public static Expr.BinaryOperator lt(Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LT, lhs, rhs);
-	}
-
-	public static Expr.DictionaryAccess get(Expr src, Expr index) {
-		return new Expr.DictionaryAccess(src, index);
-	}
-
-	public static Expr.DictionaryUpdate put(Expr src, Expr index, Expr value) {
-		return new Expr.DictionaryUpdate(src, index, value);
-	}
-
-	public static Expr.VariableAccess var(String name) {
-		return new Expr.VariableAccess(name);
-	}
-
-	public static Expr.Constant constant(int i) {
-		return new Expr.Constant(i);
-	}
-
-	public static Expr.Invoke invoke(String name, Expr... parameters) {
-		return new Expr.Invoke(name, parameters);
-	}
 }
