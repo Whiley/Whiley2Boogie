@@ -188,7 +188,15 @@ public class BoogieFile {
 			private final Stmt body;
 
 			public Procedure(String name, List<Parameter> parameters, List<Parameter> returns, List<Expr> requires,
+					List<Expr> ensures) {
+				this(name, parameters, returns, requires, ensures, Collections.EMPTY_LIST, null);
+			}
+
+			public Procedure(String name, List<Parameter> parameters, List<Parameter> returns, List<Expr> requires,
 					List<Expr> ensures, List<Decl.Variable> locals, Stmt body) {
+				if(body == null && locals.size() > 0) {
+					throw new IllegalArgumentException("Cannot specify local variables for procedure prototype");
+				}
 				this.name = name;
 				this.parameters = new ArrayList<>(parameters);
 				this.returns = new ArrayList<>(returns);
@@ -216,6 +224,42 @@ public class BoogieFile {
 
 			public List<Expr> getEnsures() {
 				return ensures;
+			}
+
+			public List<Decl.Variable> getLocals() {
+				return locals;
+			}
+
+			public Stmt getBody() {
+				return body;
+			}
+		}
+
+		public static class Implementation implements Decl {
+			private final String name;
+			private final List<Parameter> parameters;
+			private final List<Parameter> returns;
+			private final List<Decl.Variable> locals;
+			private final Stmt body;
+
+			public Implementation(String name, List<Parameter> parameters, List<Parameter> returns, List<Decl.Variable> locals, Stmt body) {
+				this.name = name;
+				this.parameters = new ArrayList<>(parameters);
+				this.returns = new ArrayList<>(returns);
+				this.locals = locals;
+				this.body = body;
+			}
+
+			public String getName() {
+				return name;
+			}
+
+			public List<Parameter> getParmeters() {
+				return parameters;
+			}
+
+			public List<Parameter> getReturns() {
+				return returns;
 			}
 
 			public List<Decl.Variable> getLocals() {

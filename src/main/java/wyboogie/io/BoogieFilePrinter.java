@@ -16,6 +16,7 @@ package wyboogie.io;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.util.List;
+import java.util.Objects;
 
 import wyboogie.core.BoogieFile;
 import wyboogie.core.BoogieFile.Decl;
@@ -44,6 +45,8 @@ public class BoogieFilePrinter {
 			writeConstant(indent,(Decl.Constant) d);
 		} else if(d instanceof Decl.Function) {
 			writeFunction(indent,(Decl.Function) d);
+		} else if(d instanceof Decl.Implementation) {
+			writeImplementation(indent,(Decl.Implementation) d);
 		} else if(d instanceof Decl.LineComment) {
 			writeLineComment(indent,(Decl.LineComment) d);
 		} else if(d instanceof Decl.Procedure) {
@@ -76,6 +79,31 @@ public class BoogieFilePrinter {
 		out.print(" : ");
 		writeType(d.getType());
 		out.println(";");
+	}
+
+	private void writeImplementation(int indent, Decl.Implementation d) {
+		tab(indent);
+		out.print("implementation ");
+		out.print(d.getName());
+		writeParameters(d.getParmeters());
+		if(!d.getReturns().isEmpty()) {
+			out.print(" returns ");
+			writeParameters(d.getReturns());
+		}
+		if(d.getBody() == null) {
+			out.println(";");
+		} else {
+			out.println();
+		}
+		tab(indent);
+		out.println("{");
+		List<Decl.Variable> locals = d.getLocals();
+		for(int i=0;i!=locals.size();++i) {
+			writeVariable(indent + 1, locals.get(i));
+		}
+		writeStmt(indent + 1, d.getBody());
+		tab(indent);
+		out.println("}");
 	}
 
 	private void writeFunction(int indent, Decl.Function d) {
@@ -112,7 +140,11 @@ public class BoogieFilePrinter {
 			out.print(" returns ");
 			writeParameters(d.getReturns());
 		}
-		out.println();
+		if(d.getBody() == null) {
+			out.println(";");
+		} else {
+			out.println();
+		}
 		List<Expr> requires = d.getRequires();
 		List<Expr> ensures = d.getEnsures();
 		for(int i=0;i!=requires.size();++i) {
@@ -126,14 +158,16 @@ public class BoogieFilePrinter {
 			out.println(";");
 		}
 		tab(indent);
-		out.println("{");
-		List<Decl.Variable> locals = d.getLocals();
-		for(int i=0;i!=locals.size();++i) {
-			writeVariable(indent + 1, locals.get(i));
+		if(d.getBody() != null) {
+			out.println("{");
+			List<Decl.Variable> locals = d.getLocals();
+			for(int i=0;i!=locals.size();++i) {
+				writeVariable(indent + 1, locals.get(i));
+			}
+			writeStmt(indent + 1, d.getBody());
+			tab(indent);
+			out.println("}");
 		}
-		writeStmt(indent + 1, d.getBody());
-		tab(indent);
-		out.println("}");
 	}
 
 	private void writeParameters(List<Decl.Parameter> parameters) {
@@ -319,7 +353,8 @@ public class BoogieFilePrinter {
 	}
 
 	private void writeConstant(Expr.Constant e) {
-		out.write(e.getValue().toString());
+		// NOTE: have to handle possibility of null here
+		out.write(Objects.toString(e.getValue()));
 	}
 
 	private void writeDictionaryAccess(Expr.DictionaryAccess e) {
