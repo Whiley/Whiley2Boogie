@@ -15,6 +15,7 @@ package wyboogie.io;
 
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Objects;
 
@@ -23,6 +24,7 @@ import wyboogie.core.BoogieFile.Decl;
 import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.Stmt;
 import wyboogie.core.BoogieFile.Type;
+import wyboogie.core.BoogieFile.Type.BitVector;
 
 public class BoogieFilePrinter {
 	private final PrintWriter out;
@@ -107,8 +109,19 @@ public class BoogieFilePrinter {
 	}
 
 	private void writeFunction(int indent, Decl.Function d) {
+		List<String> attributes = d.getAttributes();
 		tab(indent);
 		out.print("function ");
+		if(!attributes.isEmpty()) {
+			out.print("{");
+			for(int i=0;i!=attributes.size();++i) {
+				if(i != 0) {
+					out.print(" ");
+				}
+				out.print(attributes.get(i));
+			}
+			out.print("} ");
+		}
 		out.print(d.getName());
 		writeParameters(d.getParmeters());
 		out.print(" returns (");
@@ -353,8 +366,17 @@ public class BoogieFilePrinter {
 	}
 
 	private void writeConstant(Expr.Constant e) {
-		// NOTE: have to handle possibility of null here
-		out.write(Objects.toString(e.getValue()));
+		Object v = e.getValue();
+		//
+		if(v instanceof byte[]) {
+			byte[] bv = (byte[]) v;
+			out.write(new BigInteger(1,bv).toString());
+			out.write("bv");
+			out.write(Integer.toString(bv.length * 8));
+		} else {
+			// NOTE: have to handle possibility of null here
+			out.write(Objects.toString(e.getValue()));
+		}
 	}
 
 	private void writeDictionaryAccess(Expr.DictionaryAccess e) {
@@ -444,6 +466,9 @@ public class BoogieFilePrinter {
 		} else if(t instanceof Type.Synonym) {
 			Type.Synonym s = (Type.Synonym) t;
 			out.print(s.getSynonym());
+		} else if(t instanceof Type.BitVector) {
+			Type.BitVector bv = (Type.BitVector) t;
+			out.print("bv" + bv.getDigits());
 		} else if(t instanceof Type.Dictionary) {
 			Type.Dictionary m = (Type.Dictionary) t;
 			out.print("[");

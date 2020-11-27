@@ -149,7 +149,7 @@ public abstract class AbstractTranslator<D,S,E extends S> extends wyil.util.Abst
 			E initialiser = visitExpression(stmt.getInitialiser(), environment);
 			return constructInitialiser(stmt, initialiser, preconditions);
 		} else {
-			return super.visitInitialiser(stmt, environment);
+			return constructInitialiser(stmt, null, null);
 		}
 	}
 

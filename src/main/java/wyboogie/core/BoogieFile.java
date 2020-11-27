@@ -26,6 +26,7 @@ import java.util.List;
 
 import wyboogie.core.BoogieFile.Decl;
 import wyboogie.core.BoogieFile.Expr;
+import wyboogie.core.BoogieFile.Decl.Function;
 import wyboogie.io.BoogieFilePrinter;
 import wyfs.lang.Content;
 import wyfs.lang.Path;
@@ -211,27 +212,13 @@ public class BoogieFile {
 
 		public static class Function implements Decl {
 			private final String name;
+			private final List<String> attributes;
 			private final List<Parameter> parameters;
 			private final Type returns;
 			private final Expr body;
 
-			public Function(String name, Type parameter, Type returns) {
-				this(name, new Parameter(null,parameter),returns);
-			}
-
-			public Function(String name, Parameter parameter, Type returns) {
-				this(name, Arrays.asList(parameter), returns, null);
-			}
-
-			public Function(String name, Parameter parameter, Type returns, Expr body) {
-				this(name,Arrays.asList(parameter),returns,body);
-			}
-
-			public Function(String name, List<Parameter> parameters, Type returns) {
-				this(name, parameters, returns, null);
-			}
-
-			public Function(String name, List<Parameter> parameters, Type returns, Expr body) {
+			public Function(List<String> attributes, String name, List<Parameter> parameters, Type returns, Expr body) {
+				this.attributes = attributes;
 				this.name = name;
 				this.parameters = parameters;
 				this.returns = returns;
@@ -240,6 +227,10 @@ public class BoogieFile {
 
 			public String getName() {
 				return name;
+			}
+
+			public List<String> getAttributes() {
+				return attributes;
 			}
 
 			public List<Parameter> getParmeters() {
@@ -271,7 +262,7 @@ public class BoogieFile {
 
 			public Procedure(String name, List<Parameter> parameters, List<Parameter> returns, List<Expr> requires,
 					List<Expr> ensures, List<Decl.Variable> locals, Stmt body) {
-				if(body == null && locals.size() > 0) {
+				if (body == null && locals.size() > 0) {
 					throw new IllegalArgumentException("Cannot specify local variables for procedure prototype");
 				}
 				this.name = name;
@@ -326,7 +317,8 @@ public class BoogieFile {
 			private final List<Decl.Variable> locals;
 			private final Stmt body;
 
-			public Implementation(String name, List<Parameter> parameters, List<Parameter> returns, List<Decl.Variable> locals, Stmt body) {
+			public Implementation(String name, List<Parameter> parameters, List<Parameter> returns,
+					List<Decl.Variable> locals, Stmt body) {
 				this.name = name;
 				this.parameters = new ArrayList<>(parameters);
 				this.returns = new ArrayList<>(returns);
@@ -372,6 +364,7 @@ public class BoogieFile {
 				return type;
 			}
 		}
+
 		public static class Sequence implements Decl {
 			private final List<Decl> decls;
 
@@ -426,7 +419,7 @@ public class BoogieFile {
 			private final Expr invariant;
 
 			public Variable(String name, Type type) {
-				this(name,type,null);
+				this(name, type, null);
 			}
 
 			public Variable(String name, Type type, Expr initialiser) {
@@ -519,6 +512,7 @@ public class BoogieFile {
 				return label;
 			}
 		}
+
 		public static class IfElse implements Stmt {
 			private final Expr condition;
 			private final Stmt trueBranch;
@@ -542,6 +536,7 @@ public class BoogieFile {
 				return falseBranch;
 			}
 		}
+
 		public static class While implements Stmt {
 			private final Expr condition;
 			private final List<Expr> invariant;
@@ -565,9 +560,11 @@ public class BoogieFile {
 				return body;
 			}
 		}
+
 		public static class Return implements Stmt {
 
 		}
+
 		public static class Sequence implements Stmt {
 			private final List<Stmt> stmts;
 
@@ -642,18 +639,19 @@ public class BoogieFile {
 			public Constant(boolean v) {
 				this.value = v;
 			}
-			public Constant(byte v) {
-				this.value = v;
+
+			public Constant(byte[] vs) {
+				this.value = vs;
 			}
+
 			public Constant(long v) {
 				this.value = v;
 			}
-			public Constant(double v) {
-				this.value = v;
-			}
+
 			public Constant(BigInteger v) {
 				this.value = v;
 			}
+
 			public Constant(String v) {
 				this.value = v;
 			}
@@ -730,8 +728,7 @@ public class BoogieFile {
 
 		public static class UnaryOperator implements Expr {
 			public enum Kind {
-				NEG,
-				NOT
+				NEG, NOT
 			}
 
 			private final Kind kind;
@@ -757,7 +754,7 @@ public class BoogieFile {
 			}
 
 			private final Kind kind;
-			private final  List<Expr> operands;
+			private final List<Expr> operands;
 
 			public NaryOperator(Kind kind, List<Expr> operands) {
 				this.kind = kind;
@@ -830,9 +827,13 @@ public class BoogieFile {
 	// =========================================================================
 
 	public interface Type {
-		public static final Type Bool = new Type() {};
-		public static final Type Int = new Type() {};
-		public static final Type Real = new Type() {};
+		public static final Type Bool = new Type() {
+		};
+		public static final Type Int = new Type() {
+		};
+		public static final Type Real = new Type() {
+		};
+		public static final Type BitVector8 = new BitVector(8);
 
 		public static class Synonym implements Type {
 			private final String name;
@@ -843,6 +844,18 @@ public class BoogieFile {
 
 			public String getSynonym() {
 				return name;
+			}
+		}
+
+		public static class BitVector implements Type {
+			private final int digits;
+
+			public BitVector(int digits) {
+				this.digits = digits;
+			}
+
+			public int getDigits() {
+				return digits;
 			}
 		}
 
@@ -871,15 +884,28 @@ public class BoogieFile {
 
 	// Declarations
 
-	public static Decl.Function FUN(String name, BoogieFile.Type parameter, BoogieFile.Type returns) {
-		return new Decl.Function(name, parameter, returns);
+	public static Decl.Function FUNCTION(String name, BoogieFile.Type parameter, BoogieFile.Type returns, String... attributes) {
+		ArrayList<Decl.Parameter> parameters = new ArrayList<>();
+		parameters.add(new Decl.Parameter(null, parameter));
+		return new Decl.Function(Arrays.asList(attributes), name, parameters, returns, null);
 	}
 
-	public static Decl.Function FUN(String name, BoogieFile.Type param1, BoogieFile.Type param2, BoogieFile.Type returns) {
+	public static Decl.Function FUNCTION(String name, BoogieFile.Type param1, BoogieFile.Type param2,
+			BoogieFile.Type returns, String... attributes) {
 		ArrayList<Decl.Parameter> parameters = new ArrayList<>();
-		parameters.add(new Decl.Parameter(null,param1));
-		parameters.add(new Decl.Parameter(null,param2));
-		return new Decl.Function(name, parameters, returns);
+		parameters.add(new Decl.Parameter(null, param1));
+		parameters.add(new Decl.Parameter(null, param2));
+		return new Decl.Function(Arrays.asList(attributes), name, parameters, returns, null);
+	}
+
+	public static Decl.Function FUNCTION(String name, List<Decl.Parameter> parameters,
+			BoogieFile.Type returns) {
+		return new Decl.Function(Collections.EMPTY_LIST,name,parameters,returns,null);
+	}
+
+	public static Decl.Function FUNCTION(String name, List<Decl.Parameter> parameters,
+			BoogieFile.Type returns, Expr body) {
+		return new Decl.Function(Collections.EMPTY_LIST,name,parameters,returns,body);
 	}
 
 	// Logical Operators
@@ -1016,18 +1042,23 @@ public class BoogieFile {
 	public static Expr.Constant CONST(boolean b) {
 		return new Expr.Constant(b);
 	}
+
 	public static Expr.Constant CONST(int i) {
 		return new Expr.Constant(i);
 	}
+
 	public static Expr.Constant CONST(BigInteger i) {
 		return new Expr.Constant(i);
 	}
+
 	public static Expr.Invoke CALL(String name, Expr... parameters) {
 		return new Expr.Invoke(name, parameters);
 	}
+
 	public static Expr.Invoke CALL(String name, List<Expr> parameters) {
 		return new Expr.Invoke(name, parameters);
 	}
+
 	public static Expr.VariableAccess VAR(String name) {
 		return new Expr.VariableAccess(name);
 	}
