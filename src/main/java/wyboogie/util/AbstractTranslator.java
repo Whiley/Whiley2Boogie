@@ -160,7 +160,7 @@ public abstract class AbstractTranslator<D,S,E extends S> extends wyil.util.Abst
 			E returns = visitExpression(stmt.getReturn(), environment);
 			return constructReturn(stmt, returns, preconditions);
 		} else {
-			return super.visitReturn(stmt, environment, scope);
+			return constructReturn(stmt, null, null);
 		}
 	}
 

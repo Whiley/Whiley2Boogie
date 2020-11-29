@@ -25,6 +25,8 @@ import wyboogie.core.BoogieFile;
 import wyboogie.core.BoogieFile.Decl;
 import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.Stmt;
+import wyboogie.core.BoogieFile.Stmt.Assignment;
+import wyboogie.core.BoogieFile.Stmt.Sequence;
 import wyboogie.core.BoogieFile.LVal;
 import wyboogie.util.AbstractTranslator;
 import wybs.lang.Build.Meter;
@@ -131,6 +133,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	public Decl constructFunctionOrMethod(WyilFile.Decl.FunctionOrMethod d, List<Expr> precondition,
 			List<Expr> postcondition, Stmt body) {
+		ArrayList<Decl> decls = new ArrayList<>();
 		// Apply name mangling
 		String name = toMangledName(d);
 		List<Decl.Parameter> parameters = constructParameters(d.getParameters());
@@ -138,16 +141,26 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		ArrayList<Decl.Parameter> parametersAndReturns = new ArrayList<>();
 		parametersAndReturns.addAll(parameters);
 		parametersAndReturns.addAll(returns);
-		// FIXME: obviously broken for multiple returns!
-		Type returnType = returns.isEmpty() ? VALUE : returns.get(0).getType();
 		// Construct function representation precondition
-		Decl.Function pre = FUNCTION(name + "#pre", parameters, Type.Bool, AND(precondition));
+		decls.add(FUNCTION(name + "#pre", parameters, Type.Bool, AND(precondition)));
 		// Construct function representation postcondition
-		Decl.Function post = FUNCTION(name + "#post", parametersAndReturns, Type.Bool, AND(postcondition));
+		decls.add(FUNCTION(name + "#post", parametersAndReturns, Type.Bool, AND(postcondition)));
 		// Construct prototype which can be called from expressions.
-		Decl.Function prototype = FUNCTION(name, parameters, returnType);
+		if(returns.isEmpty()) {
+			decls.add(FUNCTION(name, parameters, VALUE));
+		} else if(returns.size() == 1) {
+			Type returnType = returns.get(0).getType();
+			decls.add(FUNCTION(name, parameters, returnType));
+		} else {
+			// Multiple returns require special handling
+			for(int i=0;i!=returns.size();++i) {
+				Type returnType = returns.get(i).getType();
+				decls.add(FUNCTION(name + "#" + i, parameters, returnType));
+			}
+		}
+
 		// Construct procedure prototype
-		Decl proc = new Decl.Procedure(name + "#impl", parameters, returns, precondition, postcondition);
+		decls.add(new Decl.Procedure(name + "#impl", parameters, returns, precondition, postcondition));
 		// Determine local variables
 		List<Decl.Variable> locals = constructLocals(d.getBody());
 		// Construct implementation (if applicable)
@@ -155,15 +168,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		//
 		body = addShadowAssignments(locals, body, parameters, shadows);
 		// Construct implementation which can be checked against its specification.
-		Decl impl = new Decl.Implementation(name + "#impl", shadows, returns, locals, body);
+		decls.add(new Decl.Implementation(name + "#impl", shadows, returns, locals, body));
 		if (returns.size() > 0) {
 			// Construct axiom linking post-condition with prototype.
-			Decl axiom = constructPostconditionAxiom(name, parameters, returns);
-			return new Decl.Sequence(prototype, pre, post, proc, impl, axiom);
-		} else {
-			// Done
-			return new Decl.Sequence(prototype, pre, post, proc, impl);
+			decls.add(constructPostconditionAxiom(name, parameters, returns));
 		}
+		// Done
+		return new Decl.Sequence(decls);
 	}
 
 	/**
@@ -257,7 +268,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			}
 		}
 		stmts.add(body);
-		return new Stmt.Sequence(stmts);
+		return SEQUENCE(stmts);
 	}
 
 	/**
@@ -318,20 +329,28 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	public Decl.Axiom constructPostconditionAxiom(String name, List<Decl.Parameter> parameters,
 			List<Decl.Parameter> returns) {
 		//
-		if (returns.size() != 1) {
-			throw new IllegalArgumentException("multiple returns not supported");
-		} else if (parameters.size() == 0) {
+		if (parameters.size() == 0) {
 			// Easy case, since we don't even need a quantifier.
 			return new Decl.Axiom(CALL(name + "#post", CALL(name)));
 		} else {
 			// A universal quantifier is required!
-			Expr[] pargs = new Expr[parameters.size()];
-			for (int i = 0; i != pargs.length; ++i) {
-				pargs[i] = VAR(parameters.get(i).getName());
+			List<Expr> args = new ArrayList<>();
+			for (int i = 0; i != parameters.size(); ++i) {
+				args.add(VAR(parameters.get(i).getName()));
+			}
+			ArrayList<Expr> postArgs = new ArrayList<>(args);
+			//
+			if (returns.size() == 1) {
+				postArgs.add(CALL(name, args));
+			} else {
+				// Functions with multiple returns require special handling
+				for (int i = 0; i != returns.size(); ++i) {
+					postArgs.add(CALL(name + "#" + i, args));
+				}
 			}
 			// Construct the axiom
-			return new Decl.Axiom(FORALL(parameters, IMPLIES(CALL(name + "#pre", pargs),
-					CALL(name + "#post", ArrayUtils.append(pargs, CALL(name, pargs))))));
+			return new Decl.Axiom(
+					FORALL(parameters, IMPLIES(CALL(name + "#pre", args), CALL(name + "#post", postArgs))));
 		}
 	}
 
@@ -349,19 +368,47 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	@Override
 	public Stmt constructAssign(WyilFile.Stmt.Assign stmt, List<Expr> lvals, List<Expr> rvals,
 			List<Expr> preconditions) {
-		if (lvals.size() != 1 || rvals.size() != 1) {
-			throw new UnsupportedOperationException("Multiple assignments not supported (yet)");
+		WyilFile.Tuple<WyilFile.LVal> lhs = stmt.getLeftHandSide();
+		WyilFile.Tuple<WyilFile.Expr> rhs = stmt.getRightHandSide();
+		//
+		ArrayList<Stmt> stmts = new ArrayList<>();
+		for(int i=0;i!=lvals.size();++i) {
+			// FIXME: problem with interference?
+			stmts.add(constructAssign(lhs.get(i),rhs.get(i),lvals.get(i),rvals.get(i)));
 		}
-		WyilFile.Type type = stmt.getLeftHandSide().get(0).getType();
-		LVal lhs = (LVal) lvals.get(0);
-		Expr rhs = cast(type, stmt.getRightHandSide().get(0).getType(), rvals.get(0));
+		// Done
+		return applyPreconditions(preconditions, SEQUENCE(stmts));
+	}
+
+	public Stmt constructAssign(WyilFile.LVal lhs, WyilFile.Expr rhs, Expr l, Expr r) {
+		WyilFile.Type lhsT = lhs.getType();
+		WyilFile.Type rhsT = rhs.getType();
+		if(lhsT.shape() == 1) {
+			// Easy case
+			return constructAssign(lhsT,rhsT,(LVal) l, r);
+		} else if(r instanceof FauxTuple) {
+			List<Expr> lvals = ((FauxTuple)l).getItems();
+			List<Expr> rvals = ((FauxTuple)r).getItems();
+			ArrayList<Stmt> stmts = new ArrayList<>();
+			for(int i=0;i!=lhsT.shape();++i) {
+				stmts.add(constructAssign(lhsT.dimension(i), rhsT.dimension(i), (LVal) lvals.get(i), rvals.get(i)));
+			}
+			return SEQUENCE(stmts);
+		} else {
+			throw new IllegalArgumentException("is this case possible?");
+		}
+	}
+
+	public Stmt constructAssign(WyilFile.Type type, WyilFile.Type from, LVal lhs, Expr rhs) {
+		// Cast right-hand side as necessary
+		rhs = cast(type, from, rhs);
 		// Decide whether this is a assignment into a compound data type (e.g. an array
 		// or record) or not. If so, then we need to box the right-hand side.
 		if (!(lhs instanceof Expr.VariableAccess)) {
 			rhs = box(type, rhs);
 		}
 		// Done
-		return applyPreconditions(preconditions, new Stmt.Assignment(lhs, rhs));
+		return new Stmt.Assignment(lhs,rhs);
 	}
 
 	@Override
@@ -371,21 +418,19 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Stmt constructBlock(WyilFile.Stmt.Block stmt, List<Stmt> stmts) {
-		return new Stmt.Sequence(stmts);
+		return SEQUENCE(stmts);
 	}
 
 	@Override
 	public Stmt constructBreak(WyilFile.Stmt.Break stmt) {
 		WyilFile.Stmt loop = getEnclosingLoop(stmt);
-		String label = "BREAK_" + loop.getIndex();
-		return new Stmt.Goto(label);
+		return GOTO("BREAK_" + loop.getIndex());
 	}
 
 	@Override
 	public Stmt constructContinue(WyilFile.Stmt.Continue stmt) {
 		WyilFile.Stmt loop = getEnclosingLoop(stmt);
-		String label = "CONTINUE_" + loop.getIndex();
-		return new Stmt.Goto(label);
+		return GOTO("CONTINUE_" + loop.getIndex());
 	}
 
 	@Override
@@ -398,7 +443,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			List<Expr> preconditions) {
 		Stmt loop = new Stmt.While(condition, invariant, body);
 		// FIXME: handle preconditions
-		return new Stmt.Sequence(body, loop);
+		return SEQUENCE(body, loop);
 	}
 
 	@Override
@@ -421,10 +466,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Add variable increment for completeness
 		loopBody.add(new Stmt.Assignment(var, ADD(var, CONST(1))));
 		// Construct the loop
-		Stmt.While loop = new Stmt.While(condition, invariant, new Stmt.Sequence(loopBody));
+		Stmt.While loop = new Stmt.While(condition, invariant, SEQUENCE(loopBody));
 		// FIXME: handle preconditions
 		// Done.
-		return new Stmt.Sequence(init, loop);
+		return SEQUENCE(init, loop);
 	}
 
 	@Override
@@ -442,7 +487,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		String name = vars.get(0).getName().toString();
 		//
 		if (initialiser == null) {
-			return new Stmt.Sequence();
+			return SEQUENCE();
 		} else {
 			Stmt.Assignment init = new Stmt.Assignment(new Expr.VariableAccess(name), initialiser);
 			// FIXME: need post condition!
@@ -462,15 +507,18 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			// variables.
 			WyilFile.Decl.Callable enclosing = stmt.getAncestor(WyilFile.Decl.FunctionOrMethod.class);
 			WyilFile.Tuple<WyilFile.Decl.Variable> returns = enclosing.getReturns();
-			if (returns.size() != 1) {
-				// TODO: implement this!
-				throw new IllegalArgumentException("Missing support for multiple returns");
-			} else {
-				String rv = returns.get(0).getName().get();
-				Stmt s1 = new Stmt.Assignment(VAR(rv), ret);
-				Stmt s2 = new Stmt.Return();
-				return applyPreconditions(preconditions, new Stmt.Sequence(s1, s2));
+			// Extract return values
+			List<Expr> rvs = returns.size() == 1 ? Arrays.asList(ret) : ((FauxTuple) ret).getItems();
+			// Construct return value assignments
+			ArrayList<Stmt> stmts = new ArrayList<>();
+			for (int i = 0; i != rvs.size(); ++i) {
+				String rv = returns.get(i).getName().get();
+				stmts.add(new Stmt.Assignment(VAR(rv), rvs.get(i)));
 			}
+			// Add the actual return statement
+			stmts.add(new Stmt.Return());
+			// Done
+			return applyPreconditions(preconditions, SEQUENCE(stmts));
 		} else {
 			return new Stmt.Return();
 		}
@@ -529,7 +577,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Add final break label
 		stmts.add(new Stmt.Label(breakLabel));
 		// Done
-		return applyPreconditions(preconditions, new Stmt.Sequence(stmts));
+		return applyPreconditions(preconditions, SEQUENCE(stmts));
 	}
 
 	@Override
@@ -543,13 +591,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		if (needContinueLabel && needBreakLabel) {
 			Stmt.Label continueLabel = new Stmt.Label("CONTINUE_" + stmt.getIndex());
 			Stmt.Label breakLabel = new Stmt.Label("BREAK_" + stmt.getIndex());
-			return new Stmt.Sequence(continueLabel, s, breakLabel);
+			return SEQUENCE(continueLabel, s, breakLabel);
 		} else if (needContinueLabel) {
 			Stmt.Label continueLabel = new Stmt.Label("CONTINUE_" + stmt.getIndex());
-			return new Stmt.Sequence(continueLabel, s);
+			return SEQUENCE(continueLabel, s);
 		} else if (needBreakLabel) {
 			Stmt.Label breakLabel = new Stmt.Label("BREAK_" + stmt.getIndex());
-			return new Stmt.Sequence(s, breakLabel);
+			return SEQUENCE(s, breakLabel);
 		} else {
 			return s;
 		}
@@ -560,7 +608,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			return stmt;
 		} else {
 			List<Stmt> assertions = constructAssertions(preconditions);
-			return new Stmt.Sequence(assertions, stmt);
+			return SEQUENCE(assertions, stmt);
 		}
 	}
 
@@ -597,8 +645,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructTupleInitialiserLVal(WyilFile.Expr.TupleInitialiser expr, List<Expr> source) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new FauxTuple(source);
 	}
 
 	@Override
@@ -860,10 +907,19 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructInvoke(WyilFile.Expr.Invoke expr, List<Expr> arguments) {
+		WyilFile.Type rt = expr.getType();
 		// Apply name mangling
 		String name = toMangledName(expr.getLink().getTarget());
 		//
-		return CALL(name, arguments);
+		if(rt.shape() == 1) {
+			return CALL(name, arguments);
+		} else {
+			List<Expr> items = new ArrayList<>();
+			for(int i=0;i!=rt.shape();++i) {
+				items.add(CALL(name + "#" + i, arguments));
+			}
+			return new FauxTuple(items);
+		}
 	}
 
 	@Override
@@ -917,8 +973,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructTupleInitialiser(WyilFile.Expr.TupleInitialiser expr, List<Expr> operands) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		// NOTE: at this stage, we won't attempt to support general first-class tuples.
+		return new FauxTuple(operands);
 	}
 
 	@Override
@@ -1458,4 +1514,26 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	public static final Type INTMAP = new Type.Dictionary(Type.Int, VALUE);
 	public static final Type FIELDMAP = new Type.Dictionary(FIELD, VALUE);
 
+
+	/**
+	 * A "fake" tuple constructor. This is used to work around the
+	 * <code>AbstractTranslator</code> which wants to turn a Wyil expression into a
+	 * Boogie expression, but there are no tuples in Boogie! In fact, we don't need
+	 * to implement arbitrary tuples in Boogie as, at this time, tuples in Whiley
+	 * are quite limited.
+	 *
+	 * @author David J. Pearce
+	 *
+	 */
+	private static class FauxTuple implements BoogieFile.Expr {
+		private final List<Expr> items;
+
+		public FauxTuple(List<Expr> items) {
+			this.items = items;
+		}
+
+		public List<Expr> getItems() {
+			return items;
+		}
+	}
 }

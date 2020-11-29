@@ -27,6 +27,7 @@ import java.util.List;
 import wyboogie.core.BoogieFile.Decl;
 import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.Decl.Function;
+import wyboogie.core.BoogieFile.Stmt.Sequence;
 import wyboogie.io.BoogieFilePrinter;
 import wyfs.lang.Content;
 import wyfs.lang.Path;
@@ -568,11 +569,7 @@ public class BoogieFile {
 		public static class Sequence implements Stmt {
 			private final List<Stmt> stmts;
 
-			public Sequence(Stmt... stmts) {
-				this(Arrays.asList(stmts));
-			}
-
-			public Sequence(Collection<Stmt> stmts) {
+			private Sequence(Collection<Stmt> stmts) {
 				this.stmts = new ArrayList<>(stmts);
 			}
 
@@ -915,6 +912,20 @@ public class BoogieFile {
 
 	public static Stmt GOTO(String... labels) {
 		return new Stmt.Goto(Arrays.asList(labels));
+	}
+
+	public static Stmt SEQUENCE(List<Stmt> stmts) {
+		return new Stmt.Sequence(stmts);
+	}
+
+	public static Stmt SEQUENCE(List<Stmt> stmts, Stmt stmt) {
+		ArrayList<Stmt> ss = new ArrayList<>(stmts);
+		ss.add(stmt);
+		return new Stmt.Sequence(ss);
+	}
+
+	public static Stmt SEQUENCE(Stmt... stmts) {
+		return new Stmt.Sequence(Arrays.asList(stmts));
 	}
 
 	// Logical Operators
