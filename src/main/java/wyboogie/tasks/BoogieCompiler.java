@@ -486,27 +486,49 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			List<Expr> preconditions) {
 		ArrayList<Stmt> stmts = new ArrayList<>();
 		String breakLabel = "SWITCH_" + stmt.getIndex() + "_BREAK";
-		// Construct case labels
-		String[] labels = new String[cases.size()];
-		for (int i = 0; i != labels.length; ++i) {
-			labels[i] = "SWITCH_" + stmt.getIndex() + "_" + i;
+		String defaultLabel = "SWITCH_" + stmt.getIndex() + "_DEFAULT";
+		Stmt defaultCase = null;
+		// Construct case labels (ignoring default)
+		List<String> labels = new ArrayList<>();
+		for (int i = 0; i != cases.size(); ++i) {
+			boolean isDefault = cases.get(i).first().isEmpty();
+			if(!isDefault) {
+				labels.add("SWITCH_" + stmt.getIndex() + "_" + i);
+			}
 		}
+		// Add branch to default label
+		labels.add(defaultLabel);
 		// Construct non-deterministic goto
-		stmts.add(new Stmt.Goto(labels));
+		stmts.add(GOTO(labels));
 		// Construct cases
-		for (int i = 0; i != labels.length; ++i) {
+		ArrayList<Expr> defaultCases = new ArrayList<>();
+		for (int i = 0; i != cases.size(); ++i) {
 			Pair<List<Expr>, Stmt> ith = cases.get(i);
 			List<Expr> ith_first = ith.first();
-			ArrayList<Expr> labs = new ArrayList<>();
+			ArrayList<Expr> cs = new ArrayList<>();
 			for (int j = 0; j != ith_first.size(); ++j) {
-				labs.add(EQ(condition, ith_first.get(j)));
+				cs.add(EQ(condition, ith_first.get(j)));
+				defaultCases.add(NEQ(condition, ith_first.get(j)));
 			}
-			stmts.add(new Stmt.Label(labels[i]));
-			stmts.add(new Stmt.Assume(OR(labs)));
-			stmts.add(ith.second());
-			stmts.add(new Stmt.Goto(breakLabel));
+			if(cs.isEmpty()) {
+				defaultCase = ith.second();
+			} else {
+				stmts.add(new Stmt.Label(labels.get(i)));
+				stmts.add(new Stmt.Assume(OR(cs)));
+				stmts.add(ith.second());
+				stmts.add(GOTO(breakLabel));
+			}
 		}
-		//
+		// Construct default case
+		stmts.add(new Stmt.Label(defaultLabel));
+		stmts.add(new Stmt.Assume(AND(defaultCases)));
+		if(defaultCase != null) {
+			stmts.add(defaultCase);
+		}
+		stmts.add(GOTO(breakLabel));
+		// Add final break label
+		stmts.add(new Stmt.Label(breakLabel));
+		// Done
 		return applyPreconditions(preconditions, new Stmt.Sequence(stmts));
 	}
 

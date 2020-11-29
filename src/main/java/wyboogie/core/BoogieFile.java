@@ -484,8 +484,8 @@ public class BoogieFile {
 		public static class Goto implements Stmt {
 			private final List<String> labels;
 
-			public Goto(String... labels) {
-				this.labels = Arrays.asList(labels);
+			public Goto(Collection<String> labels) {
+				this.labels = new ArrayList<>(labels);
 			}
 
 			public int size() {
@@ -906,6 +906,15 @@ public class BoogieFile {
 	public static Decl.Function FUNCTION(String name, List<Decl.Parameter> parameters,
 			BoogieFile.Type returns, Expr body) {
 		return new Decl.Function(Collections.EMPTY_LIST,name,parameters,returns,body);
+	}
+
+	// Statements
+	public static Stmt GOTO(List<String> labels) {
+		return new Stmt.Goto(labels);
+	}
+
+	public static Stmt GOTO(String... labels) {
+		return new Stmt.Goto(Arrays.asList(labels));
 	}
 
 	// Logical Operators
