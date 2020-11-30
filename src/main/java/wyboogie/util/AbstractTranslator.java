@@ -62,6 +62,7 @@ import wyfs.util.Pair;
 import wyil.lang.WyilFile.Decl;
 import wyil.lang.WyilFile.Expr;
 import wyil.lang.WyilFile.Stmt;
+import wyil.util.AbstractTranslator.Environment;
 
 /**
  * Provides a tweaked version of <code>AbstractTranslator</code> which
@@ -152,6 +153,23 @@ public abstract class AbstractTranslator<D,S,E extends S> extends wyil.util.Abst
 			return constructInitialiser(stmt, null, null);
 		}
 	}
+
+	@Override
+	public S visitInvokeStmt(Expr.Invoke stmt, Environment environment) {
+		List<E> preconditions = visitExpressionsPrecondition(stmt.getOperands(), environment);
+		List<E> operands = visitHeterogenousExpressions(stmt.getOperands(), environment);
+		return constructInvokeStmt(stmt, operands, preconditions);
+	}
+
+	@Override
+	public S visitIndirectInvokeStmt(Expr.IndirectInvoke stmt, Environment environment) {
+		List<E> preconditions = visitExpressionPrecondition(stmt.getSource(), environment);
+		preconditions.addAll(visitExpressionsPrecondition(stmt.getArguments(), environment));
+		E operand = visitExpression(stmt.getSource(), environment);
+		List<E> operands = visitHeterogenousExpressions(stmt.getArguments(), environment);
+		return constructIndirectInvokeStmt(stmt, operand, operands, preconditions);
+	}
+
 
 	@Override
 	public S visitReturn(Stmt.Return stmt, Environment environment, EnclosingScope scope) {
@@ -724,6 +742,16 @@ public abstract class AbstractTranslator<D,S,E extends S> extends wyil.util.Abst
 	}
 
 	@Override
+	public S constructInvokeStmt(Expr.Invoke stmt, List<E> arguments) {
+		throw new UnsupportedOperationException();
+	}
+
+	@Override
+	public S constructIndirectInvokeStmt(Expr.IndirectInvoke stmt, E source, List<E> arguments) {
+		throw new UnsupportedOperationException();
+	}
+
+	@Override
 	public final S constructReturn(Stmt.Return stmt, E ret) {
 		throw new UnsupportedOperationException();
 	}
@@ -757,6 +785,10 @@ public abstract class AbstractTranslator<D,S,E extends S> extends wyil.util.Abst
 	public abstract S constructIfElse(Stmt.IfElse stmt, E condition, S trueBranch, S falseBranch, List<E> preconditions);
 
 	public abstract S constructInitialiser(Stmt.Initialiser stmt, E initialiser, List<E> preconditions);
+
+	public abstract S constructInvokeStmt(Expr.Invoke stmt, List<E> arguments, List<E> preconditions);
+
+	public abstract S constructIndirectInvokeStmt(Expr.IndirectInvoke stmt, E source, List<E> arguments, List<E> preconditions);
 
 	public abstract S constructReturn(Stmt.Return stmt, E ret, List<E> preconditions);
 

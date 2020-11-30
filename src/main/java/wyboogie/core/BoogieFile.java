@@ -24,11 +24,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
-import wyboogie.core.BoogieFile.Decl;
-import wyboogie.core.BoogieFile.Expr;
-import wyboogie.core.BoogieFile.Decl.Function;
-import wyboogie.core.BoogieFile.Stmt.Assignment;
-import wyboogie.core.BoogieFile.Stmt.Sequence;
 import wyboogie.io.BoogieFilePrinter;
 import wyfs.lang.Content;
 import wyfs.lang.Path;
@@ -220,9 +215,9 @@ public class BoogieFile {
 			private final Expr body;
 
 			public Function(List<String> attributes, String name, List<Parameter> parameters, Type returns, Expr body) {
-				this.attributes = attributes;
+				this.attributes = new ArrayList<>(attributes);
 				this.name = name;
-				this.parameters = parameters;
+				this.parameters = new ArrayList<>(parameters);
 				this.returns = returns;
 				this.body = body;
 			}
@@ -272,7 +267,7 @@ public class BoogieFile {
 				this.returns = new ArrayList<>(returns);
 				this.requires = new ArrayList<>(requires);
 				this.ensures = new ArrayList<>(ensures);
-				this.locals = locals;
+				this.locals = new ArrayList<>(locals);
 				this.body = body;
 			}
 
@@ -324,7 +319,7 @@ public class BoogieFile {
 				this.name = name;
 				this.parameters = new ArrayList<>(parameters);
 				this.returns = new ArrayList<>(returns);
-				this.locals = locals;
+				this.locals = new ArrayList<>(locals);
 				this.body = body;
 			}
 
@@ -483,6 +478,24 @@ public class BoogieFile {
 			}
 		}
 
+		public static class Call implements Stmt {
+			private final String name;
+			private final List<Expr> arguments;
+
+			public Call(String name, Collection<Expr> arguments) {
+				this.name = name;
+				this.arguments = new ArrayList<>(arguments);
+			}
+
+			public String getName() {
+				return name;
+			}
+
+			public List<Expr> getArguments() {
+				return arguments;
+			}
+		}
+
 		public static class Goto implements Stmt {
 			private final List<String> labels;
 
@@ -546,7 +559,7 @@ public class BoogieFile {
 
 			public While(Expr condition, List<Expr> invariant, Stmt body) {
 				this.condition = condition;
-				this.invariant = invariant;
+				this.invariant = new ArrayList<>(invariant);
 				this.body = body;
 			}
 
@@ -598,6 +611,8 @@ public class BoogieFile {
 	// =========================================================================
 
 	public interface Expr extends Stmt {
+		// FIXME: Expr should not extend Stmt, but is currently necessary to meet the
+		// requirement of AbstractTranslator!
 
 		public static class BinaryOperator implements Expr {
 			public enum Kind {
@@ -756,7 +771,7 @@ public class BoogieFile {
 
 			public NaryOperator(Kind kind, List<Expr> operands) {
 				this.kind = kind;
-				this.operands = operands;
+				this.operands = new ArrayList<>(operands);
 			}
 
 			public NaryOperator(Kind kind, Expr... operands) {

@@ -236,6 +236,8 @@ public class BoogieFilePrinter {
 			writeAssert(indent,(Stmt.Assert) s);
 		} else if(s instanceof Stmt.Assume) {
 			writeAssume(indent,(Stmt.Assume) s);
+		} else if(s instanceof Stmt.Call) {
+			writeCall(indent,(Stmt.Call)s);
 		} else if(s instanceof Stmt.Goto) {
 			writeGoto(indent,(Stmt.Goto)s);
 		} else if(s instanceof Stmt.Label) {
@@ -271,6 +273,22 @@ public class BoogieFilePrinter {
 		writeExpression(s.getCondition());
 		out.println(";");
 	}
+	private void writeCall(int indent, Stmt.Call s) {
+		tab(indent);
+		out.print("call ");
+		out.print(s.getName());
+		out.print("(");
+		boolean firstTime = true;
+		for(Expr a : s.getArguments()) {
+			if(!firstTime) {
+				out.print(",");
+			}
+			firstTime = false;
+			writeExpression(a);
+		}
+		out.print(")");
+		out.println(";");
+	}
 	private void writeGoto(int indent, Stmt.Goto s) {
 		tab(indent);
 		out.print("goto ");
@@ -288,16 +306,15 @@ public class BoogieFilePrinter {
 		out.println(":");
 	}
 	private void writeIfElse(int indent, Stmt.IfElse s) {
-		tab(indent);
-		out.print("if(");
+		tab(indent);out.print("if(");
 		writeExpression(s.getCondition());
-		out.print(") {");
+		out.println(") {");
 		writeStmt(indent + 1, s.getTrueBranch());
 		if(s.getFalseBranch() != null) {
-			out.println("} else {");
+			tab(indent);out.println("} else {");
 			writeStmt(indent + 1, s.getFalseBranch());
 		}
-		out.println("}");
+		tab(indent);out.println("}");
 	}
 	private void writeReturn(int indent, Stmt.Return s) {
 		tab(indent);
