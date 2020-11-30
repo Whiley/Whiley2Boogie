@@ -21,15 +21,15 @@ import java.util.List;
 import java.util.Set;
 
 import static wyboogie.core.BoogieFile.*;
+
 import wyboogie.core.BoogieFile;
 import wyboogie.core.BoogieFile.Decl;
 import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.Stmt;
-import wyboogie.core.BoogieFile.Stmt.Assignment;
-import wyboogie.core.BoogieFile.Stmt.Sequence;
 import wyboogie.core.BoogieFile.LVal;
 import wyboogie.util.AbstractTranslator;
 import wybs.lang.Build.Meter;
+import wybs.util.AbstractCompilationUnit.Tuple;
 import wyfs.util.ArrayUtils;
 import wyfs.util.Pair;
 import wyil.lang.WyilFile;
@@ -37,6 +37,7 @@ import wyil.util.AbstractVisitor;
 import wyil.util.IncrementalSubtypingEnvironment;
 import wyil.util.Subtyping;
 import wyil.util.TypeMangler;
+import wyil.util.WyilUtils;
 
 public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	/**
@@ -146,19 +147,18 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Construct function representation postcondition
 		decls.add(FUNCTION(name + "#post", parametersAndReturns, Type.Bool, AND(postcondition)));
 		// Construct prototype which can be called from expressions.
-		if(returns.isEmpty()) {
+		if (returns.isEmpty()) {
 			decls.add(FUNCTION(name, parameters, VALUE));
-		} else if(returns.size() == 1) {
+		} else if (returns.size() == 1) {
 			Type returnType = returns.get(0).getType();
 			decls.add(FUNCTION(name, parameters, returnType));
 		} else {
 			// Multiple returns require special handling
-			for(int i=0;i!=returns.size();++i) {
+			for (int i = 0; i != returns.size(); ++i) {
 				Type returnType = returns.get(i).getType();
 				decls.add(FUNCTION(name + "#" + i, parameters, returnType));
 			}
 		}
-
 		// Construct procedure prototype
 		decls.add(new Decl.Procedure(name + "#impl", parameters, returns, precondition, postcondition));
 		// Determine local variables
@@ -295,6 +295,23 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			}
 
 			@Override
+			public void visitAssign(WyilFile.Stmt.Assign stmt) {
+				super.visitAssign(stmt);
+				if (!WyilUtils.isSimple(stmt) && WyilUtils.hasInterference(stmt, meter)) {
+					Tuple<WyilFile.LVal> lhs = stmt.getLeftHandSide();
+					for (int i = 0, k = 0; i != lhs.size(); ++i) {
+						WyilFile.LVal lv = lhs.get(i);
+						WyilFile.Type t = lv.getType();
+						for (int j = 0; j != t.shape(); ++j) {
+							Type type = constructType(t.dimension(j));
+							decls.add(new Decl.Variable(TEMP(stmt,k), type));
+							k = k + 1;
+						}
+					}
+				}
+			}
+
+			@Override
 			public void visitFor(WyilFile.Stmt.For stmt) {
 				super.visitFor(stmt);
 				WyilFile.Decl.StaticVariable v = stmt.getVariable();
@@ -372,25 +389,101 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		WyilFile.Tuple<WyilFile.Expr> rhs = stmt.getRightHandSide();
 		//
 		ArrayList<Stmt> stmts = new ArrayList<>();
-		for(int i=0;i!=lvals.size();++i) {
-			// FIXME: problem with interference?
-			stmts.add(constructAssign(lhs.get(i),rhs.get(i),lvals.get(i),rvals.get(i)));
+		// Check whether parallel (easy) or sequential (hard) assignment
+		if (WyilUtils.isSimple(stmt) || !WyilUtils.hasInterference(stmt, meter)) {
+			// Easy case, parallel assignment meaning can make assignments directly.
+			for (int i = 0; i != lvals.size(); ++i) {
+				stmts.add(constructAssign(lhs.get(i), rhs.get(i), lvals.get(i), rvals.get(i)));
+			}
+		} else {
+			// Hard case, sequential assignment meaning must introduce temporary variables.
+			ArrayList<Stmt> assigns = new ArrayList<>();
+			for (int i = 0, k = 0; i != lvals.size(); ++i) {
+				// Apply "split" assignment
+				Pair<Stmt, Stmt> split = constructSplitAssign(stmt, k, lhs.get(i), rhs.get(i), lvals.get(i),
+						rvals.get(i));
+				// Distribute results
+				stmts.add(split.first());
+				assigns.add(split.second());
+				// Done
+				k = k + lhs.get(i).getType().shape();
+			}
+			stmts.addAll(assigns);
 		}
 		// Done
 		return applyPreconditions(preconditions, SEQUENCE(stmts));
 	}
 
+	/**
+	 * Construct a "split" assignment. This is one where the right-hand side is
+	 * first assigned into a temporary before being finally assigned to the
+	 * left-hand side. This generates two statements for each part so they can
+	 * subsequently be combined in the right order.
+	 *
+	 * @param tmp Name of the temporary variable to use (which we assume has been
+	 *            declared with the correct type).
+	 * @param l
+	 * @param r
+	 * @return
+	 */
+	public Pair<Stmt,Stmt> constructSplitAssign(WyilFile.Stmt stmt, int k, WyilFile.LVal lhs, WyilFile.Expr rhs, Expr l, Expr r) {
+		WyilFile.Type lhsT = lhs.getType();
+		WyilFile.Type rhsT = rhs.getType();
+		if (l instanceof FauxTuple) {
+			ArrayList<Stmt> pre = new ArrayList<>();
+			ArrayList<Stmt> post = new ArrayList<>();
+			List<Expr> lvs = ((FauxTuple) l).getItems();
+			List<Expr> rvs = ((FauxTuple) r).getItems();
+			for (int i = 0; i != lvs.size(); ++i, ++k) {
+				// First assign right-hand sides to temporaries
+				pre.add(ASSIGN(VAR(TEMP(stmt,k)), rvs.get(i)));
+				// Second assign left-hand sides from temporaries
+				post.add(constructAssign(lhsT.dimension(i), rhsT.dimension(i), (LVal) lvs.get(i), VAR(TEMP(stmt,k))));
+			}
+			return new Pair<>(SEQUENCE(pre), SEQUENCE(post));
+		} else {
+			return new Pair<>(ASSIGN(VAR(TEMP(stmt,k)), r), constructAssign(lhsT, rhsT, (LVal) l, VAR(TEMP(stmt,k))));
+		}
+	}
+
+	/**
+	 * Construct a straightforward assignment between an lval and an rval (both of
+	 * which may, in fact, represent multiple values).
+	 *
+	 * @param lhs
+	 * @param rhs
+	 * @param l
+	 * @param r
+	 * @return
+	 */
 	public Stmt constructAssign(WyilFile.LVal lhs, WyilFile.Expr rhs, Expr l, Expr r) {
 		WyilFile.Type lhsT = lhs.getType();
 		WyilFile.Type rhsT = rhs.getType();
-		if(lhsT.shape() == 1) {
-			// Easy case
-			return constructAssign(lhsT,rhsT,(LVal) l, r);
-		} else if(r instanceof FauxTuple) {
-			List<Expr> lvals = ((FauxTuple)l).getItems();
-			List<Expr> rvals = ((FauxTuple)r).getItems();
+		if (l instanceof FauxTuple) {
+			List<Expr> lvals = ((FauxTuple) l).getItems();
+			List<Expr> rvals = ((FauxTuple) r).getItems();
 			ArrayList<Stmt> stmts = new ArrayList<>();
-			for(int i=0;i!=lhsT.shape();++i) {
+			for (int i = 0; i != lhsT.shape(); ++i) {
+				// Construct sequential assignment
+				stmts.add(constructAssign(lhsT.dimension(i), rhsT.dimension(i), (LVal) lvals.get(i), rvals.get(i)));
+			}
+			return SEQUENCE(stmts);
+		} else {
+			return constructAssign(lhsT, rhsT, (LVal) l, r);
+		}
+	}
+
+	public Stmt constructAssign2(WyilFile.LVal lhs, WyilFile.Expr rhs, Expr l, Expr r) {
+		WyilFile.Type lhsT = lhs.getType();
+		WyilFile.Type rhsT = rhs.getType();
+		if (lhsT.shape() == 1) {
+			// Easy case
+			return constructAssign(lhsT, rhsT, (LVal) l, r);
+		} else if (r instanceof FauxTuple) {
+			List<Expr> lvals = ((FauxTuple) l).getItems();
+			List<Expr> rvals = ((FauxTuple) r).getItems();
+			ArrayList<Stmt> stmts = new ArrayList<>();
+			for (int i = 0; i != lhsT.shape(); ++i) {
 				stmts.add(constructAssign(lhsT.dimension(i), rhsT.dimension(i), (LVal) lvals.get(i), rvals.get(i)));
 			}
 			return SEQUENCE(stmts);
@@ -408,7 +501,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			rhs = box(type, rhs);
 		}
 		// Done
-		return new Stmt.Assignment(lhs,rhs);
+		return new Stmt.Assignment(lhs, rhs);
 	}
 
 	@Override
@@ -540,7 +633,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		List<String> labels = new ArrayList<>();
 		for (int i = 0; i != cases.size(); ++i) {
 			boolean isDefault = cases.get(i).first().isEmpty();
-			if(!isDefault) {
+			if (!isDefault) {
 				labels.add("SWITCH_" + stmt.getIndex() + "_" + i);
 			}
 		}
@@ -558,7 +651,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 				cs.add(EQ(condition, ith_first.get(j)));
 				defaultCases.add(NEQ(condition, ith_first.get(j)));
 			}
-			if(cs.isEmpty()) {
+			if (cs.isEmpty()) {
 				defaultCase = ith.second();
 			} else {
 				stmts.add(new Stmt.Label(labels.get(i)));
@@ -570,7 +663,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Construct default case
 		stmts.add(new Stmt.Label(defaultLabel));
 		stmts.add(new Stmt.Assume(AND(defaultCases)));
-		if(defaultCase != null) {
+		if (defaultCase != null) {
 			stmts.add(defaultCase);
 		}
 		stmts.add(GOTO(breakLabel));
@@ -911,11 +1004,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Apply name mangling
 		String name = toMangledName(expr.getLink().getTarget());
 		//
-		if(rt.shape() == 1) {
+		if (rt.shape() == 1) {
 			return CALL(name, arguments);
 		} else {
 			List<Expr> items = new ArrayList<>();
-			for(int i=0;i!=rt.shape();++i) {
+			for (int i = 0; i != rt.shape(); ++i) {
 				items.add(CALL(name + "#" + i, arguments));
 			}
 			return new FauxTuple(items);
@@ -1175,8 +1268,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(FUNCTION("Array#from", INTMAP, VALUE));
 		decls.add(FUNCTION("Array#to", VALUE, INTMAP));
 		// Establish connection between toInt and fromInt
-		decls.add(new Decl.Axiom(
-				FORALL("i", INTMAP, EQ(CALL("Array#to", CALL("Array#from", VAR("i"))), VAR("i")))));
+		decls.add(new Decl.Axiom(FORALL("i", INTMAP, EQ(CALL("Array#to", CALL("Array#from", VAR("i"))), VAR("i")))));
 		// Array length function
 		decls.add(FUNCTION("Array#Length", INTMAP, Type.Int));
 		// Enforce array length is non-negative
@@ -1230,8 +1322,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(FUNCTION("Record#from", FIELDMAP, VALUE));
 		decls.add(FUNCTION("Record#to", VALUE, FIELDMAP));
 		// Establish connection between toInt and fromInt
-		decls.add(new Decl.Axiom(
-				FORALL("i", FIELDMAP, EQ(CALL("Record#to", CALL("Record#from", VAR("i"))), VAR("i")))));
+		decls.add(
+				new Decl.Axiom(FORALL("i", FIELDMAP, EQ(CALL("Record#to", CALL("Record#from", VAR("i"))), VAR("i")))));
 		// Defines the empty record (i.e. the base from which all other records are
 		// constructed).
 		decls.add(new Decl.Constant(true, "Record#Empty", FIELDMAP));
@@ -1514,7 +1606,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	public static final Type INTMAP = new Type.Dictionary(Type.Int, VALUE);
 	public static final Type FIELDMAP = new Type.Dictionary(FIELD, VALUE);
 
-
 	/**
 	 * A "fake" tuple constructor. This is used to work around the
 	 * <code>AbstractTranslator</code> which wants to turn a Wyil expression into a
@@ -1535,5 +1626,18 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		public List<Expr> getItems() {
 			return items;
 		}
+	}
+
+	/**
+	 * Construct a temporary variable associated with a given statement using a
+	 * given identifier to distinguish different temporaries from the same
+	 * statement.
+	 *
+	 * @param s
+	 * @param id
+	 * @return
+	 */
+	private static String TEMP(WyilFile.Stmt s, int id) {
+		return "t" + s.getIndex() + "#" + id;
 	}
 }

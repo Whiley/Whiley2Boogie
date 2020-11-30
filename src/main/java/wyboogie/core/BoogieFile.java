@@ -27,6 +27,7 @@ import java.util.List;
 import wyboogie.core.BoogieFile.Decl;
 import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.Decl.Function;
+import wyboogie.core.BoogieFile.Stmt.Assignment;
 import wyboogie.core.BoogieFile.Stmt.Sequence;
 import wyboogie.io.BoogieFilePrinter;
 import wyfs.lang.Content;
@@ -905,7 +906,10 @@ public class BoogieFile {
 		return new Decl.Function(Collections.EMPTY_LIST,name,parameters,returns,body);
 	}
 
-	// Statements
+	public static Stmt ASSIGN(LVal lhs, Expr rhs) {
+		return new Stmt.Assignment(lhs,rhs);
+	}
+
 	public static Stmt GOTO(List<String> labels) {
 		return new Stmt.Goto(labels);
 	}
