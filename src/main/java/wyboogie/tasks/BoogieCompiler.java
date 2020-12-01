@@ -401,7 +401,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		if (WyilUtils.isSimple(stmt) || !WyilUtils.hasInterference(stmt, meter)) {
 			// Easy case, parallel assignment meaning can make assignments directly.
 			for (int i = 0; i != lvals.size(); ++i) {
-				stmts.add(constructAssign(lhs.get(i), rhs.get(i), lvals.get(i), rvals.get(i)));
+				stmts.add(constructAssign(lhs.get(i), rhs.get(i), (LVal) lvals.get(i), rvals.get(i)));
 			}
 		} else {
 			// Hard case, sequential assignment meaning must introduce temporary variables.
@@ -464,7 +464,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * @param r
 	 * @return
 	 */
-	public Stmt constructAssign(WyilFile.LVal lhs, WyilFile.Expr rhs, Expr l, Expr r) {
+	public Stmt constructAssign(WyilFile.LVal lhs, WyilFile.Expr rhs, LVal l, Expr r) {
 		WyilFile.Type lhsT = lhs.getType();
 		WyilFile.Type rhsT = rhs.getType();
 		if (l instanceof FauxTuple) {
@@ -481,6 +481,23 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		}
 	}
 
+	/**
+	 * Construct an assignment statement for an rhs of a given type to an lval of a
+	 * given type including appropriate casts as necessary. For example, consider:
+	 *
+	 * <pre>
+	 * int|null x = 1
+	 * </pre>
+	 *
+	 * In this case, we need to coerce from the primtive boogie type
+	 * <code>int</code> to the boxed type <code>Value</code>.
+	 *
+	 * @param type
+	 * @param from
+	 * @param lhs
+	 * @param rhs
+	 * @return
+	 */
 	public Stmt constructAssign(WyilFile.Type type, WyilFile.Type from, LVal lhs, Expr rhs) {
 		// Cast right-hand side as necessary
 		rhs = cast(type, from, rhs);
@@ -490,7 +507,45 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			rhs = box(type, rhs);
 		}
 		// Done
-		return new Stmt.Assignment(lhs, rhs);
+		return constructAssign(lhs, rhs);
+	}
+
+	/**
+	 * Construct an assignment statement for a given lhs and rhs. The challenge here
+	 * stems from the requirement in Boogie that we cannot assign to multiple nested
+	 * dictionaries (e.g. <code>xs[i][j] = ...</code> is not permitted).
+	 *
+	 * @param lval
+	 * @param rhs
+	 * @return
+	 */
+	public Stmt constructAssign(WyilFile.LVal lval, Expr lhs, Expr rhs) {
+		switch(lval.getOpcode()) {
+		case WyilFile.EXPR_arrayaccess:
+		case WyilFile.EXPR_arrayborrow: {
+			WyilFile.Expr.ArrayAccess l = (WyilFile.Expr.ArrayAccess) lval;
+			Expr.DictionaryAccess ld = (Expr.DictionaryAccess) lhs;
+			Expr src = cast(lval.getType(), l.getFirstOperand().getType(), ld.getSource());
+			return constructAssign((WyilFile.LVal) l.getFirstOperand(), ld.getSource(), PUT(src, ld.getIndex(), rhs));
+		}
+		case WyilFile.EXPR_dereference: {
+
+		}
+		case WyilFile.EXPR_fielddereference: {
+
+		}
+		case WyilFile.EXPR_recordaccess:
+		case WyilFile.EXPR_recordborrow: {
+
+		}
+		case WyilFile.EXPR_variablecopy:
+		case WyilFile.EXPR_variablemove: {
+			LVal l = (LVal) constructVariableAccessLVal((WyilFile.Expr.VariableAccess) lval);
+			return new Stmt.Assignment(l, rhs);
+		}
+		default:
+			throw new UnsupportedOperationException("invalid lval");
+		}
 	}
 
 	@Override
@@ -599,7 +654,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Stmt constructNamedBlock(WyilFile.Stmt.NamedBlock stmt, List<Stmt> stmts) {
-		throw new IllegalArgumentException("GOT HERE");
+		// Named blocks are really a relic from the past which probably cannot currently
+		// be encountered at the source-level in Whiley.
+		throw new UnsupportedOperationException();
 	}
 
 	@Override
@@ -609,13 +666,18 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			// variables.
 			WyilFile.Decl.Callable enclosing = stmt.getAncestor(WyilFile.Decl.FunctionOrMethod.class);
 			WyilFile.Tuple<WyilFile.Decl.Variable> returns = enclosing.getReturns();
+			WyilFile.Type type = stmt.getReturn().getType();
 			// Extract return values
 			List<Expr> rvs = returns.size() == 1 ? Arrays.asList(ret) : ((FauxTuple) ret).getItems();
 			// Construct return value assignments
 			ArrayList<Stmt> stmts = new ArrayList<>();
 			for (int i = 0; i != rvs.size(); ++i) {
-				String rv = returns.get(i).getName().get();
-				stmts.add(new Stmt.Assignment(VAR(rv), rvs.get(i)));
+				WyilFile.Decl.Variable ith = returns.get(i);
+				String rv = ith.getName().get();
+				// Cast returned value as necessary
+				Expr re = cast(ith.getType(), type.dimension(i), rvs.get(i));
+				// Done
+				stmts.add(new Stmt.Assignment(VAR(rv), re));
 			}
 			// Add the actual return statement
 			stmts.add(new Stmt.Return());
@@ -757,6 +819,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructArrayAccess(WyilFile.Expr.ArrayAccess expr, Expr source, Expr index) {
+		System.out.println("UNBOXING: " + expr.getType());
 		return unbox(expr.getType(), new Expr.DictionaryAccess(source, index));
 	}
 
