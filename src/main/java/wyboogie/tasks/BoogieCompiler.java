@@ -79,19 +79,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	@Override
 	public Decl constructType(WyilFile.Decl.Type d, List<Expr> invariant) {
 		WyilFile.Decl.Variable var = d.getVariableDeclaration();
+		Type type = constructType(var.getType());
 		// Apply name mangling
 		String name = toMangledName(d);
-		Decl t = new Decl.TypeSynonym(name, constructType(var.getType()));
+		Decl t = new Decl.TypeSynonym(name, type);
 		//
-		if (invariant.isEmpty()) {
-			return t;
-		} else {
-			// FIXME: this translation is not valid.
-			Decl.Parameter p = new Decl.Parameter(var.getName().get(), new Type.Synonym(name));
-			Expr inv = new Expr.Quantifier(true, new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, invariant), p);
-			Decl a = new Decl.Axiom(inv);
-			return new Decl.Sequence(t, a);
-		}
+		Decl.Parameter p = new Decl.Parameter(var.getName().get(), type);
+		Expr inv = AND(invariant);
+		Decl a = FUNCTION(name + "#is", p, Type.Bool, inv);
+		return new Decl.Sequence(t, a);
 	}
 
 	@Override
@@ -834,8 +830,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructCast(WyilFile.Expr.Cast expr, Expr operand) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		// FIXME: unsure whether this is sufficient.
+		return cast(expr.getType(), expr.getOperand().getType(), operand);
 	}
 
 	@Override
@@ -1225,7 +1221,18 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	/**
-	 * Construct a runtime type test for a given argument operand.
+	 * Construct a runtime type test for a given argument operand. For example,
+	 * consider the following:
+	 *
+	 * <pre>
+	 * function f(int|null x) -> (int r):
+	 *   if x is null:
+	 *      return 0
+	 *   else:
+	 *      return x
+	 * </pre>
+	 *
+	 * The expression <code>x is null</code> will be translated by this function.
 	 *
 	 * @param to       The type being tested against.
 	 * @param from     The argument type
@@ -1237,14 +1244,129 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		case WyilFile.TYPE_null:
 			return EQ(argument, CONST(null));
 		case WyilFile.TYPE_bool:
-			return CALL("Bool#is", argument);
+			return CALL("Bool#is", box(from, argument));
 		case WyilFile.TYPE_byte:
-			return CALL("Byte#is", argument);
+			return CALL("Byte#is", box(from, argument));
 		case WyilFile.TYPE_int:
-			return CALL("Int#is", argument);
+			return CALL("Int#is", box(from, argument));
+		case WyilFile.TYPE_nominal:
+			return constructNominalTypeTest((WyilFile.Type.Nominal) to, from, argument);
+		case WyilFile.TYPE_array:
+			return constructArrayTypeTest((WyilFile.Type.Array) to, from, argument);
+		case WyilFile.TYPE_record:
+			return constructRecordTypeTest((WyilFile.Type.Record) to, from, argument);
 		default:
 			throw new IllegalArgumentException("unknown type encoutnered (" + to.getClass().getName() + ")");
 		}
+	}
+
+	/**
+	 * Construct a type test for a nominal type. This is done by simple calling the
+	 * <code>is</code> method for the corresponding nominal type. For example,
+	 * consider the following:
+	 *
+	 * <pre>
+	 * type nat is (int x) where ...
+	 *
+	 *   ...
+	 *   if x is nat:
+	 *      ...
+	 * </pre>
+	 *
+	 * For the type <code>nat</code> we will generate:
+	 *
+	 * <pre>
+	 * function nat#is(Value v) { ... }
+	 * </pre>
+	 *
+	 * And we can translate <code>x is nat</code> as a call to this function.
+	 *
+	 * @param to
+	 * @param from
+	 * @param argument
+	 * @return
+	 */
+	private Expr constructNominalTypeTest(WyilFile.Type.Nominal to, WyilFile.Type from, Expr argument) {
+		// Construct appropriate name mangle
+		String name = toMangledName(to.getLink().getTarget());
+		// Ensure argument is boxed
+		return CALL(name + "#is", cast(to, from, argument));
+	}
+
+	/**
+	 * Construct a type test for an unadorned record type. For simplicity, this is
+	 * done inline. For example:
+	 *
+	 * <pre>
+	 *   ...
+	 *   if x is {int f, bool g}:
+	 *      ...
+	 * </pre>
+	 *
+	 * Then, the <code>is</code> expression is translated as:
+	 *
+	 * <pre>
+	 *   Int#is(x[f]) && Bool#is(x[g])
+	 * </pre>
+	 *
+	 * @param to
+	 * @param from
+	 * @param argument
+	 * @return
+	 */
+	private Expr constructRecordTypeTest(WyilFile.Type.Record to, WyilFile.Type from, Expr argument) {
+		// NOTE: this method for describing a type test should be deprecated in the
+		// future in favour of something based around type tags.
+		//
+		Tuple<WyilFile.Type.Field> fields = to.getFields();
+		Expr[] clauses = new Expr[fields.size()];
+		// Cast argument to correct (unboxed) type
+		argument = cast(to,from,argument);
+		// Iterate fields constructing tests for each.
+		for (int i = 0; i != clauses.length; ++i) {
+			WyilFile.Type.Field f = fields.get(i);
+			String field = "$" + f.getName().get();
+			clauses[i] = constructTypeTest(f.getType(), WyilFile.Type.Any, GET(argument,VAR(field)));
+		}
+		// Done
+		return AND(clauses);
+	}
+
+	/**
+	 * Construct a type test for an unadorned array type. For simplicity, this is
+	 * done inline. For example:
+	 *
+	 * <pre>
+	 *   ...
+	 *   if x is int[]:
+	 *      ...
+	 * </pre>
+	 *
+	 * Then, the <code>is</code> expression is translated as:
+	 *
+	 * <pre>
+	 *   (forall i:int :: 0 <= i && i < length(x) ==> Int#is(x[i]))
+	 * </pre>
+	 *
+	 * @param to
+	 * @param from
+	 * @param argument
+	 * @return
+	 */
+	private Expr constructArrayTypeTest(WyilFile.Type.Array to, WyilFile.Type from, Expr argument) {
+		// NOTE: this method for describing a type test should be deprecated in the
+		// future in favour of something based around type tags.
+		//
+		// Generate temporary index variable (which avoids name clashes)
+		Expr.VariableAccess i = VAR("i#" + to.getIndex());
+		// Cast argument to (unboxed) array type
+		argument = cast(to,from,argument);
+		// Construct bounds check for index variable
+		Expr lhs = AND(LTEQ(CONST(0),i),LT(i,CALL("Array#Length",argument)));
+		// Recursively construct type test for element
+		Expr rhs = constructTypeTest(to.getElement(), WyilFile.Type.Any, GET(argument, i));
+		// Done
+		return FORALL(i.getVariable(), Type.Int, IMPLIES(lhs, rhs));
 	}
 
 	/**
@@ -1574,6 +1696,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 */
 	private static boolean isBoxed(WyilFile.Type type) {
 		switch (type.getOpcode()) {
+		case WyilFile.TYPE_any:
 		case WyilFile.TYPE_reference:
 		case WyilFile.TYPE_universal:
 		case WyilFile.TYPE_union:
