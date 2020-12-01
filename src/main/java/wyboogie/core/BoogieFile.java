@@ -903,6 +903,13 @@ public class BoogieFile {
 		return new Decl.Function(Arrays.asList(attributes), name, parameters, returns, null);
 	}
 
+	public static Decl.Function FUNCTION(String name, Decl.Parameter parameter, BoogieFile.Type returns, Expr body) {
+		ArrayList<Decl.Parameter> parameters = new ArrayList<>();
+		parameters.add(parameter);
+		return new Decl.Function(Collections.EMPTY_LIST, name, parameters, returns, body);
+	}
+
+
 	public static Decl.Function FUNCTION(String name, BoogieFile.Type param1, BoogieFile.Type param2,
 			BoogieFile.Type returns, String... attributes) {
 		ArrayList<Decl.Parameter> parameters = new ArrayList<>();
@@ -983,6 +990,26 @@ public class BoogieFile {
 	public static Expr.Quantifier FORALL(List<Decl.Parameter> parameters, Expr body) {
 		return new Expr.Quantifier(true, body, parameters);
 	}
+
+	public static Expr.Quantifier EXISTS(String name, BoogieFile.Type type, Expr body) {
+		return new Expr.Quantifier(false, body, new Decl.Parameter(name, type));
+	}
+
+	public static Expr.Quantifier EXISTS(String name1, BoogieFile.Type type1, String name2, BoogieFile.Type type2,
+			Expr body) {
+		return new Expr.Quantifier(false, body, new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2));
+	}
+
+	public static Expr.Quantifier EXISTS(String name1, BoogieFile.Type type1, String name2, BoogieFile.Type type2,
+			String name3, BoogieFile.Type type3, Expr body) {
+		return new Expr.Quantifier(false, body, new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2),
+				new Decl.Parameter(name3, type3));
+	}
+
+	public static Expr.Quantifier EXISTS(List<Decl.Parameter> parameters, Expr body) {
+		return new Expr.Quantifier(false, body, parameters);
+	}
+
 
 	public static Expr.BinaryOperator IFF(Expr lhs, Expr rhs) {
 		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.IFF, lhs, rhs);

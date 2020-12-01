@@ -575,10 +575,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			// Extract list of initialiser expressions
 			List<Expr> inits = (init instanceof FauxTuple) ? ((FauxTuple) init).getItems()
 					: Arrays.asList(init);
+			// Determine type of initialiser expression
+			WyilFile.Type initT = stmt.getInitialiser().getType();
 			// Assign to each variable
 			for (int i = 0; i != vars.size(); ++i) {
-				String name = vars.get(i).getName().toString();
-				stmts.add(ASSIGN(new Expr.VariableAccess(name), inits.get(i)));
+				WyilFile.Decl.Variable ith = vars.get(i);
+				String name = ith.getName().toString();
+				stmts.add(ASSIGN(new Expr.VariableAccess(name), cast(ith.getType(), initT.dimension(i), inits.get(i))));
 			}
 			// FIXME: need post condition!
 			return applyPreconditions(preconditions, SEQUENCE(stmts));
@@ -859,7 +862,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			Expr arr = CALL("Array#Empty", CONST(bytes.length));
 			//
 			for (int i = 0; i != bytes.length; ++i) {
-				Expr ith = coerceFrom(new Expr.Constant(bytes[i]), "Int");
+				Expr ith = box(WyilFile.Type.Int, new Expr.Constant(bytes[i]));
 				arr = new Expr.DictionaryUpdate(arr, new Expr.Constant(i), ith);
 			}
 			return arr;
@@ -884,13 +887,26 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	public Expr constructEqual(WyilFile.Expr.Equal expr, Expr lhs, Expr rhs) {
 		WyilFile.Type lhsT = expr.getFirstOperand().getType();
 		WyilFile.Type rhsT = expr.getSecondOperand().getType();
-		if (!lhsT.equals(rhsT)) {
-			// Box operands for simplicity
-			lhs = box(lhsT, lhs);
-			rhs = box(rhsT, rhs);
+		boolean boxing = !lhsT.equals(rhsT);
+		//
+		if(lhs instanceof FauxTuple) {
+			List<Expr> ls = ((FauxTuple)lhs).getItems();
+			List<Expr> rs = ((FauxTuple)rhs).getItems();
+			Expr result = null;
+			for(int i=0;i!=lhsT.shape();++i) {
+				Expr l = ls.get(i);
+				Expr r = rs.get(i);
+				l = boxing ? box(lhsT.dimension(i),l) : l;
+				r = boxing ? box(rhsT.dimension(i),r) : r;
+				result = i == 0 ? EQ(l,r) : AND(result,EQ(l,r));
+			}
+			// Done
+			return result;
+		} else if(boxing) {
+			return EQ(box(lhsT,lhs), box(rhsT,rhs));
+		} else {
+			return EQ(lhs, rhs);
 		}
-		// Done
-		return EQ(lhs, rhs);
 	}
 
 	@Override
@@ -945,8 +961,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructIs(WyilFile.Expr.Is expr, Expr operand) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return constructTypeTest(expr.getTestType(), expr.getOperand().getType(), operand);
 	}
 
 	@Override
@@ -1009,10 +1024,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructInvoke(WyilFile.Expr.Invoke expr, List<Expr> arguments) {
-		WyilFile.Type rt = expr.getType();
-		boolean method = expr.getLink().getTarget() instanceof WyilFile.Decl.Method;
+		WyilFile.Decl.Callable ft = expr.getLink().getTarget();
+		WyilFile.Type ftrt = ft.getType().getReturn();
+		WyilFile.Type rt = expr.getBinding().getConcreteType().getReturn();
+		boolean method = ft instanceof WyilFile.Decl.Method;
 		// Apply name mangling
 		String name = toMangledName(expr.getLink().getTarget());
+		// Apply conversions to arguments as necessary
+		arguments = cast(ft.getType().getParameter(), expr.getOperands(), arguments);
 		//
 		if(method) {
 			// Add heap argument to invocation to ensure (amongst other things)
@@ -1021,11 +1040,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		}
 		//
 		if (rt.shape() == 1) {
-			return CALL(name, arguments);
+			return cast(rt, ftrt, CALL(name, arguments));
 		} else {
 			List<Expr> items = new ArrayList<>();
 			for (int i = 0; i != rt.shape(); ++i) {
-				items.add(CALL(name + "#" + i, arguments));
+				items.add(cast(rt.dimension(i), ftrt.dimension(i), CALL(name + "#" + i, arguments)));
 			}
 			return new FauxTuple(items);
 		}
@@ -1051,11 +1070,28 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructNotEqual(WyilFile.Expr.NotEqual expr, Expr lhs, Expr rhs) {
-		// Box operands for simplicity
-		lhs = box(expr.getFirstOperand().getType(), lhs);
-		rhs = box(expr.getSecondOperand().getType(), rhs);
-		// Done
-		return NEQ(lhs, rhs);
+		WyilFile.Type lhsT = expr.getFirstOperand().getType();
+		WyilFile.Type rhsT = expr.getSecondOperand().getType();
+		boolean boxing = !lhsT.equals(rhsT);
+		//
+		if(lhs instanceof FauxTuple) {
+			List<Expr> ls = ((FauxTuple)lhs).getItems();
+			List<Expr> rs = ((FauxTuple)rhs).getItems();
+			Expr result = null;
+			for(int i=0;i!=lhsT.shape();++i) {
+				Expr l = ls.get(i);
+				Expr r = rs.get(i);
+				l = boxing ? box(lhsT.dimension(i),l) : l;
+				r = boxing ? box(rhsT.dimension(i),r) : r;
+				result = i == 0 ? NEQ(l, r) : OR(result, NEQ(l, r));
+			}
+			// Done
+			return result;
+		} else if(boxing) {
+			return NEQ(box(lhsT,lhs), box(rhsT,rhs));
+		} else {
+			return NEQ(lhs, rhs);
+		}
 	}
 
 	@Override
@@ -1096,7 +1132,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructVariableAccess(WyilFile.Expr.VariableAccess expr) {
-		return VAR(expr.getVariableDeclaration().getName().toString());
+		WyilFile.Type declared = expr.getVariableDeclaration().getType();
+		WyilFile.Type actual = expr.getType();
+		return cast(actual,declared,VAR(expr.getVariableDeclaration().getName().toString()));
 	}
 
 	// =========================================================================================
@@ -1116,7 +1154,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	@Override
 	public Expr constructInvokePrecondition(WyilFile.Expr.Invoke expr, List<Expr> args) {
 		WyilFile.Decl.Callable c = expr.getLink().getTarget();
+		// Mangle target name
 		String name = toMangledName(c);
+		// Coerce argument types (as necessary)
+		args = cast(c.getType().getParameter(), expr.getOperands(), args);
 		//
 		if (c instanceof WyilFile.Decl.Function) {
 			return CALL(name + "#pre", args);
@@ -1143,6 +1184,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			return Type.Int;
 		case WyilFile.TYPE_reference:
 			return REF;
+		case WyilFile.TYPE_universal:
+			return VALUE;
 		case WyilFile.TYPE_nominal:
 			return constructNominalType((WyilFile.Type.Nominal) type);
 		case WyilFile.TYPE_array:
@@ -1179,6 +1222,29 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	public Stmt applyImplicitCoercion(wyil.lang.WyilFile.Type target, wyil.lang.WyilFile.Type source, Stmt expr) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
+	}
+
+	/**
+	 * Construct a runtime type test for a given argument operand.
+	 *
+	 * @param to       The type being tested against.
+	 * @param from     The argument type
+	 * @param argument The argument being tested.
+	 * @return
+	 */
+	private Expr constructTypeTest(WyilFile.Type to, WyilFile.Type from, Expr argument) {
+		switch (to.getOpcode()) {
+		case WyilFile.TYPE_null:
+			return EQ(argument, CONST(null));
+		case WyilFile.TYPE_bool:
+			return CALL("Bool#is", argument);
+		case WyilFile.TYPE_byte:
+			return CALL("Byte#is", argument);
+		case WyilFile.TYPE_int:
+			return CALL("Int#is", argument);
+		default:
+			throw new IllegalArgumentException("unknown type encoutnered (" + to.getClass().getName() + ")");
+		}
 	}
 
 	/**
@@ -1223,13 +1289,16 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * @return
 	 */
 	private List<Decl> constructBoolAxioms(WyilFile wf) {
-		Decl header = new Decl.LineComment("Booleans");
-		Decl.Function from = FUNCTION("Bool#from", Type.Bool, VALUE);
-		Decl.Function to = FUNCTION("Bool#to", VALUE, Type.Bool);
+		ArrayList<Decl> decls = new ArrayList<>();
+		decls.add(new Decl.LineComment("Booleans"));
+		decls.add(FUNCTION("Bool#box", Type.Bool, VALUE));
+		decls.add(FUNCTION("Bool#unbox", VALUE, Type.Bool));
+		decls.add(FUNCTION("Bool#is", new Decl.Parameter("v", VALUE), Type.Bool,
+				EXISTS("b", Type.Bool, EQ(CALL("Bool#box", VAR("b")), VAR("v")))));
 		// Establish connection between toInt and fromInt
-		Decl.Axiom axiom1 = new Decl.Axiom(
-				FORALL("i", Type.Bool, EQ(CALL("Bool#to", CALL("Bool#from", VAR("i"))), VAR("i"))));
-		return Arrays.asList(header, from, to, axiom1);
+		decls.add(new Decl.Axiom(FORALL("i", Type.Bool, EQ(CALL("Bool#unbox", CALL("Bool#box", VAR("i"))), VAR("i")))));
+		// Done
+		return decls;
 	}
 
 	/**
@@ -1240,12 +1309,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 */
 	private List<Decl> constructIntAxioms(WyilFile wf) {
 		Decl header = new Decl.LineComment("Integers");
-		Decl.Function fromInt = FUNCTION("Int#from", Type.Int, VALUE);
-		Decl.Function toInt = FUNCTION("Int#to", VALUE, Type.Int);
+		Decl.Function fromInt = FUNCTION("Int#box", Type.Int, VALUE);
+		Decl.Function toInt = FUNCTION("Int#unbox", VALUE, Type.Int);
+		Decl.Function isInt = FUNCTION("Int#is", new Decl.Parameter("v", VALUE), Type.Bool,
+				EXISTS("i", Type.Int, EQ(CALL("Int#box", VAR("i")), VAR("v"))));
 		// Establish connection between toInt and fromInt
 		Decl.Axiom axiom1 = new Decl.Axiom(
-				FORALL("i", Type.Int, EQ(CALL("Int#to", CALL("Int#from", VAR("i"))), VAR("i"))));
-		return Arrays.asList(header, fromInt, toInt, axiom1);
+				FORALL("i", Type.Int, EQ(CALL("Int#unbox", CALL("Int#box", VAR("i"))), VAR("i"))));
+		return Arrays.asList(header, fromInt, toInt, isInt, axiom1);
 	}
 
 	/**
@@ -1255,27 +1326,31 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * @return
 	 */
 	private List<Decl> constructByteAxioms(WyilFile wf) {
-		Decl header = new Decl.LineComment("Bytes");
-		Decl.Function fromByte = FUNCTION("Byte#from", Type.BitVector8, VALUE);
-		Decl.Function toByte = FUNCTION("Byte#to", VALUE, Type.BitVector8);
-		Decl.Function toInt = FUNCTION("Byte#toInt", Type.BitVector8, Type.Int, ":bvbuiltin", "\"bv2int\"");
+		ArrayList<Decl> decls = new ArrayList<>();
+		decls.add(new Decl.LineComment("Bytes"));
+		decls.add(FUNCTION("Byte#box", Type.BitVector8, VALUE));
+		decls.add(FUNCTION("Byte#unbox", VALUE, Type.BitVector8));
+		decls.add(FUNCTION("Byte#toInt", Type.BitVector8, Type.Int, ":bvbuiltin", "\"bv2int\""));
+		decls.add(FUNCTION("Byte#is", new Decl.Parameter("v", VALUE), Type.Bool,
+				EXISTS("b", Type.BitVector8, EQ(CALL("Byte#box", VAR("b")), VAR("v")))));
 		// NOTE: figuring out int2bv was a challenge!
-		Decl.Function fromInt = FUNCTION("Byte#fromInt", Type.Int, Type.BitVector8, ":bvbuiltin", "\"(_ int2bv 8)\"");
-		Decl.Function not = FUNCTION("Byte#Not", Type.BitVector8, Type.BitVector8, ":bvbuiltin", "\"bvnot\"");
-		Decl.Function and = FUNCTION("Byte#And", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin",
-				"\"bvand\"");
-		Decl.Function or = FUNCTION("Byte#Or", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin",
-				"\"bvor\"");
-		Decl.Function xor = FUNCTION("Byte#Xor", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin",
-				"\"bvxor\"");
-		Decl.Function shl = FUNCTION("Byte#Shl", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin",
-				"\"bvshl\"");
-		Decl.Function shr = FUNCTION("Byte#Shr", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin",
-				"\"bvlshr\"");
+		decls.add(FUNCTION("Byte#fromInt", Type.Int, Type.BitVector8, ":bvbuiltin", "\"(_ int2bv 8)\""));
+		decls.add(FUNCTION("Byte#Not", Type.BitVector8, Type.BitVector8, ":bvbuiltin", "\"bvnot\""));
+		decls.add(FUNCTION("Byte#And", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin",
+				"\"bvand\""));
+		decls.add(FUNCTION("Byte#Or", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin",
+				"\"bvor\""));
+		decls.add(FUNCTION("Byte#Xor", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin",
+				"\"bvxor\""));
+		decls.add(FUNCTION("Byte#Shl", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin",
+				"\"bvshl\""));
+		decls.add(FUNCTION("Byte#Shr", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin",
+				"\"bvlshr\""));
 		// Establish connection between toByte and fromByte
-		Decl.Axiom axiom1 = new Decl.Axiom(
-				FORALL("b", Type.BitVector8, EQ(CALL("Byte#to", CALL("Byte#from", VAR("b"))), VAR("b"))));
-		return Arrays.asList(header, fromByte, toByte, axiom1, toInt, fromInt, not, and, or, xor, shl, shr);
+		decls.add(new Decl.Axiom(
+				FORALL("b", Type.BitVector8, EQ(CALL("Byte#unbox", CALL("Byte#box", VAR("b"))), VAR("b")))));
+		// Done
+		return decls;
 	}
 
 	/**
@@ -1288,10 +1363,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// custom array types for each different array type encountered.
 		ArrayList<Decl> decls = new ArrayList<>();
 		decls.add(new Decl.LineComment("Arrays"));
-		decls.add(FUNCTION("Array#from", INTMAP, VALUE));
-		decls.add(FUNCTION("Array#to", VALUE, INTMAP));
+		decls.add(FUNCTION("Array#box", INTMAP, VALUE));
+		decls.add(FUNCTION("Array#unbox", VALUE, INTMAP));
 		// Establish connection between toInt and fromInt
-		decls.add(new Decl.Axiom(FORALL("i", INTMAP, EQ(CALL("Array#to", CALL("Array#from", VAR("i"))), VAR("i")))));
+		decls.add(new Decl.Axiom(FORALL("i", INTMAP, EQ(CALL("Array#unbox", CALL("Array#box", VAR("i"))), VAR("i")))));
 		// Array length function
 		decls.add(FUNCTION("Array#Length", INTMAP, Type.Int));
 		// Enforce array length is non-negative
@@ -1342,11 +1417,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		}
 		//
 		decls.add(new Decl.LineComment("Records"));
-		decls.add(FUNCTION("Record#from", FIELDMAP, VALUE));
-		decls.add(FUNCTION("Record#to", VALUE, FIELDMAP));
+		decls.add(FUNCTION("Record#box", FIELDMAP, VALUE));
+		decls.add(FUNCTION("Record#unbox", VALUE, FIELDMAP));
 		// Establish connection between toInt and fromInt
 		decls.add(
-				new Decl.Axiom(FORALL("i", FIELDMAP, EQ(CALL("Record#to", CALL("Record#from", VAR("i"))), VAR("i")))));
+				new Decl.Axiom(FORALL("i", FIELDMAP, EQ(CALL("Record#unbox", CALL("Record#box", VAR("i"))), VAR("i")))));
 		// Defines the empty record (i.e. the base from which all other records are
 		// constructed).
 		decls.add(new Decl.Constant(true, "Record#Empty", FIELDMAP));
@@ -1458,12 +1533,58 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		}
 	}
 
-	private static Expr cast(WyilFile.Type to, WyilFile.Type from, Expr e) {
-		switch (to.getOpcode()) {
-		case WyilFile.TYPE_union:
-			return box(from, e);
+	private static List<Expr> cast(WyilFile.Type target, Tuple<WyilFile.Expr> from, List<Expr> args) {
+		ArrayList<Expr> es = new ArrayList<>();
+		for(int i=0;i!=args.size();++i) {
+			es.add(cast(target.dimension(i), from.get(i).getType(), args.get(i)));
 		}
-		return e;
+		return es;
+	}
+
+	/**
+	 * Box or Unbox a given type as necessary.
+	 *
+	 * @param to
+	 * @param from
+	 * @param e
+	 * @return
+	 */
+	private static Expr cast(WyilFile.Type to, WyilFile.Type from, Expr e) {
+		// Determine boxed status of each
+		boolean t = isBoxed(to);
+		boolean f = isBoxed(from);
+		// box/unbox as necessary
+		if (t && !f) {
+			return box(from, e);
+		} else if (!t && f) {
+			return unbox(to, e);
+		} else {
+			return e;
+		}
+	}
+
+	/**
+	 * Determine whether the Boogie representation of a given Whiley type is
+	 * naturally boxed or not. Boxed types are whose represented by `Value`.
+	 * However, some Whiley types (e.g. `int`) can be represented directly in Boogie
+	 * and, hence, are done so.
+	 *
+	 * @param type
+	 * @return
+	 */
+	private static boolean isBoxed(WyilFile.Type type) {
+		switch (type.getOpcode()) {
+		case WyilFile.TYPE_reference:
+		case WyilFile.TYPE_universal:
+		case WyilFile.TYPE_union:
+			return true;
+		case WyilFile.TYPE_nominal: {
+			WyilFile.Type.Nominal n = (WyilFile.Type.Nominal) type;
+			// FIXME: problem with recursive types?
+			return isBoxed(n.getConcreteType());
+		}
+		}
+		return false;
 	}
 
 	/**
@@ -1478,15 +1599,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	private static Expr box(WyilFile.Type type, Expr e) {
 		switch (type.getOpcode()) {
 		case WyilFile.TYPE_bool:
-			return coerceFrom(e, "Bool");
+			return coerce(e, "Bool#unbox", "Bool#box");
 		case WyilFile.TYPE_byte:
-			return coerceFrom(e, "Byte");
+			return coerce(e, "Byte#unbox", "Byte#box");
 		case WyilFile.TYPE_int:
-			return coerceFrom(e, "Int");
+			return coerce(e, "Int#unbox", "Int#box");
 		case WyilFile.TYPE_record:
-			return coerceFrom(e, "Record");
+			return coerce(e, "Record#unbox", "Record#box");
 		case WyilFile.TYPE_array:
-			return coerceFrom(e, "Array");
+			return coerce(e, "Array#unbox", "Array#box");
 		case WyilFile.TYPE_nominal: {
 			WyilFile.Type.Nominal t = (WyilFile.Type.Nominal) type;
 			// Decision on whether boxing required depends on underlying type!
@@ -1508,15 +1629,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	private static Expr unbox(WyilFile.Type type, Expr e) {
 		switch (type.getOpcode()) {
 		case WyilFile.TYPE_bool:
-			return coerceTo(e, "Bool");
+			return coerce(e, "Bool#box", "Bool#unbox");
 		case WyilFile.TYPE_byte:
-			return coerceTo(e, "Byte");
+			return coerce(e, "Byte#box", "Byte#unbox");
 		case WyilFile.TYPE_int:
-			return coerceTo(e, "Int");
+			return coerce(e, "Int#box", "Int#unbox");
 		case WyilFile.TYPE_record:
-			return coerceTo(e, "Record");
+			return coerce(e, "Record#box", "Record#unbox");
 		case WyilFile.TYPE_array:
-			return coerceTo(e, "Array");
+			return coerce(e, "Array#box", "Array#unbox");
 		case WyilFile.TYPE_nominal: {
 			WyilFile.Type.Nominal t = (WyilFile.Type.Nominal) type;
 			// Decision on whether boxing required depends on underlying type!
@@ -1526,16 +1647,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		return e;
 	}
 
-	private static Expr coerceTo(Expr e, String type) {
-		return coerce(e, type + "#from", type + "#to");
-	}
-
-	private static Expr coerceFrom(Expr e, String type) {
-		return coerce(e, type + "#to", type + "#from");
-	}
-
 	/**
-	 * Convert a given expression using two coercion functions (to and from).
+	 * Convert a given expression using two coercion functions (to and from). This
+	 * performs some simple optimisations to eliminate chained coercions (e.g.
+	 * <code>box(unbox(x))</code> becomes <code>x</code>).
 	 *
 	 * @param e
 	 * @return
