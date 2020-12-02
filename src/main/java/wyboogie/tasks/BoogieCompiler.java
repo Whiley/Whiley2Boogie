@@ -393,7 +393,75 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public Stmt constructAssign(WyilFile.Stmt.Assign stmt, List<Expr> lvals, List<Expr> rvals,
+	public Stmt constructAssign(WyilFile.Stmt.Assign stmt, List<Expr> _, List<Expr> rhs,
+			List<Expr> preconditions) {
+		ArrayList<Stmt> stmts = new ArrayList<>();
+		// First, flattern left-hand side
+		List<WyilFile.LVal> lvals = flatternAssignmentLeftHandSide(stmt.getLeftHandSide());
+		// Second, flattern right-hand side
+		List<Expr> rvals = flatternAssignmentRightHandSide(rhs);
+		// Third, coerce right-hand side elements
+		rvals = coerceAssignmentRightHandSide(lvals, stmt.getRightHandSide(), rvals);
+		// Fourth, determine whether simple assign sufficient (or not)
+		if (!WyilUtils.isSimple(stmt) && WyilUtils.hasInterference(stmt, meter)) {
+			// GOT HERE. Need to replace rvals with temporary variables for the final
+			// assignment.
+			for (int i = 0; i != rhs.size(); ++i) {
+				stmts.add(e);
+			}
+		}
+		// Fifth action final assignments.
+		for (int i = 0; i != lvals.size(); ++i) {
+			stmts.add(constructAssign(lvals.get(i), rvals.get(i)));
+		}
+		// Done
+		return SEQUENCE(stmts);
+	}
+
+	private List<WyilFile.LVal> flatternAssignmentLeftHandSide(Tuple<WyilFile.LVal> lhs) {
+		ArrayList<WyilFile.LVal> lvals = new ArrayList<>();
+		for (int i = 0; i != lhs.size(); ++i) {
+			WyilFile.LVal ith = lhs.get(i);
+			if (ith instanceof WyilFile.Expr.TupleInitialiser) {
+				WyilFile.Expr.TupleInitialiser ti = (WyilFile.Expr.TupleInitialiser) ith;
+				for (int j = 0; j < ti.size(); ++j) {
+					lvals.add((WyilFile.LVal) ti.get(j));
+				}
+			} else {
+				lvals.add(ith);
+			}
+		}
+		return lvals;
+	}
+
+	private List<Expr> flatternAssignmentRightHandSide(List<Expr> rhs) {
+		ArrayList<Expr> rvals = new ArrayList<>();
+		// First, flattern all rvals
+		for (int i = 0; i != rhs.size(); ++i) {
+			Expr ith = rhs.get(i);
+			if (ith instanceof FauxTuple) {
+				rvals.addAll(((FauxTuple) ith).getItems());
+			} else {
+				rvals.add(ith);
+			}
+		}
+		return rvals;
+	}
+
+	private List<Expr> coerceAssignmentRightHandSide(List<WyilFile.LVal> lvals, Tuple<WyilFile.Expr> rhs, List<Expr> rvals) {
+		for (int i = 0, k = 0; i != rhs.size(); ++i) {
+			WyilFile.Type t = rhs.get(i).getType();
+			for (int j = 0; j < t.shape(); ++j) {
+				WyilFile.Type l = lvals.get(k).getType();
+				WyilFile.Type r = t.dimension(j);
+				rvals.set(k, cast(l, r, rvals.get(k)));
+				k = k + 1;
+			}
+		}
+		return rvals;
+	}
+
+	public Stmt constructAssignOriginal(WyilFile.Stmt.Assign stmt, List<Expr> lvals, List<Expr> rvals,
 			List<Expr> preconditions) {
 		WyilFile.Tuple<WyilFile.LVal> lhs = stmt.getLeftHandSide();
 		WyilFile.Tuple<WyilFile.Expr> rhs = stmt.getRightHandSide();
@@ -497,7 +565,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * dictionaries (e.g. <code>xs[i][j] = ...</code> is not permitted).
 	 *
 	 * @param lval Raw left-hand side
-	 * @param rhs  Translated right-hand side
+	 * @param rhs Translated and coerced right-hand side(s)
 	 * @return
 	 */
 	public Stmt constructAssign(WyilFile.LVal lval, Expr rhs) {
