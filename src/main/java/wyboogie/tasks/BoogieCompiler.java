@@ -393,24 +393,27 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public Stmt constructAssign(WyilFile.Stmt.Assign stmt, List<Expr> _, List<Expr> rhs,
-			List<Expr> preconditions) {
+	public Stmt constructAssign(WyilFile.Stmt.Assign stmt, List<Expr> _, List<Expr> rhs, List<Expr> preconditions) {
 		ArrayList<Stmt> stmts = new ArrayList<>();
-		// First, flattern left-hand side
+		// First, flatten left-hand side
 		List<WyilFile.LVal> lvals = flatternAssignmentLeftHandSide(stmt.getLeftHandSide());
-		// Second, flattern right-hand side
+		// Second, flatten right-hand side
 		List<Expr> rvals = flatternAssignmentRightHandSide(rhs);
 		// Third, coerce right-hand side elements
 		rvals = coerceAssignmentRightHandSide(lvals, stmt.getRightHandSide(), rvals);
 		// Fourth, determine whether simple assign sufficient (or not)
 		if (!WyilUtils.isSimple(stmt) && WyilUtils.hasInterference(stmt, meter)) {
-			// GOT HERE. Need to replace rvals with temporary variables for the final
-			// assignment.
-			for (int i = 0; i != rhs.size(); ++i) {
-				stmts.add(e);
+			// Simple assignment is insufficient. Therefore, we need to assign every element
+			// on the right-hand side into a temporary variable before (subsequently)
+			// assigning it into the corresponding item on the left-hand side.
+			for (int i = 0; i != rvals.size(); ++i) {
+				// Assign item on rhs into temporary
+				stmts.add(ASSIGN(VAR(TEMP(stmt, i)), rvals.get(i)));
+				// Setup assignment from temporary to the lhs
+				rvals.set(i, VAR(TEMP(stmt, i)));
 			}
 		}
-		// Fifth action final assignments.
+		// Finally, action final assignments.
 		for (int i = 0; i != lvals.size(); ++i) {
 			stmts.add(constructAssign(lvals.get(i), rvals.get(i)));
 		}
@@ -418,6 +421,28 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		return SEQUENCE(stmts);
 	}
 
+	/**
+	 * Flatten the left-hand side into an array of individual lvals. For example:
+	 * 
+	 * <pre>
+	 * x,(y,z) = 1,f()
+	 * </pre>
+	 * 
+	 * The left-hand side of the assignment would be flatterned into
+	 * <code>x,y,z</code>. The purpose of flattening is simply to align primitive
+	 * assignments on the left-hand side with those on the right hand side. In a
+	 * general sense, this doesn't work because (as above) we may have fewer items
+	 * on the right-hand side (strictly speaking). However, in this Boogie
+	 * translation this will never arise because <code>FauxTuple</code>s have been
+	 * employed to ensure they line up. More specifically, the above would become:
+	 * 
+	 * <pre>
+	 * x,y,z = 1,f#1(),f#2
+	 * </pre>
+	 * 
+	 * @param lhs
+	 * @return
+	 */
 	private List<WyilFile.LVal> flatternAssignmentLeftHandSide(Tuple<WyilFile.LVal> lhs) {
 		ArrayList<WyilFile.LVal> lvals = new ArrayList<>();
 		for (int i = 0; i != lhs.size(); ++i) {
@@ -434,6 +459,26 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		return lvals;
 	}
 
+	/**
+	 * Flattern the right-hand side of a given assignment. This is relatively
+	 * straightforward, though we just need to expand any <code>FauxTuple</code>s
+	 * that we encounter. For example, the following:
+	 * 
+	 * <pre>
+	 * x,(y,z) = 1,f()
+	 * </pre>
+	 * 
+	 * The right-hand side above is translated into the following:
+	 * 
+	 * <pre>
+	 * x,(y,z) = 1,(f#1(),f#2())
+	 * </pre>
+	 * 
+	 * Here, <code>(f#1(),f#2())</code> is a <i>faux tuple</i>.
+	 * 
+	 * @param rhs
+	 * @return
+	 */
 	private List<Expr> flatternAssignmentRightHandSide(List<Expr> rhs) {
 		ArrayList<Expr> rvals = new ArrayList<>();
 		// First, flattern all rvals
@@ -448,6 +493,27 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		return rvals;
 	}
 
+	/**
+	 * Coerce elements on the right-hand side of an assignment. This is necessary
+	 * because some types in Boogie are boxed (e.g. arrays or unions), where as
+	 * others are not (e.g. ints or booleans). Thus, consider the following:
+	 * 
+	 * <pre>
+	 * int|null x = ...
+	 * ...
+	 * x = 1
+	 * </pre>
+	 * 
+	 * In this case, the right-hand side has primitive (Boogie) type
+	 * <code>int</code> (which is not boxex). whilst the left-hand side has (Boogie)
+	 * type <code>Value</code> (which is boxed). Therefore, we need to box the
+	 * right-hand side prior to the assignment.
+	 * 
+	 * @param lvals
+	 * @param rhs
+	 * @param rvals
+	 * @return
+	 */
 	private List<Expr> coerceAssignmentRightHandSide(List<WyilFile.LVal> lvals, Tuple<WyilFile.Expr> rhs, List<Expr> rvals) {
 		for (int i = 0, k = 0; i != rhs.size(); ++i) {
 			WyilFile.Type t = rhs.get(i).getType();
