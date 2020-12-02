@@ -527,114 +527,16 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		return rvals;
 	}
 
-	public Stmt constructAssignOriginal(WyilFile.Stmt.Assign stmt, List<Expr> lvals, List<Expr> rvals,
-			List<Expr> preconditions) {
-		WyilFile.Tuple<WyilFile.LVal> lhs = stmt.getLeftHandSide();
-		WyilFile.Tuple<WyilFile.Expr> rhs = stmt.getRightHandSide();
-		//
-		ArrayList<Stmt> stmts = new ArrayList<>();
-		// Check whether parallel (easy) or sequential (hard) assignment
-		if (WyilUtils.isSimple(stmt) || !WyilUtils.hasInterference(stmt, meter)) {
-			// Easy case, parallel assignment meaning can make assignments directly.
-			for (int i = 0; i != lvals.size(); ++i) {
-				stmts.add(constructAssign(lhs.get(i), rhs.get(i), (LVal) lvals.get(i), rvals.get(i)));
-			}
-		} else {
-			// Hard case, sequential assignment meaning must introduce temporary variables.
-			ArrayList<Stmt> assigns = new ArrayList<>();
-			for (int i = 0, k = 0; i != lvals.size(); ++i) {
-				// Apply "split" assignment
-				Pair<Stmt, Stmt> split = constructSplitAssign(stmt, k, lhs.get(i), rhs.get(i), lvals.get(i),
-						rvals.get(i));
-				// Distribute results
-				stmts.add(split.first());
-				assigns.add(split.second());
-				// Done
-				k = k + lhs.get(i).getType().shape();
-			}
-			stmts.addAll(assigns);
-		}
-		// Done
-		return applyPreconditions(preconditions, SEQUENCE(stmts));
-	}
-
-	/**
-	 * Construct a "split" assignment. This is one where the right-hand side is
-	 * first assigned into a temporary before being finally assigned to the
-	 * left-hand side. This generates two statements for each part so they can
-	 * subsequently be combined in the right order.
-	 *
-	 * @param tmp Name of the temporary variable to use (which we assume has been
-	 *            declared with the correct type).
-	 * @param l
-	 * @param r
-	 * @return
-	 */
-	public Pair<Stmt, Stmt> constructSplitAssign(WyilFile.Stmt stmt, int k, WyilFile.LVal lhs, WyilFile.Expr rhs,
-			Expr l, Expr r) {
-		WyilFile.Type rhsT = rhs.getType();
-		if (l instanceof FauxTuple) {
-			ArrayList<Stmt> pre = new ArrayList<>();
-			ArrayList<Stmt> post = new ArrayList<>();
-			Tuple<WyilFile.Expr> lval = ((WyilFile.Expr.TupleInitialiser) lhs).getOperands();
-			List<Expr> rvs = ((FauxTuple) r).getItems();
-			for (int i = 0; i != rvs.size(); ++i, ++k) {
-				// First assign right-hand sides to temporaries
-				pre.add(ASSIGN(VAR(TEMP(stmt, k)), rvs.get(i)));
-				// Second assign left-hand sides from temporaries
-				post.add(constructAssign((WyilFile.LVal) lval.get(i), VAR(TEMP(stmt, k)), rhsT.dimension(i)));
-			}
-			return new Pair<>(SEQUENCE(pre), SEQUENCE(post));
-		} else {
-			return new Pair<>(ASSIGN(VAR(TEMP(stmt, k)), r), constructAssign(lhs, VAR(TEMP(stmt, k)), rhsT));
-		}
-	}
-
-	/**
-	 * Construct a straightforward assignment between an lval and an rval (both of
-	 * which may, in fact, represent multiple values).
-	 *
-	 * @param lhs
-	 * @param rhs
-	 * @param l
-	 * @param r
-	 * @return
-	 */
-	public Stmt constructAssign(WyilFile.LVal lhs, WyilFile.Expr rhs, LVal l, Expr r) {
-		WyilFile.Type lhsT = lhs.getType();
-		WyilFile.Type rhsT = rhs.getType();
-		if (l instanceof FauxTuple) {
-			Tuple<WyilFile.Expr> lval = ((WyilFile.Expr.TupleInitialiser) lhs).getOperands();
-			List<Expr> rvals = ((FauxTuple) r).getItems();
-			ArrayList<Stmt> stmts = new ArrayList<>();
-			for (int i = 0; i != lhsT.shape(); ++i) {
-				// Construct sequential assignment
-				stmts.add(constructAssign((WyilFile.LVal) lval.get(i), rvals.get(i), rhsT.dimension(i)));
-			}
-			return SEQUENCE(stmts);
-		} else {
-			return constructAssign(lhs, r, rhsT);
-		}
-	}
-
-	public Stmt constructAssign(WyilFile.LVal lval, Expr rhs, WyilFile.Type rhsT) {
-		WyilFile.Type lhsT = lval.getType();
-		// Cast right-hand side as necessary
-		rhs = cast(lhsT,rhsT,rhs);
-		// Recursively rebuild assignment
-		return constructAssign(lval, rhs);
-	}
-
 	/**
 	 * Construct an assignment statement for a given lhs and rhs. The challenge here
 	 * stems from the requirement in Boogie that we cannot assign to multiple nested
 	 * dictionaries (e.g. <code>xs[i][j] = ...</code> is not permitted).
 	 *
 	 * @param lval Raw left-hand side
-	 * @param rhs Translated and coerced right-hand side(s)
+	 * @param rhs  Translated and coerced right-hand side(s)
 	 * @return
 	 */
-	public Stmt constructAssign(WyilFile.LVal lval, Expr rhs) {
+	private Stmt constructAssign(WyilFile.LVal lval, Expr rhs) {
 		switch (lval.getOpcode()) {
 		case WyilFile.EXPR_arrayaccess:
 		case WyilFile.EXPR_arrayborrow: {
