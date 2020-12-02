@@ -423,11 +423,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	/**
 	 * Flatten the left-hand side into an array of individual lvals. For example:
-	 * 
+	 *
 	 * <pre>
 	 * x,(y,z) = 1,f()
 	 * </pre>
-	 * 
+	 *
 	 * The left-hand side of the assignment would be flatterned into
 	 * <code>x,y,z</code>. The purpose of flattening is simply to align primitive
 	 * assignments on the left-hand side with those on the right hand side. In a
@@ -435,11 +435,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * on the right-hand side (strictly speaking). However, in this Boogie
 	 * translation this will never arise because <code>FauxTuple</code>s have been
 	 * employed to ensure they line up. More specifically, the above would become:
-	 * 
+	 *
 	 * <pre>
 	 * x,y,z = 1,f#1(),f#2
 	 * </pre>
-	 * 
+	 *
 	 * @param lhs
 	 * @return
 	 */
@@ -448,7 +448,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		for (int i = 0; i != lhs.size(); ++i) {
 			WyilFile.LVal ith = lhs.get(i);
 			if (ith instanceof WyilFile.Expr.TupleInitialiser) {
-				WyilFile.Expr.TupleInitialiser ti = (WyilFile.Expr.TupleInitialiser) ith;
+				Tuple<WyilFile.Expr> ti = ((WyilFile.Expr.TupleInitialiser) ith).getOperands();
 				for (int j = 0; j < ti.size(); ++j) {
 					lvals.add((WyilFile.LVal) ti.get(j));
 				}
@@ -463,19 +463,19 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * Flattern the right-hand side of a given assignment. This is relatively
 	 * straightforward, though we just need to expand any <code>FauxTuple</code>s
 	 * that we encounter. For example, the following:
-	 * 
+	 *
 	 * <pre>
 	 * x,(y,z) = 1,f()
 	 * </pre>
-	 * 
+	 *
 	 * The right-hand side above is translated into the following:
-	 * 
+	 *
 	 * <pre>
 	 * x,(y,z) = 1,(f#1(),f#2())
 	 * </pre>
-	 * 
+	 *
 	 * Here, <code>(f#1(),f#2())</code> is a <i>faux tuple</i>.
-	 * 
+	 *
 	 * @param rhs
 	 * @return
 	 */
@@ -497,18 +497,18 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * Coerce elements on the right-hand side of an assignment. This is necessary
 	 * because some types in Boogie are boxed (e.g. arrays or unions), where as
 	 * others are not (e.g. ints or booleans). Thus, consider the following:
-	 * 
+	 *
 	 * <pre>
 	 * int|null x = ...
 	 * ...
 	 * x = 1
 	 * </pre>
-	 * 
+	 *
 	 * In this case, the right-hand side has primitive (Boogie) type
 	 * <code>int</code> (which is not boxex). whilst the left-hand side has (Boogie)
 	 * type <code>Value</code> (which is boxed). Therefore, we need to box the
 	 * right-hand side prior to the assignment.
-	 * 
+	 *
 	 * @param lvals
 	 * @param rhs
 	 * @param rvals
