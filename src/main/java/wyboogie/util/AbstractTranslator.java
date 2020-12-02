@@ -62,7 +62,6 @@ import wyfs.util.Pair;
 import wyil.lang.WyilFile.Decl;
 import wyil.lang.WyilFile.Expr;
 import wyil.lang.WyilFile.Stmt;
-import wyil.util.AbstractTranslator.Environment;
 
 /**
  * Provides a tweaked version of <code>AbstractTranslator</code> which
@@ -81,73 +80,73 @@ public abstract class AbstractTranslator<D,S,E extends S> extends wyil.util.Abst
 	}
 
 	@Override
-	public S visitAssert(Stmt.Assert stmt, Environment environment, EnclosingScope scope) {
-		List<E> preconditions = visitExpressionPrecondition(stmt.getCondition(), environment);
-		E operand = visitExpression(stmt.getCondition(), environment);
+	public S visitAssert(Stmt.Assert stmt, EnclosingScope scope) {
+		List<E> preconditions = visitExpressionPrecondition(stmt.getCondition());
+		E operand = visitExpression(stmt.getCondition());
 		return constructAssert(stmt, operand, preconditions);
 	}
 
 	@Override
-	public S visitAssign(Stmt.Assign stmt, Environment environment, EnclosingScope scope) {
-		List<E> preconditions = visitExpressionsPrecondition(stmt.getRightHandSide(), environment);
-		List<E> lvals = visitLVals(stmt.getLeftHandSide(), environment, scope);
-		List<E> rvals = visitExpressions(stmt.getRightHandSide(), environment);
+	public S visitAssign(Stmt.Assign stmt, EnclosingScope scope) {
+		List<E> preconditions = visitExpressionsPrecondition(stmt.getRightHandSide());
+		List<E> lvals = visitLVals(stmt.getLeftHandSide(), scope);
+		List<E> rvals = visitExpressions(stmt.getRightHandSide());
 		return constructAssign(stmt,lvals,rvals,preconditions);
 	}
 
 	@Override
-	public S visitAssume(Stmt.Assume stmt, Environment environment, EnclosingScope scope) {
-		List<E> preconditions = visitExpressionPrecondition(stmt.getCondition(),environment);
-		E operand = visitExpression(stmt.getCondition(), environment);
+	public S visitAssume(Stmt.Assume stmt, EnclosingScope scope) {
+		List<E> preconditions = visitExpressionPrecondition(stmt.getCondition());
+		E operand = visitExpression(stmt.getCondition());
 		return constructAssume(stmt, operand, preconditions);
 	}
 
 	@Override
-	public S visitDebug(Stmt.Debug stmt, Environment environment, EnclosingScope scope) {
-		List<E> preconditions = visitExpressionPrecondition(stmt.getOperand(), environment);
-		E operand = visitExpression(stmt.getOperand(), environment);
+	public S visitDebug(Stmt.Debug stmt, EnclosingScope scope) {
+		List<E> preconditions = visitExpressionPrecondition(stmt.getOperand());
+		E operand = visitExpression(stmt.getOperand());
 		return constructDebug(stmt,operand,preconditions);
 	}
 
 	@Override
-	public S visitDoWhile(Stmt.DoWhile stmt, Environment environment, EnclosingScope scope) {
-		List<E> preconditions = visitExpressionPrecondition(stmt.getCondition(), environment);
-		S body = visitStatement(stmt.getBody(), environment, scope);
-		E condition = visitExpression(stmt.getCondition(), environment);
-		List<E> invariant = visitHomogoneousExpressions(stmt.getInvariant(), environment);
+	public S visitDoWhile(Stmt.DoWhile stmt, EnclosingScope scope) {
+		List<E> preconditions = visitExpressionPrecondition(stmt.getCondition());
+		S body = visitStatement(stmt.getBody(), scope);
+		E condition = visitExpression(stmt.getCondition());
+		List<E> invariant = visitHomogoneousExpressions(stmt.getInvariant());
 		return constructDoWhile(stmt, body, condition, invariant, preconditions);
 	}
 
 	@Override
-	public S visitFor(Stmt.For stmt, Environment environment, EnclosingScope scope) {
+	public S visitFor(Stmt.For stmt, EnclosingScope scope) {
 		Expr.ArrayRange range = (Expr.ArrayRange) stmt.getVariable().getInitialiser();
-		List<E> startPreconditions = visitExpressionPrecondition(range.getFirstOperand(),environment);
-		List<E> endPreconditions = visitExpressionPrecondition(range.getSecondOperand(),environment);
-		E start = visitExpression(range.getFirstOperand(),environment);
-		E end = visitExpression(range.getSecondOperand(),environment);
-		List<E> invariant = visitHomogoneousExpressions(stmt.getInvariant(), environment);
-		S body = visitStatement(stmt.getBody(), environment, scope);
+		List<E> startPreconditions = visitExpressionPrecondition(range.getFirstOperand());
+		List<E> endPreconditions = visitExpressionPrecondition(range.getSecondOperand());
+		E start = visitExpression(range.getFirstOperand());
+		E end = visitExpression(range.getSecondOperand());
+		List<E> invariant = visitHomogoneousExpressions(stmt.getInvariant());
+		S body = visitStatement(stmt.getBody(), scope);
 		return constructFor(stmt, new Pair<>(start, end), invariant, body,
 				append(startPreconditions, endPreconditions));
 	}
 
 	@Override
-	public S visitIfElse(Stmt.IfElse stmt, Environment environment, EnclosingScope scope) {
-		List<E> preconditions = visitExpressionPrecondition(stmt.getCondition(),environment);
-		E condition = visitExpression(stmt.getCondition(), environment);
-		S trueBranch = visitStatement(stmt.getTrueBranch(), environment, scope);
+	public S visitIfElse(Stmt.IfElse stmt, EnclosingScope scope) {
+		List<E> preconditions = visitExpressionPrecondition(stmt.getCondition());
+		E condition = visitExpression(stmt.getCondition());
+		S trueBranch = visitStatement(stmt.getTrueBranch(), scope);
 		S falseBranch = null;
 		if (stmt.hasFalseBranch()) {
-			falseBranch = visitStatement(stmt.getFalseBranch(), environment, scope);
+			falseBranch = visitStatement(stmt.getFalseBranch(), scope);
 		}
 		return constructIfElse(stmt, condition, trueBranch, falseBranch, preconditions);
 	}
 
 	@Override
-	public S visitInitialiser(Stmt.Initialiser stmt, Environment environment) {
+	public S visitInitialiser(Stmt.Initialiser stmt) {
 		if (stmt.hasInitialiser()) {
-			List<E> preconditions = visitExpressionPrecondition(stmt.getInitialiser(), environment);
-			E initialiser = visitExpression(stmt.getInitialiser(), environment);
+			List<E> preconditions = visitExpressionPrecondition(stmt.getInitialiser());
+			E initialiser = visitExpression(stmt.getInitialiser());
 			return constructInitialiser(stmt, initialiser, preconditions);
 		} else {
 			return constructInitialiser(stmt, null, null);
@@ -155,27 +154,27 @@ public abstract class AbstractTranslator<D,S,E extends S> extends wyil.util.Abst
 	}
 
 	@Override
-	public S visitInvokeStmt(Expr.Invoke stmt, Environment environment) {
-		List<E> preconditions = visitExpressionsPrecondition(stmt.getOperands(), environment);
-		List<E> operands = visitHeterogenousExpressions(stmt.getOperands(), environment);
+	public S visitInvokeStmt(Expr.Invoke stmt) {
+		List<E> preconditions = visitExpressionsPrecondition(stmt.getOperands());
+		List<E> operands = visitHeterogenousExpressions(stmt.getOperands());
 		return constructInvokeStmt(stmt, operands, preconditions);
 	}
 
 	@Override
-	public S visitIndirectInvokeStmt(Expr.IndirectInvoke stmt, Environment environment) {
-		List<E> preconditions = visitExpressionPrecondition(stmt.getSource(), environment);
-		preconditions.addAll(visitExpressionsPrecondition(stmt.getArguments(), environment));
-		E operand = visitExpression(stmt.getSource(), environment);
-		List<E> operands = visitHeterogenousExpressions(stmt.getArguments(), environment);
+	public S visitIndirectInvokeStmt(Expr.IndirectInvoke stmt) {
+		List<E> preconditions = visitExpressionPrecondition(stmt.getSource());
+		preconditions.addAll(visitExpressionsPrecondition(stmt.getArguments()));
+		E operand = visitExpression(stmt.getSource());
+		List<E> operands = visitHeterogenousExpressions(stmt.getArguments());
 		return constructIndirectInvokeStmt(stmt, operand, operands, preconditions);
 	}
 
 
 	@Override
-	public S visitReturn(Stmt.Return stmt, Environment environment, EnclosingScope scope) {
+	public S visitReturn(Stmt.Return stmt, EnclosingScope scope) {
 		if (stmt.hasReturn()) {
-			List<E> preconditions = visitExpressionPrecondition(stmt.getReturn(), environment);
-			E returns = visitExpression(stmt.getReturn(), environment);
+			List<E> preconditions = visitExpressionPrecondition(stmt.getReturn());
+			E returns = visitExpression(stmt.getReturn());
 			return constructReturn(stmt, returns, preconditions);
 		} else {
 			return constructReturn(stmt, null, null);
@@ -183,52 +182,52 @@ public abstract class AbstractTranslator<D,S,E extends S> extends wyil.util.Abst
 	}
 
 	@Override
-	public S visitSwitch(Stmt.Switch stmt, Environment environment, EnclosingScope scope) {
-		List<E> preconditions = visitExpressionPrecondition(stmt.getCondition(),environment);
-		E condition = visitExpression(stmt.getCondition(), environment);
+	public S visitSwitch(Stmt.Switch stmt, EnclosingScope scope) {
+		List<E> preconditions = visitExpressionPrecondition(stmt.getCondition());
+		E condition = visitExpression(stmt.getCondition());
 		Tuple<Stmt.Case> cases = stmt.getCases();
 		ArrayList<Pair<List<E>,S>> cs = new ArrayList<>();
 		for (int i = 0; i != cases.size(); ++i) {
-			cs.add(visitCase(cases.get(i), environment, scope));
+			cs.add(visitCase(cases.get(i), scope));
 		}
 		return constructSwitch(stmt, condition, cs, preconditions);
 	}
 
 	@Override
-	public S visitWhile(Stmt.While stmt, Environment environment, EnclosingScope scope) {
-		List<E> preconditions = visitExpressionPrecondition(stmt.getCondition(), environment);
-		E condition = visitExpression(stmt.getCondition(), environment);
-		List<E> invariant = visitHomogoneousExpressions(stmt.getInvariant(), environment);
-		S body = visitStatement(stmt.getBody(), environment, scope);
+	public S visitWhile(Stmt.While stmt, EnclosingScope scope) {
+		List<E> preconditions = visitExpressionPrecondition(stmt.getCondition());
+		E condition = visitExpression(stmt.getCondition());
+		List<E> invariant = visitHomogoneousExpressions(stmt.getInvariant());
+		S body = visitStatement(stmt.getBody(), scope);
 		return constructWhile(stmt, condition, invariant, body, preconditions);
 	}
 
-	public List<E> visitExpressionsPrecondition(Tuple<Expr> exprs, Environment environment) {
+	public List<E> visitExpressionsPrecondition(Tuple<Expr> exprs) {
 		List<E> results = Collections.EMPTY_LIST;
 		for (int i = 0; i != exprs.size(); ++i) {
-			results = append(results, visitExpressionPrecondition(exprs.get(i), environment));
+			results = append(results, visitExpressionPrecondition(exprs.get(i)));
 		}
 		return results;
 	}
 
-	public List<E> visitExpressionPrecondition(Expr expr, Environment environment) {
+	public List<E> visitExpressionPrecondition(Expr expr) {
 		meter.step("expression");
 		//
 		switch (expr.getOpcode()) {
 		// Terminals
 		case EXPR_constant:
-			return visitConstantPrecondition((Expr.Constant) expr, environment);
+			return visitConstantPrecondition((Expr.Constant) expr);
 		case EXPR_indirectinvoke:
-			return visitIndirectInvokePrecondition((Expr.IndirectInvoke) expr, environment);
+			return visitIndirectInvokePrecondition((Expr.IndirectInvoke) expr);
 		case EXPR_lambdaaccess:
-			return visitLambdaAccessPrecondition((Expr.LambdaAccess) expr, environment);
+			return visitLambdaAccessPrecondition((Expr.LambdaAccess) expr);
 		case DECL_lambda:
 			throw new IllegalArgumentException("implement me");
 		case EXPR_staticvariable:
-			return visitStaticVariableAccessPrecondition((Expr.StaticVariableAccess) expr, environment);
+			return visitStaticVariableAccessPrecondition((Expr.StaticVariableAccess) expr);
 		case EXPR_variablecopy:
 		case EXPR_variablemove:
-			return visitVariableAccessPrecondition((Expr.VariableAccess) expr, environment);
+			return visitVariableAccessPrecondition((Expr.VariableAccess) expr);
 		// Unary Operators
 		case EXPR_cast:
 		case EXPR_integernegation:
@@ -243,7 +242,7 @@ public abstract class AbstractTranslator<D,S,E extends S> extends wyil.util.Abst
 		case EXPR_recordaccess:
 		case EXPR_recordborrow:
 		case EXPR_arraylength:
-			return visitUnaryOperatorPrecondition((Expr.UnaryOperator) expr, environment);
+			return visitUnaryOperatorPrecondition((Expr.UnaryOperator) expr);
 		// Binary Operators
 		case EXPR_logicalimplication:
 		case EXPR_logicaliff:
@@ -265,7 +264,7 @@ public abstract class AbstractTranslator<D,S,E extends S> extends wyil.util.Abst
 		case EXPR_arrayrange:
 		case EXPR_recordupdate:
 		case EXPR_arraygenerator:
-			return visitBinaryOperatorPrecondition((Expr.BinaryOperator) expr, environment);
+			return visitBinaryOperatorPrecondition((Expr.BinaryOperator) expr);
 		// Nary Operators
 		case EXPR_logicaland:
 		case EXPR_logicalor:
@@ -276,314 +275,314 @@ public abstract class AbstractTranslator<D,S,E extends S> extends wyil.util.Abst
 		case EXPR_arrayinitialiser:
 		case EXPR_recordinitialiser:
 		case EXPR_tupleinitialiser:
-			return visitNaryOperatorPrecondition((Expr.NaryOperator) expr, environment);
+			return visitNaryOperatorPrecondition((Expr.NaryOperator) expr);
 		// Ternary Operators
 		case EXPR_arrayupdate:
-			return visitTernaryOperatorPrecondition((Expr.TernaryOperator) expr, environment);
+			return visitTernaryOperatorPrecondition((Expr.TernaryOperator) expr);
 		default:
 			throw new IllegalArgumentException("unknown expression encountered (" + expr.getClass().getName() + ")");
 		}
 	}
 
-	public List<E> visitUnaryOperatorPrecondition(Expr.UnaryOperator expr, Environment environment) {
+	public List<E> visitUnaryOperatorPrecondition(Expr.UnaryOperator expr) {
 		switch (expr.getOpcode()) {
 		// Unary Operators
 		case EXPR_cast:
-			return visitCastPrecondition((Expr.Cast) expr, environment);
+			return visitCastPrecondition((Expr.Cast) expr);
 		case EXPR_integernegation: {
-			return visitIntegerNegationPrecondition((Expr.IntegerNegation) expr, environment);
+			return visitIntegerNegationPrecondition((Expr.IntegerNegation) expr);
 		}
 		case EXPR_is:
-			return visitIsPrecondition((Expr.Is) expr, environment);
+			return visitIsPrecondition((Expr.Is) expr);
 		case EXPR_logicalnot:
-			return visitLogicalNotPrecondition((Expr.LogicalNot) expr, environment);
+			return visitLogicalNotPrecondition((Expr.LogicalNot) expr);
 		case EXPR_logicalexistential:
-			return visitExistentialQuantifierPrecondition((Expr.ExistentialQuantifier) expr, environment);
+			return visitExistentialQuantifierPrecondition((Expr.ExistentialQuantifier) expr);
 		case EXPR_logicaluniversal:
-			return visitUniversalQuantifierPrecondition((Expr.UniversalQuantifier) expr, environment);
+			return visitUniversalQuantifierPrecondition((Expr.UniversalQuantifier) expr);
 		case EXPR_bitwisenot:
-			return visitBitwiseComplementPrecondition((Expr.BitwiseComplement) expr, environment);
+			return visitBitwiseComplementPrecondition((Expr.BitwiseComplement) expr);
 		case EXPR_dereference:
-			return visitDereferencePrecondition((Expr.Dereference) expr, environment);
+			return visitDereferencePrecondition((Expr.Dereference) expr);
 		case EXPR_fielddereference:
-			return visitFieldDereferencePrecondition((Expr.FieldDereference) expr, environment);
+			return visitFieldDereferencePrecondition((Expr.FieldDereference) expr);
 		case EXPR_new: {
-			return visitNewPrecondition((Expr.New) expr, environment);
+			return visitNewPrecondition((Expr.New) expr);
 		}
 		case EXPR_recordaccess:
 		case EXPR_recordborrow:
-			return visitRecordAccessPrecondition((Expr.RecordAccess) expr, environment);
+			return visitRecordAccessPrecondition((Expr.RecordAccess) expr);
 		case EXPR_arraylength: {
-			return visitArrayLengthPrecondition((Expr.ArrayLength) expr, environment);
+			return visitArrayLengthPrecondition((Expr.ArrayLength) expr);
 		}
 		default:
 			throw new IllegalArgumentException("unknown expression encountered (" + expr.getClass().getName() + ")");
 		}
 	}
 
-	public List<E> visitBinaryOperatorPrecondition(Expr.BinaryOperator expr, Environment environment) {
+	public List<E> visitBinaryOperatorPrecondition(Expr.BinaryOperator expr) {
 		switch (expr.getOpcode()) {
 		// Binary Operators
 		case EXPR_equal:
-			return visitEqualPrecondition((Expr.Equal) expr, environment);
+			return visitEqualPrecondition((Expr.Equal) expr);
 		case EXPR_notequal:
-			return visitNotEqualPrecondition((Expr.NotEqual) expr, environment);
+			return visitNotEqualPrecondition((Expr.NotEqual) expr);
 		case EXPR_logicalimplication:
-			return visitLogicalImplicationPrecondition((Expr.LogicalImplication) expr, environment);
+			return visitLogicalImplicationPrecondition((Expr.LogicalImplication) expr);
 		case EXPR_logicaliff:
-			return visitLogicalIffPrecondition((Expr.LogicalIff) expr, environment);
+			return visitLogicalIffPrecondition((Expr.LogicalIff) expr);
 		case EXPR_integerlessthan:
-			return visitIntegerLessThanPrecondition((Expr.IntegerLessThan) expr, environment);
+			return visitIntegerLessThanPrecondition((Expr.IntegerLessThan) expr);
 		case EXPR_integerlessequal:
-			return visitIntegerLessThanOrEqualPrecondition((Expr.IntegerLessThanOrEqual) expr, environment);
+			return visitIntegerLessThanOrEqualPrecondition((Expr.IntegerLessThanOrEqual) expr);
 		case EXPR_integergreaterthan:
-			return visitIntegerGreaterThanPrecondition((Expr.IntegerGreaterThan) expr, environment);
+			return visitIntegerGreaterThanPrecondition((Expr.IntegerGreaterThan) expr);
 		case EXPR_integergreaterequal:
-			return visitIntegerGreaterThanOrEqualPrecondition((Expr.IntegerGreaterThanOrEqual) expr, environment);
+			return visitIntegerGreaterThanOrEqualPrecondition((Expr.IntegerGreaterThanOrEqual) expr);
 		case EXPR_integeraddition: {
-			return visitIntegerAdditionPrecondition((Expr.IntegerAddition) expr, environment);
+			return visitIntegerAdditionPrecondition((Expr.IntegerAddition) expr);
 		}
 		case EXPR_integersubtraction: {
-			return visitIntegerSubtractionPrecondition((Expr.IntegerSubtraction) expr, environment);
+			return visitIntegerSubtractionPrecondition((Expr.IntegerSubtraction) expr);
 		}
 		case EXPR_integermultiplication: {
-			return visitIntegerMultiplicationPrecondition((Expr.IntegerMultiplication) expr, environment);
+			return visitIntegerMultiplicationPrecondition((Expr.IntegerMultiplication) expr);
 		}
 		case EXPR_integerdivision: {
-			return visitIntegerDivisionPrecondition((Expr.IntegerDivision) expr, environment);
+			return visitIntegerDivisionPrecondition((Expr.IntegerDivision) expr);
 		}
 		case EXPR_integerremainder: {
-			return visitIntegerRemainderPrecondition((Expr.IntegerRemainder) expr, environment);
+			return visitIntegerRemainderPrecondition((Expr.IntegerRemainder) expr);
 		}
 		case EXPR_bitwiseshl:
-			return visitBitwiseShiftLeftPrecondition((Expr.BitwiseShiftLeft) expr, environment);
+			return visitBitwiseShiftLeftPrecondition((Expr.BitwiseShiftLeft) expr);
 		case EXPR_bitwiseshr:
-			return visitBitwiseShiftRightPrecondition((Expr.BitwiseShiftRight) expr, environment);
+			return visitBitwiseShiftRightPrecondition((Expr.BitwiseShiftRight) expr);
 		case EXPR_arraygenerator: {
-			return visitArrayGeneratorPrecondition((Expr.ArrayGenerator) expr, environment);
+			return visitArrayGeneratorPrecondition((Expr.ArrayGenerator) expr);
 		}
 		case EXPR_arrayaccess:
 		case EXPR_arrayborrow:
-			return visitArrayAccessPrecondition((Expr.ArrayAccess) expr, environment);
+			return visitArrayAccessPrecondition((Expr.ArrayAccess) expr);
 		case EXPR_arrayrange: {
-			return visitArrayRangePrecondition((Expr.ArrayRange) expr, environment);
+			return visitArrayRangePrecondition((Expr.ArrayRange) expr);
 		}
 		case EXPR_recordupdate:
-			return visitRecordUpdatePrecondition((Expr.RecordUpdate) expr, environment);
+			return visitRecordUpdatePrecondition((Expr.RecordUpdate) expr);
 		default:
 			throw new IllegalArgumentException("unknown expression encountered (" + expr.getClass().getName() + ")");
 		}
 	}
 
-	public List<E> visitTernaryOperatorPrecondition(Expr.TernaryOperator expr, Environment environment) {
+	public List<E> visitTernaryOperatorPrecondition(Expr.TernaryOperator expr) {
 		switch (expr.getOpcode()) {
 		// Ternary Operators
 		case EXPR_arrayupdate:
-			return visitArrayUpdatePrecondition((Expr.ArrayUpdate) expr, environment);
+			return visitArrayUpdatePrecondition((Expr.ArrayUpdate) expr);
 		default:
 			throw new IllegalArgumentException("unknown expression encountered (" + expr.getClass().getName() + ")");
 		}
 	}
 
-	public List<E> visitNaryOperatorPrecondition(Expr.NaryOperator expr, Environment environment) {
+	public List<E> visitNaryOperatorPrecondition(Expr.NaryOperator expr) {
 		switch (expr.getOpcode()) {
 		// Nary Operators
 		case EXPR_arrayinitialiser:
-			return visitArrayInitialiserPrecondition((Expr.ArrayInitialiser) expr, environment);
+			return visitArrayInitialiserPrecondition((Expr.ArrayInitialiser) expr);
 		case EXPR_bitwiseand:
-			return visitBitwiseAndPrecondition((Expr.BitwiseAnd) expr, environment);
+			return visitBitwiseAndPrecondition((Expr.BitwiseAnd) expr);
 		case EXPR_bitwiseor:
-			return visitBitwiseOrPrecondition((Expr.BitwiseOr) expr, environment);
+			return visitBitwiseOrPrecondition((Expr.BitwiseOr) expr);
 		case EXPR_bitwisexor:
-			return visitBitwiseXorPrecondition((Expr.BitwiseXor) expr, environment);
+			return visitBitwiseXorPrecondition((Expr.BitwiseXor) expr);
 		case EXPR_invoke:
-			return visitInvokePrecondition((Expr.Invoke) expr, environment);
+			return visitInvokePrecondition((Expr.Invoke) expr);
 		case EXPR_logicaland:
-			return visitLogicalAndPrecondition((Expr.LogicalAnd) expr, environment);
+			return visitLogicalAndPrecondition((Expr.LogicalAnd) expr);
 		case EXPR_logicalor:
-			return visitLogicalOrPrecondition((Expr.LogicalOr) expr, environment);
+			return visitLogicalOrPrecondition((Expr.LogicalOr) expr);
 		case EXPR_recordinitialiser:
-			return visitRecordInitialiserPrecondition((Expr.RecordInitialiser) expr, environment);
+			return visitRecordInitialiserPrecondition((Expr.RecordInitialiser) expr);
 		case EXPR_tupleinitialiser:
-			return visitTupleInitialiserPrecondition((Expr.TupleInitialiser) expr, environment);
+			return visitTupleInitialiserPrecondition((Expr.TupleInitialiser) expr);
 		default:
 			throw new IllegalArgumentException("unknown expression encountered (" + expr.getClass().getName() + ")");
 		}
 	}
 
-	public List<E> visitArrayAccessPrecondition(Expr.ArrayAccess expr, Environment environment) {
-		List<E> source = visitExpressionPrecondition(expr.getFirstOperand(), environment);
-		List<E> index = visitExpressionPrecondition(expr.getSecondOperand(), environment);
-		E s = visitExpression(expr.getFirstOperand(),environment);
-		E i = visitExpression(expr.getSecondOperand(),environment);
+	public List<E> visitArrayAccessPrecondition(Expr.ArrayAccess expr) {
+		List<E> source = visitExpressionPrecondition(expr.getFirstOperand());
+		List<E> index = visitExpressionPrecondition(expr.getSecondOperand());
+		E s = visitExpression(expr.getFirstOperand());
+		E i = visitExpression(expr.getSecondOperand());
 		E pre = constructArrayAccessPrecondition(expr, s, i);
 		return append(append(source, index), pre);
 	}
 
-	public List<E> visitArrayLengthPrecondition(Expr.ArrayLength expr,  Environment environment) {
-		return visitExpressionPrecondition(expr.getOperand(), environment);
+	public List<E> visitArrayLengthPrecondition(Expr.ArrayLength expr) {
+		return visitExpressionPrecondition(expr.getOperand());
 	}
 
-	public List<E> visitArrayGeneratorPrecondition(Expr.ArrayGenerator expr,Environment environment) {
-		List<E> value = visitExpressionPrecondition(expr.getFirstOperand(), environment);
-		List<E> length = visitExpressionPrecondition(expr.getSecondOperand(), environment);
+	public List<E> visitArrayGeneratorPrecondition(Expr.ArrayGenerator expr) {
+		List<E> value = visitExpressionPrecondition(expr.getFirstOperand());
+		List<E> length = visitExpressionPrecondition(expr.getSecondOperand());
 		return append(value,length);
 	}
 
-	public List<E> visitArrayInitialiserPrecondition(Expr.ArrayInitialiser expr, Environment environment) {
-		return visitExpressionsPrecondition(expr.getOperands(), environment);
+	public List<E> visitArrayInitialiserPrecondition(Expr.ArrayInitialiser expr) {
+		return visitExpressionsPrecondition(expr.getOperands());
 	}
 
-	public List<E> visitArrayRangePrecondition(Expr.ArrayRange expr, Environment environment) {
+	public List<E> visitArrayRangePrecondition(Expr.ArrayRange expr) {
 		throw new UnsupportedOperationException();
 	}
 
-	public List<E> visitArrayUpdatePrecondition(Expr.ArrayUpdate expr, Environment environment) {
+	public List<E> visitArrayUpdatePrecondition(Expr.ArrayUpdate expr) {
 		throw new UnsupportedOperationException();
 	}
 
-	public List<E> visitBitwiseComplementPrecondition(Expr.BitwiseComplement expr, Environment environment) {
-		return visitExpressionPrecondition(expr.getOperand(), environment);
+	public List<E> visitBitwiseComplementPrecondition(Expr.BitwiseComplement expr) {
+		return visitExpressionPrecondition(expr.getOperand());
 	}
 
-	public List<E> visitBitwiseAndPrecondition(Expr.BitwiseAnd expr, Environment environment) {
-		return visitExpressionsPrecondition(expr.getOperands(), environment);
+	public List<E> visitBitwiseAndPrecondition(Expr.BitwiseAnd expr) {
+		return visitExpressionsPrecondition(expr.getOperands());
 	}
 
-	public List<E> visitBitwiseOrPrecondition(Expr.BitwiseOr expr, Environment environment) {
-		return visitExpressionsPrecondition(expr.getOperands(), environment);
+	public List<E> visitBitwiseOrPrecondition(Expr.BitwiseOr expr) {
+		return visitExpressionsPrecondition(expr.getOperands());
 	}
 
-	public List<E> visitBitwiseXorPrecondition(Expr.BitwiseXor expr, Environment environment) {
-		return visitExpressionsPrecondition(expr.getOperands(), environment);
+	public List<E> visitBitwiseXorPrecondition(Expr.BitwiseXor expr) {
+		return visitExpressionsPrecondition(expr.getOperands());
 	}
 
-	public List<E> visitBitwiseShiftLeftPrecondition(Expr.BitwiseShiftLeft expr, Environment environment) {
-		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand(), environment);
-		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand(), environment);
+	public List<E> visitBitwiseShiftLeftPrecondition(Expr.BitwiseShiftLeft expr) {
+		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand());
+		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand());
 		return append(lhs,rhs);
 	}
 
-	public List<E> visitBitwiseShiftRightPrecondition(Expr.BitwiseShiftRight expr, Environment environment) {
-		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand(), environment);
-		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand(), environment);
+	public List<E> visitBitwiseShiftRightPrecondition(Expr.BitwiseShiftRight expr) {
+		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand());
+		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand());
 		return append(lhs,rhs);
 	}
 
-	public List<E> visitCastPrecondition(Expr.Cast expr, Environment environment) {
-		return visitExpressionPrecondition(expr.getOperand(), environment);
+	public List<E> visitCastPrecondition(Expr.Cast expr) {
+		return visitExpressionPrecondition(expr.getOperand());
 	}
 
-	public List<E> visitConstantPrecondition(Expr.Constant expr, Environment environment) {
+	public List<E> visitConstantPrecondition(Expr.Constant expr) {
 		return Collections.EMPTY_LIST;
 	}
 
-	public List<E> visitDereferencePrecondition(Expr.Dereference expr, Environment environment) {
-		return visitExpressionPrecondition(expr.getOperand(), environment);
+	public List<E> visitDereferencePrecondition(Expr.Dereference expr) {
+		return visitExpressionPrecondition(expr.getOperand());
 	}
 
-	public List<E> visitFieldDereferencePrecondition(Expr.FieldDereference expr, Environment environment) {
-		return visitExpressionPrecondition(expr.getOperand(), environment);
+	public List<E> visitFieldDereferencePrecondition(Expr.FieldDereference expr) {
+		return visitExpressionPrecondition(expr.getOperand());
 	}
 
-	public List<E> visitEqualPrecondition(Expr.Equal expr, Environment environment) {
-		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand(), environment);
-		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand(), environment);
+	public List<E> visitEqualPrecondition(Expr.Equal expr) {
+		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand());
+		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand());
 		return append(lhs,rhs);
 	}
 
-	public List<E> visitIntegerLessThanPrecondition(Expr.IntegerLessThan expr, Environment environment) {
-		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand(), environment);
-		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand(), environment);
+	public List<E> visitIntegerLessThanPrecondition(Expr.IntegerLessThan expr) {
+		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand());
+		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand());
 		return append(lhs,rhs);
 	}
 
-	public List<E> visitIntegerLessThanOrEqualPrecondition(Expr.IntegerLessThanOrEqual expr, Environment environment) {
-		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand(), environment);
-		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand(), environment);
+	public List<E> visitIntegerLessThanOrEqualPrecondition(Expr.IntegerLessThanOrEqual expr) {
+		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand());
+		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand());
 		return append(lhs,rhs);
 	}
 
-	public List<E> visitIntegerGreaterThanPrecondition(Expr.IntegerGreaterThan expr, Environment environment) {
-		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand(), environment);
-		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand(), environment);
+	public List<E> visitIntegerGreaterThanPrecondition(Expr.IntegerGreaterThan expr) {
+		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand());
+		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand());
 		return append(lhs,rhs);
 	}
 
-	public List<E> visitIntegerGreaterThanOrEqualPrecondition(Expr.IntegerGreaterThanOrEqual expr, Environment environment) {
-		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand(), environment);
-		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand(), environment);
+	public List<E> visitIntegerGreaterThanOrEqualPrecondition(Expr.IntegerGreaterThanOrEqual expr) {
+		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand());
+		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand());
 		return append(lhs,rhs);
 	}
 
-	public List<E> visitIntegerNegationPrecondition(Expr.IntegerNegation expr, Environment environment) {
-		return visitExpressionPrecondition(expr.getOperand(), environment);
+	public List<E> visitIntegerNegationPrecondition(Expr.IntegerNegation expr) {
+		return visitExpressionPrecondition(expr.getOperand());
 	}
 
-	public List<E> visitIntegerAdditionPrecondition(Expr.IntegerAddition expr, Environment environment) {
-		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand(), environment);
-		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand(), environment);
+	public List<E> visitIntegerAdditionPrecondition(Expr.IntegerAddition expr) {
+		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand());
+		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand());
 		return append(lhs,rhs);
 	}
 
-	public List<E> visitIntegerSubtractionPrecondition(Expr.IntegerSubtraction expr, Environment environment) {
-		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand(), environment);
-		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand(), environment);
+	public List<E> visitIntegerSubtractionPrecondition(Expr.IntegerSubtraction expr) {
+		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand());
+		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand());
 		return append(lhs,rhs);
 	}
 
-	public List<E> visitIntegerMultiplicationPrecondition(Expr.IntegerMultiplication expr, Environment environment) {
-		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand(), environment);
-		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand(), environment);
+	public List<E> visitIntegerMultiplicationPrecondition(Expr.IntegerMultiplication expr) {
+		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand());
+		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand());
 		return append(lhs,rhs);
 	}
 
-	public List<E> visitIntegerDivisionPrecondition(Expr.IntegerDivision expr, Environment environment) {
-		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand(), environment);
-		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand(), environment);
-		E l = visitExpression(expr.getFirstOperand(),environment);
-		E r = visitExpression(expr.getSecondOperand(), environment);
+	public List<E> visitIntegerDivisionPrecondition(Expr.IntegerDivision expr) {
+		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand());
+		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand());
+		E l = visitExpression(expr.getFirstOperand());
+		E r = visitExpression(expr.getSecondOperand());
 		E pre = constructIntegerDivisionPrecondition(expr,l,r);
 		return append(append(lhs, rhs), pre);
 	}
 
-	public List<E> visitIntegerRemainderPrecondition(Expr.IntegerRemainder expr, Environment environment) {
-		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand(), environment);
-		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand(), environment);
+	public List<E> visitIntegerRemainderPrecondition(Expr.IntegerRemainder expr) {
+		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand());
+		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand());
 		return append(lhs,rhs);
 	}
 
-	public List<E> visitIsPrecondition(Expr.Is expr, Environment environment) {
-		return visitExpressionPrecondition(expr.getOperand(), environment);
+	public List<E> visitIsPrecondition(Expr.Is expr) {
+		return visitExpressionPrecondition(expr.getOperand());
 	}
 
-	public List<E> visitLogicalAndPrecondition(Expr.LogicalAnd expr, Environment environment) {
-		return visitExpressionsPrecondition(expr.getOperands(), environment);
+	public List<E> visitLogicalAndPrecondition(Expr.LogicalAnd expr) {
+		return visitExpressionsPrecondition(expr.getOperands());
 	}
 
 
-	public List<E> visitLogicalImplicationPrecondition(Expr.LogicalImplication expr, Environment environment) {
-		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand(), environment);
-		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand(), environment);
+	public List<E> visitLogicalImplicationPrecondition(Expr.LogicalImplication expr) {
+		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand());
+		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand());
 		return append(lhs,rhs);
 	}
 
 
-	public List<E> visitLogicalIffPrecondition(Expr.LogicalIff expr, Environment environment) {
-		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand(), environment);
-		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand(), environment);
+	public List<E> visitLogicalIffPrecondition(Expr.LogicalIff expr) {
+		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand());
+		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand());
 		return append(lhs,rhs);
 	}
 
-	public List<E> visitLogicalNotPrecondition(Expr.LogicalNot expr, Environment environment) {
-		return visitExpressionPrecondition(expr.getOperand(), environment);
+	public List<E> visitLogicalNotPrecondition(Expr.LogicalNot expr) {
+		return visitExpressionPrecondition(expr.getOperand());
 	}
 
-	public List<E> visitLogicalOrPrecondition(Expr.LogicalOr expr, Environment environment) {
-		return visitExpressionsPrecondition(expr.getOperands(), environment);
+	public List<E> visitLogicalOrPrecondition(Expr.LogicalOr expr) {
+		return visitExpressionsPrecondition(expr.getOperands());
 	}
 
-	public List<E> visitExistentialQuantifierPrecondition(Expr.ExistentialQuantifier expr, Environment environment) {
+	public List<E> visitExistentialQuantifierPrecondition(Expr.ExistentialQuantifier expr) {
 		Tuple<Decl.StaticVariable> parameters = expr.getParameters();
 		List<E> ranges = Collections.EMPTY_LIST;
 		for (int i = 0; i != parameters.size(); ++i) {
@@ -591,17 +590,17 @@ public abstract class AbstractTranslator<D,S,E extends S> extends wyil.util.Abst
 			// NOTE: Currently ranges can only appear in quantifiers. Eventually, this will
 			// be deprecated.
 			Expr.ArrayRange range = (Expr.ArrayRange) parameter.getInitialiser();
-			List<E> start = visitExpressionPrecondition(range.getFirstOperand(), environment);
-			List<E> end = visitExpressionPrecondition(range.getSecondOperand(), environment);
+			List<E> start = visitExpressionPrecondition(range.getFirstOperand());
+			List<E> end = visitExpressionPrecondition(range.getSecondOperand());
 			ranges = append(ranges,start);
 			ranges = append(ranges,end);
 		}
-		List<E> body = visitExpressionPrecondition(expr.getOperand(), environment);
+		List<E> body = visitExpressionPrecondition(expr.getOperand());
 		return append(ranges,body);
 	}
 
 
-	public List<E> visitUniversalQuantifierPrecondition(Expr.UniversalQuantifier expr, Environment environment) {
+	public List<E> visitUniversalQuantifierPrecondition(Expr.UniversalQuantifier expr) {
 		Tuple<Decl.StaticVariable> parameters = expr.getParameters();
 		List<E> ranges = Collections.EMPTY_LIST;
 		for (int i = 0; i != parameters.size(); ++i) {
@@ -609,19 +608,19 @@ public abstract class AbstractTranslator<D,S,E extends S> extends wyil.util.Abst
 			// NOTE: Currently ranges can only appear in quantifiers. Eventually, this will
 			// be deprecated.
 			Expr.ArrayRange range = (Expr.ArrayRange) parameter.getInitialiser();
-			List<E> start = visitExpressionPrecondition(range.getFirstOperand(), environment);
-			List<E> end = visitExpressionPrecondition(range.getSecondOperand(), environment);
+			List<E> start = visitExpressionPrecondition(range.getFirstOperand());
+			List<E> end = visitExpressionPrecondition(range.getSecondOperand());
 			ranges = append(ranges,start);
 			ranges = append(ranges,end);
 		}
-		List<E> body = visitExpressionPrecondition(expr.getOperand(), environment);
+		List<E> body = visitExpressionPrecondition(expr.getOperand());
 		return append(ranges,body);
 	}
 
 
-	public List<E> visitInvokePrecondition(Expr.Invoke expr, Environment environment) {
-		List<E> argPreconditions = visitExpressionsPrecondition(expr.getOperands(), environment);
-		List<E> args = visitExpressions(expr.getOperands(), environment);
+	public List<E> visitInvokePrecondition(Expr.Invoke expr) {
+		List<E> argPreconditions = visitExpressionsPrecondition(expr.getOperands());
+		List<E> args = visitExpressions(expr.getOperands());
 		E pre = constructInvokePrecondition(expr, args);
 		if(pre != null) {
 			return append(argPreconditions,pre);
@@ -631,69 +630,69 @@ public abstract class AbstractTranslator<D,S,E extends S> extends wyil.util.Abst
 	}
 
 
-	public List<E> visitIndirectInvokePrecondition(Expr.IndirectInvoke expr, Environment environment) {
-		List<E> operand = visitExpressionPrecondition(expr.getSource(), environment);
-		List<E> operands = visitExpressionsPrecondition(expr.getArguments(), environment);
+	public List<E> visitIndirectInvokePrecondition(Expr.IndirectInvoke expr) {
+		List<E> operand = visitExpressionPrecondition(expr.getSource());
+		List<E> operands = visitExpressionsPrecondition(expr.getArguments());
 		return append(operand,operands);
 	}
 
 
-	public List<E> visitLambdaAccessPrecondition(Expr.LambdaAccess expr, Environment environment) {
+	public List<E> visitLambdaAccessPrecondition(Expr.LambdaAccess expr) {
 		return Collections.EMPTY_LIST;
 	}
 
 
-	public List<E> visitNewPrecondition(Expr.New expr, Environment environment) {
-		return visitExpressionPrecondition(expr.getOperand(), environment);
+	public List<E> visitNewPrecondition(Expr.New expr) {
+		return visitExpressionPrecondition(expr.getOperand());
 	}
 
 
-	public List<E> visitNotEqualPrecondition(Expr.NotEqual expr, Environment environment) {
-		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand(), environment);
-		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand(), environment);
+	public List<E> visitNotEqualPrecondition(Expr.NotEqual expr) {
+		List<E> lhs = visitExpressionPrecondition(expr.getFirstOperand());
+		List<E> rhs = visitExpressionPrecondition(expr.getSecondOperand());
 		return append(lhs,rhs);
 	}
 
 
-	public List<E> visitRecordAccessPrecondition(Expr.RecordAccess expr, Environment environment) {
-		return visitExpressionPrecondition(expr.getOperand(), environment);
+	public List<E> visitRecordAccessPrecondition(Expr.RecordAccess expr) {
+		return visitExpressionPrecondition(expr.getOperand());
 	}
 
 
-	public List<E> visitRecordInitialiserPrecondition(Expr.RecordInitialiser expr, Environment environment) {
+	public List<E> visitRecordInitialiserPrecondition(Expr.RecordInitialiser expr) {
 		Tuple<Identifier> fields = expr.getFields();
 		Tuple<Expr> operands = expr.getOperands();
 		List<E> args = new ArrayList<>();
 		for (int i = 0; i != fields.size(); ++i) {
 			Expr operand = operands.get(i);
-			args.addAll(visitExpressionPrecondition(operand, environment));
+			args.addAll(visitExpressionPrecondition(operand));
 		}
 		return args;
 	}
 
-	public List<E> visitRecordUpdatePrecondition(Expr.RecordUpdate expr, Environment environment) {
-		List<E> src = visitExpressionPrecondition(expr.getFirstOperand(), environment);
-		List<E> val = visitExpressionPrecondition(expr.getSecondOperand(), environment);
+	public List<E> visitRecordUpdatePrecondition(Expr.RecordUpdate expr) {
+		List<E> src = visitExpressionPrecondition(expr.getFirstOperand());
+		List<E> val = visitExpressionPrecondition(expr.getSecondOperand());
 		// TODO: implement me!
 		// return constructRecordUpdate(expr,src,val);
 		throw new UnsupportedOperationException();
 	}
 
-	public List<E> visitTupleInitialiserPrecondition(Expr.TupleInitialiser expr, Environment environment) {
+	public List<E> visitTupleInitialiserPrecondition(Expr.TupleInitialiser expr) {
 		Tuple<Expr> operands = expr.getOperands();
 		List<E> args = new ArrayList<>();
 		for (int i = 0; i != operands.size(); ++i) {
 			Expr operand = operands.get(i);
-			args.addAll(visitExpressionPrecondition(operand, environment));
+			args.addAll(visitExpressionPrecondition(operand));
 		}
 		return args;
 	}
 
-	public List<E> visitStaticVariableAccessPrecondition(Expr.StaticVariableAccess expr, Environment environment) {
+	public List<E> visitStaticVariableAccessPrecondition(Expr.StaticVariableAccess expr) {
 		return Collections.EMPTY_LIST;
 	}
 
-	public List<E> visitVariableAccessPrecondition(Expr.VariableAccess expr, Environment environment) {
+	public List<E> visitVariableAccessPrecondition(Expr.VariableAccess expr) {
 		return Collections.EMPTY_LIST;
 	}
 
