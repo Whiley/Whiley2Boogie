@@ -111,8 +111,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		if (initialiser == null) {
 			return d1;
 		} else {
-			Decl d2 = new Decl.Axiom(
-					new Expr.BinaryOperator(Expr.BinaryOperator.Kind.EQ, new Expr.VariableAccess(name), initialiser));
+			Expr lhs = box(d.getType(),new Expr.VariableAccess(name));
+			Expr rhs = box(d.getInitialiser().getType(), initialiser);
+			Decl d2 = new Decl.Axiom(EQ(lhs, rhs));
 			return new Decl.Sequence(d1, d2);
 		}
 	}
@@ -1044,8 +1045,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 				Expr operand = BoogieCompiler.this.visitExpression(expr.getOperand());
 				// Box operand (as necessary)
 				operand = box(expr.getOperand().getType(),operand);
+				// Construct lvals
+				List<LVal> lvals = Arrays.asList(VAR("#HEAP"), VAR(name));
 				// Done
-				allocations.add(CALL("Ref#new", VAR(name), operand));
+				allocations.add(CALL("Ref#new", lvals, VAR("#HEAP"), operand));
 			}
 
 			@Override

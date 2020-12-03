@@ -1145,6 +1145,9 @@ public class BoogieFile {
 	public static Stmt.Call CALL(String name, LVal lhs, List<Expr> parameters) {
 		return new Stmt.Call(name, Arrays.asList(lhs), parameters);
 	}
+	public static Stmt.Call CALL(String name, List<LVal> lvals, Expr... parameters) {
+		return new Stmt.Call(name, lvals, Arrays.asList(parameters));
+	}
 	public static Stmt.Call CALL(String name, List<LVal> lvals, List<Expr> parameters) {
 		return new Stmt.Call(name, lvals, parameters);
 	}
