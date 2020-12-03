@@ -22,6 +22,7 @@ import java.util.Objects;
 import wyboogie.core.BoogieFile;
 import wyboogie.core.BoogieFile.Decl;
 import wyboogie.core.BoogieFile.Expr;
+import wyboogie.core.BoogieFile.LVal;
 import wyboogie.core.BoogieFile.Stmt;
 import wyboogie.core.BoogieFile.Type;
 import wyboogie.core.BoogieFile.Type.BitVector;
@@ -288,8 +289,14 @@ public class BoogieFilePrinter {
 	private void writeCall(int indent, Stmt.Call s) {
 		tab(indent);
 		out.print("call ");
-		if(s.getLeftHandSide() != null) {
-			writeExpression(s.getLeftHandSide());
+		List<LVal> lvals = s.getLVals();
+		if(lvals.size() > 0) {
+			for(int i=0;i!=lvals.size();++i) {
+				if(i != 0) {
+					out.print(", ");
+				}
+				writeExpression(lvals.get(i));
+			}
 			out.print(" := ");
 		}
 		out.print(s.getName());

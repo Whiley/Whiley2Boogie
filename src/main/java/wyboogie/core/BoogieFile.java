@@ -486,12 +486,12 @@ public class BoogieFile {
 
 		public static class Call implements Stmt {
 			private final String name;
-			private final LVal lhs;
+			private final List<LVal> lvals;
 			private final List<Expr> arguments;
 
-			public Call(String name, LVal lhs, Collection<Expr> arguments) {
+			public Call(String name, List<LVal> lvals, Collection<Expr> arguments) {
 				this.name = name;
-				this.lhs = lhs;
+				this.lvals = lvals;
 				this.arguments = new ArrayList<>(arguments);
 			}
 
@@ -499,8 +499,8 @@ public class BoogieFile {
 				return name;
 			}
 
-			public LVal getLeftHandSide() {
-				return lhs;
+			public List<LVal> getLVals() {
+				return lvals;
 			}
 
 			public List<Expr> getArguments() {
@@ -938,6 +938,10 @@ public class BoogieFile {
 		return new Decl.Function(Collections.EMPTY_LIST,name,parameters,returns,body);
 	}
 
+	public static Decl.Procedure PROCEDURE(String name, List<Decl.Parameter> parameters, List<Decl.Parameter> returns) {
+		return new Decl.Procedure(name, parameters, returns, Collections.EMPTY_LIST, Collections.EMPTY_LIST, Collections.EMPTY_LIST);
+	}
+
 	public static Stmt ASSIGN(LVal lhs, Expr rhs) {
 		return new Stmt.Assignment(lhs,rhs);
 	}
@@ -1130,13 +1134,20 @@ public class BoogieFile {
 		return new Expr.UnaryOperator(Expr.UnaryOperator.Kind.OLD, lhs);
 	}
 	public static Stmt.Call CALL(String name, Expr... parameters) {
-		return new Stmt.Call(name, null, Arrays.asList(parameters));
+		return new Stmt.Call(name, Collections.EMPTY_LIST, Arrays.asList(parameters));
 	}
-
+	public static Stmt.Call CALL(String name, List<Expr> parameters) {
+		return new Stmt.Call(name, Collections.EMPTY_LIST, parameters);
+	}
 	public static Stmt.Call CALL(String name, LVal lhs, Expr... parameters) {
-		return new Stmt.Call(name, lhs, Arrays.asList(parameters));
+		return new Stmt.Call(name, Arrays.asList(lhs), Arrays.asList(parameters));
 	}
-
+	public static Stmt.Call CALL(String name, LVal lhs, List<Expr> parameters) {
+		return new Stmt.Call(name, Arrays.asList(lhs), parameters);
+	}
+	public static Stmt.Call CALL(String name, List<LVal> lvals, List<Expr> parameters) {
+		return new Stmt.Call(name, lvals, parameters);
+	}
 	public static Expr.Invoke INVOKE(String name, Expr... parameters) {
 		return new Expr.Invoke(name, parameters);
 	}
