@@ -595,7 +595,23 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			return new Stmt.Assignment(VAR("#HEAP"), PUT(VAR("#HEAP"),src,rhs));
 		}
 		case WyilFile.EXPR_fielddereference: {
-
+			WyilFile.Expr.FieldDereference r = (WyilFile.Expr.FieldDereference) lval;
+			// Extract the source reference type
+			WyilFile.Type.Reference refT = r.getOperand().getType().as(WyilFile.Type.Reference.class);
+			// Extract the source record type
+			WyilFile.Type.Record recT = refT.getElement().as(WyilFile.Type.Record.class);
+			// Reconstruct source expression
+			Expr src = visitExpression(r.getOperand());
+			// Reconstruct index expression
+			Expr index = VAR("$" + r.getField());
+			// Box the right-hand side (as necessary)
+			rhs = box(lval.getType(),rhs);
+			// Make the field assignment
+			rhs = PUT(unbox(recT,GET(VAR("#HEAP"), src)), index, rhs);
+			// Box again!
+			rhs = box(recT,rhs);
+			// Done
+			return new Stmt.Assignment(VAR("#HEAP"), PUT(VAR("#HEAP"), src, rhs));
 		}
 		case WyilFile.EXPR_recordaccess:
 		case WyilFile.EXPR_recordborrow: {
@@ -960,8 +976,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructFieldDereferenceLVal(WyilFile.Expr.FieldDereference expr, Expr operand) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		// First dereference the pointer.
+		Expr deref = new Expr.DictionaryAccess(VAR("#HEAP"), operand);
+		// Second access the given field.
+		return new Expr.DictionaryAccess(deref,VAR("$" + expr.getField()));
 	}
 
 	@Override
@@ -1099,8 +1117,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructFieldDereference(WyilFile.Expr.FieldDereference expr, Expr operand) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		Expr field = VAR("$" + expr.getField().get());
+		// Extract the source reference type
+		WyilFile.Type.Reference refT = expr.getOperand().getType().as(WyilFile.Type.Reference.class);
+		// Extract the source record type
+		WyilFile.Type.Record recT = refT.getElement().as(WyilFile.Type.Record.class);
+		// Reconstruct source expression
+		Expr deref = unbox(recT, new Expr.DictionaryAccess(VAR("#HEAP"), operand));
+		//
+		return unbox(expr.getType(),GET(deref,field));
 	}
 
 	@Override
@@ -2336,6 +2361,20 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 					for (WyilFile.Type.Field f : t.getFields()) {
 						names.add(f.getName().get());
 					}
+				}
+				@Override
+				public void visitRecordInitialiser(WyilFile.Expr.RecordInitialiser expr) {
+					for (WyilFile.Identifier f : expr.getFields()) {
+						names.add(f.get());
+					}
+				}
+				@Override
+				public void visitRecordAccess(WyilFile.Expr.RecordAccess expr) {
+					names.add(expr.getField().get());
+				}
+				@Override
+				public void visitFieldDereference(WyilFile.Expr.FieldDereference expr) {
+					names.add(expr.getField().get());
 				}
 			}.visitUnit(unit);
 
