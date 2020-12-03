@@ -249,16 +249,17 @@ public class BoogieFile {
 			private final List<Parameter> returns;
 			private final List<Expr> requires;
 			private final List<Expr> ensures;
+			private final List<String> modifies;
 			private final List<Decl.Variable> locals;
 			private final Stmt body;
 
 			public Procedure(String name, List<Parameter> parameters, List<Parameter> returns, List<Expr> requires,
-					List<Expr> ensures) {
-				this(name, parameters, returns, requires, ensures, Collections.EMPTY_LIST, null);
+					List<Expr> ensures, List<String> modifies) {
+				this(name, parameters, returns, requires, ensures, Collections.EMPTY_LIST, modifies, null);
 			}
 
 			public Procedure(String name, List<Parameter> parameters, List<Parameter> returns, List<Expr> requires,
-					List<Expr> ensures, List<Decl.Variable> locals, Stmt body) {
+					List<Expr> ensures, List<Decl.Variable> locals, List<String> modifies, Stmt body) {
 				if (body == null && locals.size() > 0) {
 					throw new IllegalArgumentException("Cannot specify local variables for procedure prototype");
 				}
@@ -267,6 +268,7 @@ public class BoogieFile {
 				this.returns = new ArrayList<>(returns);
 				this.requires = new ArrayList<>(requires);
 				this.ensures = new ArrayList<>(ensures);
+				this.modifies = new ArrayList<>(modifies);
 				this.locals = new ArrayList<>(locals);
 				this.body = body;
 			}
@@ -289,6 +291,10 @@ public class BoogieFile {
 
 			public List<Expr> getEnsures() {
 				return ensures;
+			}
+
+			public List<String> getModifies() {
+				return modifies;
 			}
 
 			public List<Decl.Variable> getLocals() {
@@ -480,15 +486,21 @@ public class BoogieFile {
 
 		public static class Call implements Stmt {
 			private final String name;
+			private final LVal lhs;
 			private final List<Expr> arguments;
 
-			public Call(String name, Collection<Expr> arguments) {
+			public Call(String name, LVal lhs, Collection<Expr> arguments) {
 				this.name = name;
+				this.lhs = lhs;
 				this.arguments = new ArrayList<>(arguments);
 			}
 
 			public String getName() {
 				return name;
+			}
+
+			public LVal getLeftHandSide() {
+				return lhs;
 			}
 
 			public List<Expr> getArguments() {
@@ -610,9 +622,7 @@ public class BoogieFile {
 	// Expressions
 	// =========================================================================
 
-	public interface Expr extends Stmt {
-		// FIXME: Expr should not extend Stmt, but is currently necessary to meet the
-		// requirement of AbstractTranslator!
+	public interface Expr {
 
 		public static class BinaryOperator implements Expr {
 			public enum Kind {
@@ -741,7 +751,7 @@ public class BoogieFile {
 
 		public static class UnaryOperator implements Expr {
 			public enum Kind {
-				NEG, NOT
+				NEG, NOT, OLD
 			}
 
 			private final Kind kind;
@@ -1116,12 +1126,22 @@ public class BoogieFile {
 	public static Expr.Constant CONST(BigInteger i) {
 		return new Expr.Constant(i);
 	}
+	public static Expr.UnaryOperator OLD(Expr lhs) {
+		return new Expr.UnaryOperator(Expr.UnaryOperator.Kind.OLD, lhs);
+	}
+	public static Stmt.Call CALL(String name, Expr... parameters) {
+		return new Stmt.Call(name, null, Arrays.asList(parameters));
+	}
 
-	public static Expr.Invoke CALL(String name, Expr... parameters) {
+	public static Stmt.Call CALL(String name, LVal lhs, Expr... parameters) {
+		return new Stmt.Call(name, lhs, Arrays.asList(parameters));
+	}
+
+	public static Expr.Invoke INVOKE(String name, Expr... parameters) {
 		return new Expr.Invoke(name, parameters);
 	}
 
-	public static Expr.Invoke CALL(String name, List<Expr> parameters) {
+	public static Expr.Invoke INVOKE(String name, List<Expr> parameters) {
 		return new Expr.Invoke(name, parameters);
 	}
 

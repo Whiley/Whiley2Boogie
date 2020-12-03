@@ -73,7 +73,7 @@ import wyil.lang.WyilFile.Stmt;
  * @param <S>
  * @param <E>
  */
-public abstract class AbstractTranslator<D,S,E extends S> extends wyil.util.AbstractTranslator<D, S, E> {
+public abstract class AbstractTranslator<D,S,E> extends wyil.util.AbstractTranslator<D, S, E> {
 
 	public AbstractTranslator(Meter meter, wyil.util.Subtyping.Environment subtypeOperator) {
 		super(meter, subtypeOperator);

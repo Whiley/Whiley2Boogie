@@ -147,12 +147,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		List<Decl.Parameter> parameters = constructParameters(d.getParameters(), precondition);
 		List<Decl.Parameter> protoParameters = new ArrayList<>(parameters);
 		List<Decl.Parameter> returns = constructParameters(d.getReturns(), postcondition);
+		List<String> modifies = new ArrayList<>();
 		// Construct parameters and arguments for specification helpers
 		ArrayList<Decl.Parameter> specParametersAndReturns = new ArrayList<>();
 		// Add heap argument (as necessary)
 		if (d instanceof WyilFile.Decl.Method) {
 			// To make this work, we override the existing heap variable name.
-			protoParameters.add(0, new Decl.Variable("Heap#", REFMAP));
+			protoParameters.add(0, new Decl.Variable("HEAP#", REFMAP));
+			// Update modifies
+			modifies.add("#HEAP");
 		}
 		specParametersAndReturns.addAll(protoParameters);
 		// Construct function representation precondition
@@ -173,14 +176,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 				decls.add(FUNCTION(name + "#" + i, protoParameters, returnType));
 			}
 		}
-		// Construct procedure prototype
-		decls.add(new Decl.Procedure(name + "#impl", parameters, returns, precondition, postcondition));
+		// Construct shadow parameters (if applicable, and before heap variable)
+		List<Decl.Parameter> shadows = constructShadowParameters(d.getParameters(), parameters);
 		// Determine local variables
 		List<Decl.Variable> locals = constructLocals(d.getBody());
-		// Construct implementation (if applicable)
-		List<Decl.Parameter> shadows = constructShadowParameters(d.getParameters(), parameters);
-		//
+		// Add shadown assignments to the body
 		body = addShadowAssignments(locals, body, parameters, shadows);
+		// Construct procedure prototype
+		decls.add(new Decl.Procedure(name + "#impl", parameters, returns, precondition, postcondition, modifies));
 		// Construct implementation which can be checked against its specification.
 		decls.add(new Decl.Implementation(name + "#impl", shadows, returns, locals, body));
 		if (returns.size() > 0) {
@@ -301,6 +304,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		new AbstractVisitor(meter) {
 			@Override
 			public void visitInitialiser(WyilFile.Stmt.Initialiser stmt) {
+				super.visitInitialiser(stmt);
 				WyilFile.Tuple<WyilFile.Decl.Variable> vars = stmt.getVariables();
 				for (int i = 0; i != vars.size(); ++i) {
 					WyilFile.Decl.Variable ith = vars.get(i);
@@ -340,6 +344,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			}
 
 			@Override
+			public void visitNew(WyilFile.Expr.New expr) {
+				super.visitNew(expr);
+				String name = "l#" + expr.getIndex();
+				decls.add(new Decl.Variable(name, REF));
+			}
+
+			@Override
 			public void visitType(WyilFile.Type t) {
 				// Prevent unexpected traverals of types
 			}
@@ -362,7 +373,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		//
 		if (d instanceof WyilFile.Decl.Function && parameters.size() == 0) {
 			// Easy case, since we don't even need a quantifier.
-			return new Decl.Axiom(CALL(name + "#post", CALL(name)));
+			return new Decl.Axiom(INVOKE(name + "#post", INVOKE(name)));
 		} else {
 			// A universal quantifier is required!
 			List<Expr> args = new ArrayList<>();
@@ -371,7 +382,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 				// Clone parameters list to prevent side-effects
 				parameters = new ArrayList<>(parameters);
 				// Insert new parameter at the beginning
-				parameters.add(0, new Decl.Variable("Heap#", REFMAP));
+				parameters.add(0, new Decl.Variable("#HEAP", REFMAP));
 			}
 			// Add remaining arguments
 			for (int i = 0; i != parameters.size(); ++i) {
@@ -380,16 +391,16 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			ArrayList<Expr> postArgs = new ArrayList<>(args);
 			//
 			if (returns.size() == 1) {
-				postArgs.add(CALL(name, args));
+				postArgs.add(INVOKE(name, args));
 			} else {
 				// Functions with multiple returns require special handling
 				for (int i = 0; i != returns.size(); ++i) {
-					postArgs.add(CALL(name + "#" + i, args));
+					postArgs.add(INVOKE(name + "#" + i, args));
 				}
 			}
 			// Construct the axiom
 			return new Decl.Axiom(
-					FORALL(parameters, IMPLIES(CALL(name + "#pre", args), CALL(name + "#post", postArgs))));
+					FORALL(parameters, IMPLIES(INVOKE(name + "#pre", args), INVOKE(name + "#post", postArgs))));
 		}
 	}
 
@@ -563,7 +574,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			return constructAssign((WyilFile.LVal) l.getFirstOperand(), PUT(src, index, rhs));
 		}
 		case WyilFile.EXPR_dereference: {
-
+			WyilFile.Expr.Dereference r = (WyilFile.Expr.Dereference) lval;
+			// Reconstruct source expression
+			Expr src = visitExpression(r.getOperand());
+			// Box the right-hand side (as necessary)
+			rhs = box(lval.getType(),rhs);
+			//
+			return new Stmt.Assignment(VAR("#HEAP"), PUT(VAR("#HEAP"),src,rhs));
 		}
 		case WyilFile.EXPR_fielddereference: {
 
@@ -666,6 +683,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			return SEQUENCE();
 		} else {
 			ArrayList<Stmt> stmts = new ArrayList<>();
+			// Apply any heap allocations
+			stmts.addAll(constructAllocations(stmt.getInitialiser()));
 			// Extract list of initialiser expressions
 			List<Expr> inits = (init instanceof FauxTuple) ? ((FauxTuple) init).getItems() : Arrays.asList(init);
 			// Determine type of initialiser expression
@@ -687,7 +706,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	@Override
-	public Expr constructIndirectInvokeStmt(WyilFile.Expr.IndirectInvoke expr, Expr source, List<Expr> arguments,
+	public Stmt constructIndirectInvokeStmt(WyilFile.Expr.IndirectInvoke expr, Expr source, List<Expr> arguments,
 			List<Expr> preconditions) {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
@@ -825,6 +844,59 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		return assertions;
 	}
 
+
+	/**
+	 * Construction allocations for heap variables. For example, consider the
+	 * following statement in Whiley:
+	 *
+	 * <pre>
+	 * ...
+	 * &int p = new 1
+	 * </pre>
+	 *
+	 * This is translated into:
+	 *
+	 * <pre>
+	 * var p : Ref;
+	 * var l#0 : Ref;
+	 * ...
+	 * l#0 = new(1);
+	 * p = l#0;
+	 * </pre>
+	 *
+	 * This is necessary for several reasons. Firstly, <code>new</code> is a
+	 * procedure and call only be called by the Boogie "call" expression.
+	 *
+	 * @param expr
+	 * @return
+	 */
+	private List<Stmt> constructAllocations(WyilFile.Expr expr) {
+		ArrayList<Stmt> allocations = new ArrayList<>();
+		// Handle local variables
+		new AbstractVisitor(meter) {
+
+			@Override
+			public void visitNew(WyilFile.Expr.New expr) {
+				super.visitNew(expr);
+				String name = "l#" + expr.getIndex();
+				// Translate operand
+				Expr operand = BoogieCompiler.this.visitExpression(expr.getOperand());
+				// Box operand (as necessary)
+				operand = box(expr.getOperand().getType(),operand);
+				// Done
+				allocations.add(CALL("Ref#new", VAR(name), operand));
+			}
+
+			@Override
+			public void visitType(WyilFile.Type t) {
+				// Prevent unexpected traverals of types
+			}
+		}.visitExpression(expr);
+		//
+		return allocations;
+	}
+
+
 	@Override
 	public Expr constructArrayAccessLVal(WyilFile.Expr.ArrayAccess expr, Expr source, Expr index) {
 		return new Expr.DictionaryAccess(source, index);
@@ -832,8 +904,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructDereferenceLVal(WyilFile.Expr.Dereference expr, Expr operand) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return new Expr.DictionaryAccess(VAR("#HEAP"), operand);
 	}
 
 	@Override
@@ -864,20 +935,20 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructArrayLength(WyilFile.Expr.ArrayLength expr, Expr source) {
-		return CALL("Array#Length", source);
+		return INVOKE("Array#Length", source);
 	}
 
 	@Override
 	public Expr constructArrayGenerator(WyilFile.Expr.ArrayGenerator expr, Expr value, Expr length) {
 		WyilFile.Type vt = expr.getFirstOperand().getType();
 		WyilFile.Type lt = expr.getSecondOperand().getType();
-		return CALL("Array#Generator", box(vt, value), cast(WyilFile.Type.Int, lt, length));
+		return INVOKE("Array#Generator", box(vt, value), cast(WyilFile.Type.Int, lt, length));
 	}
 
 	@Override
 	public Expr constructArrayInitialiser(WyilFile.Expr.ArrayInitialiser expr, List<Expr> values) {
 		WyilFile.Type elementType = expr.getType().as(WyilFile.Type.Array.class).getElement();
-		Expr arr = CALL("Array#Empty", CONST(values.size()));
+		Expr arr = INVOKE("Array#Empty", CONST(values.size()));
 		//
 		for (int i = 0; i != values.size(); ++i) {
 			WyilFile.Type type = expr.getOperands().get(i).getType();
@@ -890,14 +961,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructBitwiseComplement(WyilFile.Expr.BitwiseComplement expr, Expr operand) {
-		return CALL("Byte#Not", operand);
+		return INVOKE("Byte#Not", operand);
 	}
 
 	@Override
 	public Expr constructBitwiseAnd(WyilFile.Expr.BitwiseAnd expr, List<Expr> operands) {
 		Expr e = operands.get(0);
 		for (int i = 1; i != operands.size(); ++i) {
-			e = CALL("Byte#And", e, operands.get(i));
+			e = INVOKE("Byte#And", e, operands.get(i));
 		}
 		return e;
 	}
@@ -906,7 +977,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	public Expr constructBitwiseOr(WyilFile.Expr.BitwiseOr expr, List<Expr> operands) {
 		Expr e = operands.get(0);
 		for (int i = 1; i != operands.size(); ++i) {
-			e = CALL("Byte#Or", e, operands.get(i));
+			e = INVOKE("Byte#Or", e, operands.get(i));
 		}
 		return e;
 	}
@@ -915,19 +986,19 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	public Expr constructBitwiseXor(WyilFile.Expr.BitwiseXor expr, List<Expr> operands) {
 		Expr e = operands.get(0);
 		for (int i = 1; i != operands.size(); ++i) {
-			e = CALL("Byte#Xor", e, operands.get(i));
+			e = INVOKE("Byte#Xor", e, operands.get(i));
 		}
 		return e;
 	}
 
 	@Override
 	public Expr constructBitwiseShiftLeft(WyilFile.Expr.BitwiseShiftLeft expr, Expr lhs, Expr rhs) {
-		return CALL("Byte#Shl", lhs, CALL("Byte#fromInt", rhs));
+		return INVOKE("Byte#Shl", lhs, INVOKE("Byte#fromInt", rhs));
 	}
 
 	@Override
 	public Expr constructBitwiseShiftRight(WyilFile.Expr.BitwiseShiftRight expr, Expr lhs, Expr rhs) {
-		return CALL("Byte#Shr", lhs, CALL("Byte#fromInt", rhs));
+		return INVOKE("Byte#Shr", lhs, INVOKE("Byte#fromInt", rhs));
 	}
 
 	@Override
@@ -957,7 +1028,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		}
 		case WyilFile.ITEM_utf8: {
 			byte[] bytes = ((WyilFile.Value.UTF8) v).get();
-			Expr arr = CALL("Array#Empty", CONST(bytes.length));
+			Expr arr = INVOKE("Array#Empty", CONST(bytes.length));
 			//
 			for (int i = 0; i != bytes.length; ++i) {
 				Expr ith = box(WyilFile.Type.Int, new Expr.Constant(bytes[i]));
@@ -972,7 +1043,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructDereference(WyilFile.Expr.Dereference expr, Expr operand) {
-		return unbox(expr.getType(), new Expr.DictionaryAccess(VAR("Heap#"), operand));
+		return unbox(expr.getType(), new Expr.DictionaryAccess(VAR("#HEAP"), operand));
 	}
 
 	@Override
@@ -1134,15 +1205,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		if (method) {
 			// Add heap argument to invocation to ensure (amongst other things)
 			// non-determinism.
-			arguments.add(0, VAR("Heap#"));
+			arguments.add(0, VAR("#HEAP"));
 		}
 		//
 		if (rt.shape() == 1) {
-			return cast(rt, ftrt, CALL(name, arguments));
+			return cast(rt, ftrt, INVOKE(name, arguments));
 		} else {
 			List<Expr> items = new ArrayList<>();
 			for (int i = 0; i != rt.shape(); ++i) {
-				items.add(cast(rt.dimension(i), ftrt.dimension(i), CALL(name + "#" + i, arguments)));
+				items.add(cast(rt.dimension(i), ftrt.dimension(i), INVOKE(name + "#" + i, arguments)));
 			}
 			return new FauxTuple(items);
 		}
@@ -1162,8 +1233,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructNew(WyilFile.Expr.New expr, Expr operand) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		return VAR("l#" + expr.getIndex());
 	}
 
 	@Override
@@ -1241,7 +1311,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructArrayAccessPrecondition(WyilFile.Expr.ArrayAccess expr, Expr source, Expr index) {
-		return AND(LTEQ(CONST(0), index), LT(index, CALL("Array#Length", source)));
+		return AND(LTEQ(CONST(0), index), LT(index, INVOKE("Array#Length", source)));
 	}
 
 	@Override
@@ -1258,10 +1328,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		args = cast(c.getType().getParameter(), expr.getOperands(), args);
 		//
 		if (c instanceof WyilFile.Decl.Function) {
-			return CALL(name + "#pre", args);
+			return INVOKE(name + "#pre", args);
 		} else if (c instanceof WyilFile.Decl.Method) {
-			args.add(0, VAR("Heap#"));
-			return CALL(name + "#pre", args);
+			args.add(0, VAR("#HEAP"));
+			return INVOKE(name + "#pre", args);
 		} else {
 			return null;
 		}
@@ -1298,6 +1368,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	public Type constructArrayType(WyilFile.Type.Array type) {
+		// NOTE: could actually do better here? In principle, yes, but it would require
+		// generating axioms that could accept different types for arrays.
 		return INTMAP;
 	}
 
@@ -1361,6 +1433,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			return constructReferenceTypeConstraint((WyilFile.Type.Reference) type, expr);
 		case WyilFile.TYPE_union:
 			return constructUnionTypeConstraint((WyilFile.Type.Union) type, expr);
+		case WyilFile.TYPE_function:
+		case WyilFile.TYPE_method:
+		case WyilFile.TYPE_property:
+			return constructCallableTypeConstraint((WyilFile.Type.Callable) type, expr);
 		default:
 			throw new IllegalArgumentException("unknown type encoutnered (" + type.getClass().getName() + ")");
 		}
@@ -1392,7 +1468,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			// Construct appropriate name mangle
 			String name = toMangledName(type.getLink().getTarget());
 			// Ensure argument is boxed
-			return CALL(name + "#is", expr);
+			return INVOKE(name + "#is", expr);
 		}
 	}
 
@@ -1422,7 +1498,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// If any constraint exists, employ a universal quantifier.
 		if (rhs != null) {
 			// Construct bounds check for index variable
-			Expr lhs = AND(LTEQ(CONST(0), i), LT(i, CALL("Array#Length", expr)));
+			Expr lhs = AND(LTEQ(CONST(0), i), LT(i, INVOKE("Array#Length", expr)));
 			return FORALL(i.getVariable(), Type.Int, IMPLIES(lhs, rhs));
 		} else {
 			// No constraints required.
@@ -1470,7 +1546,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * would be generated:
 	 *
 	 * <pre>
-	 *   nat#is(#Heap[x])
+	 *   nat#is(Heap[x])
 	 * </pre>
 	 *
 	 * Observe that such a constraint is only when there are actual constraints on
@@ -1483,7 +1559,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 */
 	private Expr constructReferenceTypeConstraint(WyilFile.Type.Reference type, Expr expr) {
 		// Construct a dereference to access the element value
-		Expr deref = unbox(type, new Expr.DictionaryAccess(VAR("Heap#"), expr));
+		Expr deref = unbox(type, new Expr.DictionaryAccess(VAR("#HEAP"), expr));
 		// Determine what constraint (if any) exists on the element type
 		return constructTypeConstraint(type.getElement(), unbox(type.getElement(), deref));
 	}
@@ -1519,6 +1595,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		return null;
 	}
 
+	private Expr constructCallableTypeConstraint(WyilFile.Type.Callable type, Expr expr) {
+		// NOTE: unclear how to proceed here.
+		return null;
+	}
 
 	/**
 	 * Construct a runtime type test for a given argument operand. For example,
@@ -1544,17 +1624,19 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		case WyilFile.TYPE_null:
 			return EQ(argument, CONST(null));
 		case WyilFile.TYPE_bool:
-			return CALL("Bool#is", box(from, argument));
+			return INVOKE("Bool#is", box(from, argument));
 		case WyilFile.TYPE_byte:
-			return CALL("Byte#is", box(from, argument));
+			return INVOKE("Byte#is", box(from, argument));
 		case WyilFile.TYPE_int:
-			return CALL("Int#is", box(from, argument));
+			return INVOKE("Int#is", box(from, argument));
 		case WyilFile.TYPE_nominal:
 			return constructNominalTypeTest((WyilFile.Type.Nominal) to, from, argument);
 		case WyilFile.TYPE_array:
 			return constructArrayTypeTest((WyilFile.Type.Array) to, from, argument);
 		case WyilFile.TYPE_record:
 			return constructRecordTypeTest((WyilFile.Type.Record) to, from, argument);
+		case WyilFile.TYPE_reference:
+			return constructReferenceTypeTest((WyilFile.Type.Reference) to, from, argument);
 		case WyilFile.TYPE_union:
 			return constructUnionTypeTest((WyilFile.Type.Union) to, from, argument);
 		default:
@@ -1592,7 +1674,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Construct appropriate name mangle
 		String name = toMangledName(to.getLink().getTarget());
 		// Ensure argument is boxed
-		return CALL(name + "#is", cast(to, from, argument));
+		return INVOKE(name + "#is", cast(to, from, argument));
 	}
 
 	/**
@@ -1664,11 +1746,21 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Cast argument to (unboxed) array type
 		argument = cast(to, from, argument);
 		// Construct bounds check for index variable
-		Expr lhs = AND(LTEQ(CONST(0), i), LT(i, CALL("Array#Length", argument)));
+		Expr lhs = AND(LTEQ(CONST(0), i), LT(i, INVOKE("Array#Length", argument)));
 		// Recursively construct type test for element
 		Expr rhs = constructTypeTest(to.getElement(), WyilFile.Type.Any, GET(argument, i));
 		// Done
 		return FORALL(i.getVariable(), Type.Int, IMPLIES(lhs, rhs));
+	}
+
+	private Expr constructReferenceTypeTest(WyilFile.Type.Reference to, WyilFile.Type from, Expr argument) {
+		// Cast argument to (unboxed) reference type
+		System.out.println("CASTING: " + to + " <= " + from);
+		argument = cast(to, from, argument);
+		// Dereference argument
+		Expr deref = GET(VAR("#HEAP"),argument);
+		//
+		return constructTypeTest(to.getElement(), WyilFile.Type.Any, deref);
 	}
 
 	/**
@@ -1747,9 +1839,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(FUNCTION("Bool#box", Type.Bool, VALUE));
 		decls.add(FUNCTION("Bool#unbox", VALUE, Type.Bool));
 		decls.add(FUNCTION("Bool#is", new Decl.Parameter("v", VALUE), Type.Bool,
-				EXISTS("b", Type.Bool, EQ(CALL("Bool#box", VAR("b")), VAR("v")))));
+				EXISTS("b", Type.Bool, EQ(INVOKE("Bool#box", VAR("b")), VAR("v")))));
 		// Establish connection between toInt and fromInt
-		decls.add(new Decl.Axiom(FORALL("i", Type.Bool, EQ(CALL("Bool#unbox", CALL("Bool#box", VAR("i"))), VAR("i")))));
+		decls.add(new Decl.Axiom(FORALL("i", Type.Bool, EQ(INVOKE("Bool#unbox", INVOKE("Bool#box", VAR("i"))), VAR("i")))));
 		// Done
 		return decls;
 	}
@@ -1765,10 +1857,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		Decl.Function fromInt = FUNCTION("Int#box", Type.Int, VALUE);
 		Decl.Function toInt = FUNCTION("Int#unbox", VALUE, Type.Int);
 		Decl.Function isInt = FUNCTION("Int#is", new Decl.Parameter("v", VALUE), Type.Bool,
-				EXISTS("i", Type.Int, EQ(CALL("Int#box", VAR("i")), VAR("v"))));
+				EXISTS("i", Type.Int, EQ(INVOKE("Int#box", VAR("i")), VAR("v"))));
 		// Establish connection between toInt and fromInt
 		Decl.Axiom axiom1 = new Decl.Axiom(
-				FORALL("i", Type.Int, EQ(CALL("Int#unbox", CALL("Int#box", VAR("i"))), VAR("i"))));
+				FORALL("i", Type.Int, EQ(INVOKE("Int#unbox", INVOKE("Int#box", VAR("i"))), VAR("i"))));
 		return Arrays.asList(header, fromInt, toInt, isInt, axiom1);
 	}
 
@@ -1785,7 +1877,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(FUNCTION("Byte#unbox", VALUE, Type.BitVector8));
 		decls.add(FUNCTION("Byte#toInt", Type.BitVector8, Type.Int, ":bvbuiltin", "\"bv2int\""));
 		decls.add(FUNCTION("Byte#is", new Decl.Parameter("v", VALUE), Type.Bool,
-				EXISTS("b", Type.BitVector8, EQ(CALL("Byte#box", VAR("b")), VAR("v")))));
+				EXISTS("b", Type.BitVector8, EQ(INVOKE("Byte#box", VAR("b")), VAR("v")))));
 		// NOTE: figuring out int2bv was a challenge!
 		decls.add(FUNCTION("Byte#fromInt", Type.Int, Type.BitVector8, ":bvbuiltin", "\"(_ int2bv 8)\""));
 		decls.add(FUNCTION("Byte#Not", Type.BitVector8, Type.BitVector8, ":bvbuiltin", "\"bvnot\""));
@@ -1796,7 +1888,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(FUNCTION("Byte#Shr", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin", "\"bvlshr\""));
 		// Establish connection between toByte and fromByte
 		decls.add(new Decl.Axiom(
-				FORALL("b", Type.BitVector8, EQ(CALL("Byte#unbox", CALL("Byte#box", VAR("b"))), VAR("b")))));
+				FORALL("b", Type.BitVector8, EQ(INVOKE("Byte#unbox", INVOKE("Byte#box", VAR("b"))), VAR("b")))));
 		// Done
 		return decls;
 	}
@@ -1814,35 +1906,35 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(FUNCTION("Array#box", INTMAP, VALUE));
 		decls.add(FUNCTION("Array#unbox", VALUE, INTMAP));
 		// Establish connection between toInt and fromInt
-		decls.add(new Decl.Axiom(FORALL("i", INTMAP, EQ(CALL("Array#unbox", CALL("Array#box", VAR("i"))), VAR("i")))));
+		decls.add(new Decl.Axiom(FORALL("i", INTMAP, EQ(INVOKE("Array#unbox", INVOKE("Array#box", VAR("i"))), VAR("i")))));
 		// Array length function
 		decls.add(FUNCTION("Array#Length", INTMAP, Type.Int));
 		// Enforce array length is non-negative
-		decls.add(new Decl.Axiom(FORALL("a", INTMAP, LTEQ(CONST(0), CALL("Array#Length", VAR("a"))))));
+		decls.add(new Decl.Axiom(FORALL("a", INTMAP, LTEQ(CONST(0), INVOKE("Array#Length", VAR("a"))))));
 		// Empty arrays
 		decls.add(FUNCTION("Array#Empty", Type.Int, INTMAP));
 		decls.add(FUNCTION("Array#Generator", VALUE, Type.Int, INTMAP));
 		// Ensure that all elements outside array length are void
 		decls.add(new Decl.Axiom(
 				FORALL("l", Type.Int, "i", Type.Int, OR(AND(LTEQ(CONST(0), VAR("i")), LT(VAR("i"), VAR("l"))),
-						EQ(GET(CALL("Array#Empty", VAR("l")), VAR("i")), VAR("Void"))))));
+						EQ(GET(INVOKE("Array#Empty", VAR("l")), VAR("i")), VAR("Void"))))));
 		// Relate empty array with its length
 		decls.add(new Decl.Axiom(FORALL("a", INTMAP, "l", Type.Int,
-				OR(NEQ(CALL("Array#Empty", VAR("l")), VAR("a")), EQ(CALL("Array#Length", VAR("a")), VAR("l"))))));
+				OR(NEQ(INVOKE("Array#Empty", VAR("l")), VAR("a")), EQ(INVOKE("Array#Length", VAR("a")), VAR("l"))))));
 		// Ensure that all elements inside generator length are void
 		decls.add(new Decl.Axiom(FORALL("v", VALUE, "l", Type.Int, "i", Type.Int, OR(LT(VAR("i"), CONST(0)),
-				LTEQ(VAR("l"), VAR("i")), EQ(GET(CALL("Array#Generator", VAR("v"), VAR("l")), VAR("i")), VAR("v"))))));
+				LTEQ(VAR("l"), VAR("i")), EQ(GET(INVOKE("Array#Generator", VAR("v"), VAR("l")), VAR("i")), VAR("v"))))));
 		// Ensure that all elements outside generator length are void
 		decls.add(new Decl.Axiom(FORALL("v", VALUE, "l", Type.Int, "i", Type.Int,
 				OR(AND(LTEQ(CONST(0), VAR("i")), LT(VAR("i"), VAR("l"))),
-						EQ(GET(CALL("Array#Generator", VAR("v"), VAR("l")), VAR("i")), VAR("Void"))))));
+						EQ(GET(INVOKE("Array#Generator", VAR("v"), VAR("l")), VAR("i")), VAR("Void"))))));
 		// Relate array generator with its length
 		decls.add(new Decl.Axiom(FORALL("a", INTMAP, "v", VALUE, "l", Type.Int,
-				OR(NEQ(CALL("Array#Generator", VAR("v"), VAR("l")), VAR("a")),
-						EQ(CALL("Array#Length", VAR("a")), VAR("l"))))));
+				OR(NEQ(INVOKE("Array#Generator", VAR("v"), VAR("l")), VAR("a")),
+						EQ(INVOKE("Array#Length", VAR("a")), VAR("l"))))));
 		// Relate updated array with its length
 		decls.add(new Decl.Axiom(FORALL("a", INTMAP, "i", Type.Int, "v", VALUE,
-				EQ(CALL("Array#Length", VAR("a")), CALL("Array#Length", PUT(VAR("a"), VAR("i"), VAR("v")))))));
+				EQ(INVOKE("Array#Length", VAR("a")), INVOKE("Array#Length", PUT(VAR("a"), VAR("i"), VAR("v")))))));
 		// Done
 		return decls;
 	}
@@ -1869,7 +1961,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(FUNCTION("Record#unbox", VALUE, FIELDMAP));
 		// Establish connection between toInt and fromInt
 		decls.add(new Decl.Axiom(
-				FORALL("i", FIELDMAP, EQ(CALL("Record#unbox", CALL("Record#box", VAR("i"))), VAR("i")))));
+				FORALL("i", FIELDMAP, EQ(INVOKE("Record#unbox", INVOKE("Record#box", VAR("i"))), VAR("i")))));
 		// Defines the empty record (i.e. the base from which all other records are
 		// constructed).
 		decls.add(new Decl.Constant(true, "Record#Empty", FIELDMAP));
@@ -1885,10 +1977,35 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * @return
 	 */
 	private List<Decl> constructReferenceAxioms(WyilFile wf) {
-		Decl header = new Decl.LineComment("References");
-		Decl decl = new Decl.TypeSynonym("Ref", null);
-		Decl heap = new Decl.Variable("Heap#", REFMAP);
-		return Arrays.asList(header, decl, heap);
+		ArrayList<Decl> decls = new ArrayList<>();
+		decls.add(new Decl.LineComment("References"));
+		decls.add(new Decl.TypeSynonym("Ref", null));
+		decls.add(new Decl.Variable("#HEAP", REFMAP));
+		decls.add(FUNCTION("Ref#box", REF, VALUE));
+		decls.add(FUNCTION("Ref#unbox", VALUE, REF));
+		// Construct the allocation procedure
+		Expr heap = VAR("#HEAP");
+		Expr.VariableAccess val = VAR("val");
+		Expr.VariableAccess ref = VAR("ref");
+		//
+		List<Decl.Parameter> parameters = Arrays.asList(new Decl.Parameter(val.getVariable(), VALUE));
+		List<Decl.Parameter> returns =  Arrays.asList(new Decl.Parameter(ref.getVariable(), REF));
+		// FIXME: there are still some problems below related to the Void constant which
+		// is not necessarily disjoint with all integer constants, etc.
+		List<Expr> requires = new ArrayList<>();
+		List<Expr> ensures = new ArrayList<>();
+		// Heap location at ref equals val
+		ensures.add(EQ(GET(heap,ref),val));
+		// Heap location not previously allocated!
+		ensures.add(EQ(GET(OLD(heap),ref),VAR("Void")));
+		// All allocated locations remain as before
+		ensures.add(FORALL("r",REF,OR(EQ(ref,VAR("r")),EQ(GET(OLD(heap),VAR("r")),GET(heap,VAR("r"))))));
+		//
+		List<String> modifies = Arrays.asList("#HEAP");
+		//
+		decls.add(new Decl.Procedure("Ref#new", parameters, returns, requires, ensures, modifies));
+		// Done
+		return decls;
 	}
 
 	/**
@@ -2022,7 +2139,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	private static boolean isBoxed(WyilFile.Type type) {
 		switch (type.getOpcode()) {
 		case WyilFile.TYPE_any:
-		case WyilFile.TYPE_reference:
 		case WyilFile.TYPE_universal:
 		case WyilFile.TYPE_union:
 			return true;
@@ -2054,6 +2170,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			return coerce(e, "Int#unbox", "Int#box");
 		case WyilFile.TYPE_record:
 			return coerce(e, "Record#unbox", "Record#box");
+		case WyilFile.TYPE_reference:
+			return coerce(e, "Ref#unbox", "Ref#box");
 		case WyilFile.TYPE_array:
 			return coerce(e, "Array#unbox", "Array#box");
 		case WyilFile.TYPE_nominal: {
@@ -2084,6 +2202,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			return coerce(e, "Int#box", "Int#unbox");
 		case WyilFile.TYPE_record:
 			return coerce(e, "Record#box", "Record#unbox");
+		case WyilFile.TYPE_reference:
+			return coerce(e, "Ref#box", "Ref#unbox");
 		case WyilFile.TYPE_array:
 			return coerce(e, "Array#box", "Array#unbox");
 		case WyilFile.TYPE_nominal: {

@@ -170,6 +170,18 @@ public class BoogieFilePrinter {
 			writeExpression(ensures.get(i));
 			out.println(";");
 		}
+		List<String> modifies = d.getModifies();
+		if(modifies.size() > 0) {
+			out.print("modifies ");
+			for(int i=0;i!=modifies.size();++i) {
+				if(i != 0) {
+					out.print(", ");
+				}
+				out.print(modifies.get(i));
+			}
+			out.println(";");
+		}
+
 		tab(indent);
 		if(d.getBody() != null) {
 			out.println("{");
@@ -276,6 +288,10 @@ public class BoogieFilePrinter {
 	private void writeCall(int indent, Stmt.Call s) {
 		tab(indent);
 		out.print("call ");
+		if(s.getLeftHandSide() != null) {
+			writeExpression(s.getLeftHandSide());
+			out.print(" := ");
+		}
 		out.print(s.getName());
 		out.print("(");
 		boolean firstTime = true;
@@ -466,6 +482,11 @@ public class BoogieFilePrinter {
 		case NOT:
 			out.print("!");
 			writeExpressionWithBraces(e.getOperand());
+			break;
+		case OLD:
+			out.print("old(");
+			writeExpression(e.getOperand());
+			out.print(")");
 			break;
 		default:
 			throw new IllegalArgumentException("unknown unary operator encountered (" + e.getClass().getName() + ")");
