@@ -1857,16 +1857,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * @return
 	 */
 	private Expr constructNominalTypeConstraint(WyilFile.Type.Nominal type, Expr expr) {
-		WyilFile.Decl.Type decl = type.getLink().getTarget();
-		if (decl.getInvariant().size() == 0) {
-			// No constraints implied for this type.
-			return null;
-		} else {
-			// Construct appropriate name mangle
-			String name = toMangledName(type.getLink().getTarget());
-			// Ensure argument is boxed
-			return INVOKE(name + "#is", expr);
-		}
+		// Construct appropriate name mangle
+		String name = toMangledName(type.getLink().getTarget());
+		// Ensure argument is boxed
+		return INVOKE(name + "#is", expr);
 	}
 
 	/**
@@ -1981,15 +1975,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 */
 	private Expr constructUnionTypeConstraint(WyilFile.Type.Union type, Expr expr) {
 		// First, check whether any constraints actually exist.
-		for(int i=0;i!=type.size();++i) {
-			Expr c = constructTypeConstraint(type.get(i), expr);
-			if(c != null) {
-				// Yes. at least one type constraint exists.
-				return constructUnionTypeTest(type, type, expr);
-			}
-		}
-		// No type constraints exist, hence return nothing.
-		return null;
+		return constructUnionTypeTest(type, WyilFile.Type.Any, expr);
 	}
 
 	private Expr constructCallableTypeConstraint(WyilFile.Type.Callable type, Expr expr) {
