@@ -29,9 +29,10 @@ import wyil.lang.WyilFile;
 
 public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 	/**
-	 * Handle for the boogie verifier
+	 * Handle for the boogie verifier, making sure to enable the array theory (as
+	 * this really helps!)
 	 */
-	private final Boogie verifier = new Boogie();
+	private final Boogie verifier = new Boogie().setArrayTheory();
 	/**
 	 * Specify whether to print verbose progress messages or not
 	 */

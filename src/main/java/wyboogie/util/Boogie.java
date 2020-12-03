@@ -72,6 +72,14 @@ public class Boogie {
 	}
 
 	/**
+	 * Enable the built-in array theory.
+	 */
+	public Boogie setArrayTheory() {
+		options.put("useArrayTheory", null);
+		return this;
+	}
+
+	/**
 	 * Check a given filename
 	 *
 	 * @param timeout (in milli seconds)

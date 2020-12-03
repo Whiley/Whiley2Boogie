@@ -412,12 +412,24 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Stmt constructAssert(WyilFile.Stmt.Assert stmt, Expr condition, List<Expr> preconditions) {
-		return applyPreconditions(preconditions, new Stmt.Assert(condition));
+		ArrayList<Stmt> stmts = new ArrayList<>();
+		// Add all preconditions arising.
+		stmts.addAll(constructAssertions(preconditions));
+		// Apply any heap allocations arising.
+		stmts.addAll(constructAllocations(stmt.getCondition()));
+		//
+		stmts.add(new Stmt.Assert(condition));
+		// DONE
+		return SEQUENCE(stmts);
 	}
 
 	@Override
 	public Stmt constructAssign(WyilFile.Stmt.Assign stmt, List<Expr> _, List<Expr> rhs, List<Expr> preconditions) {
 		ArrayList<Stmt> stmts = new ArrayList<>();
+		// Add all preconditions arising.
+		stmts.addAll(constructAssertions(preconditions));
+		// Apply any heap allocations arising.
+		stmts.addAll(constructAllocations(stmt.getRightHandSide()));
 		// First, flatten left-hand side
 		List<WyilFile.LVal> lvals = flatternAssignmentLeftHandSide(stmt.getLeftHandSide());
 		// Second, flatten right-hand side
@@ -610,7 +622,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Stmt constructAssume(WyilFile.Stmt.Assume stmt, Expr condition, List<Expr> preconditions) {
-		return applyPreconditions(preconditions, new Stmt.Assume(condition));
+		ArrayList<Stmt> stmts = new ArrayList<>();
+		// Add all preconditions arising.
+		stmts.addAll(constructAssertions(preconditions));
+		// Apply any heap allocations arising.
+		stmts.addAll(constructAllocations(stmt.getCondition()));
+		//
+		stmts.add(new Stmt.Assume(condition));
+		// Done
+		return SEQUENCE(stmts);
 	}
 
 	@Override
@@ -632,7 +652,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Stmt constructDebug(WyilFile.Stmt.Debug stmt, Expr operand, List<Expr> preconditions) {
-		return applyPreconditions(preconditions, new Stmt.Assert(CONST(true)));
+		ArrayList<Stmt> stmts = new ArrayList<>();
+		// Add all preconditions arising.
+		stmts.addAll(constructAssertions(preconditions));
+		// Apply any heap allocations arising.
+		stmts.addAll(constructAllocations(stmt.getOperand()));
+		//
+		stmts.add(new Stmt.Assert(CONST(true)));
+		return SEQUENCE(stmts);
 	}
 
 	@Override
@@ -654,25 +681,39 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Determine name of loop variable
 		String name = stmt.getVariable().getName().get();
 		Expr.VariableAccess var = new Expr.VariableAccess(name);
+		ArrayList<Stmt> stmts = new ArrayList<>();
+		// Add all preconditions arising.
+		stmts.addAll(constructAssertions(preconditions));
+		// Apply any heap allocations arising.
+		stmts.addAll(constructAllocations(stmt.getVariable().getInitialiser()));
 		// Extract loop contents so it can be appended later
 		ArrayList<Stmt> loopBody = new ArrayList<>();
 		loopBody.add(body);
 		// Initialise index variable with first value from range
-		Stmt.Assignment init = new Stmt.Assignment(var, range.first());
+		stmts.add(new Stmt.Assignment(var, range.first()));
 		Expr condition = LT(var, range.second());
 		// Add variable increment for completeness
 		loopBody.add(new Stmt.Assignment(var, ADD(var, CONST(1))));
 		// Construct the loop
-		Stmt.While loop = new Stmt.While(condition, invariant, SEQUENCE(loopBody));
-		// FIXME: handle preconditions
+		stmts.add(new Stmt.While(condition, invariant, SEQUENCE(loopBody)));
+		// FIXME: handle preconditions and allocations arising from conditions /
+		// invariant at end of loop.
 		// Done.
-		return SEQUENCE(init, loop);
+		return SEQUENCE(stmts);
 	}
 
 	@Override
 	public Stmt constructIfElse(WyilFile.Stmt.IfElse stmt, Expr condition, Stmt trueBranch, Stmt falseBranch,
 			List<Expr> preconditions) {
-		return applyPreconditions(preconditions, new Stmt.IfElse(condition, trueBranch, falseBranch));
+		ArrayList<Stmt> stmts = new ArrayList<>();
+		// Add all preconditions arising.
+		stmts.addAll(constructAssertions(preconditions));
+		// Apply any heap allocations arising.
+		stmts.addAll(constructAllocations(stmt.getCondition()));
+		// Add statement!
+		stmts.add(new Stmt.IfElse(condition, trueBranch, falseBranch));
+		// Done
+		return SEQUENCE(stmts);
 	}
 
 	@Override
@@ -683,7 +724,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			return SEQUENCE();
 		} else {
 			ArrayList<Stmt> stmts = new ArrayList<>();
-			// Apply any heap allocations
+			// Add all preconditions arising.
+			stmts.addAll(constructAssertions(preconditions));
+			// Apply any heap allocations arising.
 			stmts.addAll(constructAllocations(stmt.getInitialiser()));
 			// Extract list of initialiser expressions
 			List<Expr> inits = (init instanceof FauxTuple) ? ((FauxTuple) init).getItems() : Arrays.asList(init);
@@ -696,7 +739,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 				stmts.add(ASSIGN(new Expr.VariableAccess(name), cast(ith.getType(), initT.dimension(i), inits.get(i))));
 			}
 			// FIXME: need post condition!
-			return applyPreconditions(preconditions, SEQUENCE(stmts));
+			return SEQUENCE(stmts);
 		}
 	}
 
@@ -731,6 +774,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			List<Expr> rvs = returns.size() == 1 ? Arrays.asList(ret) : ((FauxTuple) ret).getItems();
 			// Construct return value assignments
 			ArrayList<Stmt> stmts = new ArrayList<>();
+			// Add all preconditions arising.
+			stmts.addAll(constructAssertions(preconditions));
+			// Apply any heap allocations arising.
+			stmts.addAll(constructAllocations(stmt.getReturn()));
+			//
 			for (int i = 0; i != rvs.size(); ++i) {
 				WyilFile.Decl.Variable ith = returns.get(i);
 				String rv = ith.getName().get();
@@ -742,7 +790,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			// Add the actual return statement
 			stmts.add(new Stmt.Return());
 			// Done
-			return applyPreconditions(preconditions, SEQUENCE(stmts));
+			return SEQUENCE(stmts);
 		} else {
 			return new Stmt.Return();
 		}
@@ -757,6 +805,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	public Stmt constructSwitch(WyilFile.Stmt.Switch stmt, Expr condition, List<Pair<List<Expr>, Stmt>> cases,
 			List<Expr> preconditions) {
 		ArrayList<Stmt> stmts = new ArrayList<>();
+		// Add all preconditions arising.
+		stmts.addAll(constructAssertions(preconditions));
+		// Apply any heap allocations arising.
+		stmts.addAll(constructAllocations(stmt.getCondition()));
+		//
 		String breakLabel = "SWITCH_" + stmt.getIndex() + "_BREAK";
 		String defaultLabel = "SWITCH_" + stmt.getIndex() + "_DEFAULT";
 		Stmt defaultCase = null;
@@ -801,7 +854,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Add final break label
 		stmts.add(new Stmt.Label(breakLabel));
 		// Done
-		return applyPreconditions(preconditions, SEQUENCE(stmts));
+		return SEQUENCE(stmts);
 	}
 
 	@Override
@@ -809,31 +862,22 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			List<Expr> preconditions) {
 		boolean needContinueLabel = containsContinueOrBreak(stmt, false);
 		boolean needBreakLabel = containsContinueOrBreak(stmt, true);
-		Stmt.While s = new Stmt.While(condition, invariant, body);
-		// FIXME: handle preconditions
-		// Handle need for continue / break
-		if (needContinueLabel && needBreakLabel) {
-			Stmt.Label continueLabel = new Stmt.Label("CONTINUE_" + stmt.getIndex());
-			Stmt.Label breakLabel = new Stmt.Label("BREAK_" + stmt.getIndex());
-			return SEQUENCE(continueLabel, s, breakLabel);
-		} else if (needContinueLabel) {
-			Stmt.Label continueLabel = new Stmt.Label("CONTINUE_" + stmt.getIndex());
-			return SEQUENCE(continueLabel, s);
-		} else if (needBreakLabel) {
-			Stmt.Label breakLabel = new Stmt.Label("BREAK_" + stmt.getIndex());
-			return SEQUENCE(s, breakLabel);
-		} else {
-			return s;
+		ArrayList<Stmt> stmts = new ArrayList<>();
+		// Add all preconditions arising.
+		stmts.addAll(constructAssertions(preconditions));
+		// Apply any heap allocations arising.
+		stmts.addAll(constructAllocations(stmt.getCondition()));
+		// Add continue label (if necessary)
+		if (needContinueLabel) {
+			stmts.add(new Stmt.Label("CONTINUE_" + stmt.getIndex()));
 		}
-	}
-
-	public Stmt applyPreconditions(List<Expr> preconditions, Stmt stmt) {
-		if (preconditions.isEmpty()) {
-			return stmt;
-		} else {
-			List<Stmt> assertions = constructAssertions(preconditions);
-			return SEQUENCE(assertions, stmt);
+		// FIXME: Handle preconditions and allocations arising from condition at the end of the loop body.
+		stmts.add(new Stmt.While(condition, invariant, body));
+		// Add break label (if necessary)
+		if (needBreakLabel) {
+			stmts.add(new Stmt.Label("BREAK_" + stmt.getIndex()));
 		}
+		return SEQUENCE(stmts);
 	}
 
 	public List<Stmt> constructAssertions(List<Expr> exprs) {
@@ -896,6 +940,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		return allocations;
 	}
 
+	private List<Stmt> constructAllocations(Tuple<WyilFile.Expr> expr) {
+		ArrayList<Stmt> stmts = new ArrayList<>();
+		for(int i=0;i!=expr.size();++i) {
+			stmts.addAll(constructAllocations(expr.get(i)));
+		}
+		return stmts;
+	}
 
 	@Override
 	public Expr constructArrayAccessLVal(WyilFile.Expr.ArrayAccess expr, Expr source, Expr index) {
@@ -1605,7 +1656,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * consider the following:
 	 *
 	 * <pre>
-	 * function f(int|null x) -> (int r):
+	 * func)tion f(int|null x) -> (int r):
 	 *   if x is null:
 	 *      return 0
 	 *   else:
@@ -1755,7 +1806,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	private Expr constructReferenceTypeTest(WyilFile.Type.Reference to, WyilFile.Type from, Expr argument) {
 		// Cast argument to (unboxed) reference type
-		System.out.println("CASTING: " + to + " <= " + from);
 		argument = cast(to, from, argument);
 		// Dereference argument
 		Expr deref = GET(VAR("#HEAP"),argument);
@@ -1840,8 +1890,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(FUNCTION("Bool#unbox", VALUE, Type.Bool));
 		decls.add(FUNCTION("Bool#is", new Decl.Parameter("v", VALUE), Type.Bool,
 				EXISTS("b", Type.Bool, EQ(INVOKE("Bool#box", VAR("b")), VAR("v")))));
-		// Establish connection between toInt and fromInt
-		decls.add(new Decl.Axiom(FORALL("i", Type.Bool, EQ(INVOKE("Bool#unbox", INVOKE("Bool#box", VAR("i"))), VAR("i")))));
+		// Establish connection between box and unbox
+		decls.add(new Decl.Axiom(FORALL("b", Type.Bool, EQ(INVOKE("Bool#unbox", INVOKE("Bool#box", VAR("b"))), VAR("b")))));
+		// Establish no connection between bools and Void
+		decls.add(new Decl.Axiom(FORALL("b", Type.Bool, NEQ(INVOKE("Bool#box", VAR("b")), VAR("Void")))));
 		// Done
 		return decls;
 	}
@@ -1853,15 +1905,19 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * @return
 	 */
 	private List<Decl> constructIntAxioms(WyilFile wf) {
-		Decl header = new Decl.LineComment("Integers");
-		Decl.Function fromInt = FUNCTION("Int#box", Type.Int, VALUE);
-		Decl.Function toInt = FUNCTION("Int#unbox", VALUE, Type.Int);
-		Decl.Function isInt = FUNCTION("Int#is", new Decl.Parameter("v", VALUE), Type.Bool,
-				EXISTS("i", Type.Int, EQ(INVOKE("Int#box", VAR("i")), VAR("v"))));
-		// Establish connection between toInt and fromInt
-		Decl.Axiom axiom1 = new Decl.Axiom(
-				FORALL("i", Type.Int, EQ(INVOKE("Int#unbox", INVOKE("Int#box", VAR("i"))), VAR("i"))));
-		return Arrays.asList(header, fromInt, toInt, isInt, axiom1);
+		ArrayList<Decl> decls = new ArrayList<>();
+		decls.add(new Decl.LineComment("Integers"));
+		decls.add(FUNCTION("Int#box", Type.Int, VALUE));
+		decls.add(FUNCTION("Int#unbox", VALUE, Type.Int));
+		decls.add(FUNCTION("Int#is", new Decl.Parameter("v", VALUE), Type.Bool,
+				EXISTS("i", Type.Int, EQ(INVOKE("Int#box", VAR("i")), VAR("v")))));
+		// Establish connection between box and unbox
+		decls.add(new Decl.Axiom(
+				FORALL("i", Type.Int, EQ(INVOKE("Int#unbox", INVOKE("Int#box", VAR("i"))), VAR("i")))));
+		// Establish no connection between ints and Void
+		decls.add(new Decl.Axiom(FORALL("i", Type.Int, NEQ(INVOKE("Int#box", VAR("i")), VAR("Void")))));
+		// Done
+		return decls;
 	}
 
 	/**
@@ -1886,9 +1942,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(FUNCTION("Byte#Xor", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin", "\"bvxor\""));
 		decls.add(FUNCTION("Byte#Shl", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin", "\"bvshl\""));
 		decls.add(FUNCTION("Byte#Shr", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin", "\"bvlshr\""));
-		// Establish connection between toByte and fromByte
+		// Establish connection between tbox and unbox
 		decls.add(new Decl.Axiom(
 				FORALL("b", Type.BitVector8, EQ(INVOKE("Byte#unbox", INVOKE("Byte#box", VAR("b"))), VAR("b")))));
+		// Establish no connection between bytes and Void
+		decls.add(new Decl.Axiom(FORALL("b", Type.BitVector8, NEQ(INVOKE("Byte#box", VAR("b")), VAR("Void")))));
 		// Done
 		return decls;
 	}
@@ -1905,8 +1963,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(new Decl.LineComment("Arrays"));
 		decls.add(FUNCTION("Array#box", INTMAP, VALUE));
 		decls.add(FUNCTION("Array#unbox", VALUE, INTMAP));
-		// Establish connection between toInt and fromInt
+		// Establish connection between tbox and unbox
 		decls.add(new Decl.Axiom(FORALL("i", INTMAP, EQ(INVOKE("Array#unbox", INVOKE("Array#box", VAR("i"))), VAR("i")))));
+		// Establish no connection between arrays and Void
+		decls.add(new Decl.Axiom(FORALL("a", INTMAP, NEQ(INVOKE("Array#box", VAR("a")), VAR("Void")))));
+		// Establish array equality (unsure why this is needed though)
+//		decls.add(new Decl.Axiom(FORALL("x", INTMAP, "y", INTMAP, "i", Type.Int,
+//				IMPLIES(EQ(GET(VAR("x"), VAR("i")), GET(VAR("y"), VAR("i"))), EQ(VAR("x"), VAR("y"))))));
 		// Array length function
 		decls.add(FUNCTION("Array#Length", INTMAP, Type.Int));
 		// Enforce array length is non-negative
@@ -1959,9 +2022,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(new Decl.LineComment("Records"));
 		decls.add(FUNCTION("Record#box", FIELDMAP, VALUE));
 		decls.add(FUNCTION("Record#unbox", VALUE, FIELDMAP));
-		// Establish connection between toInt and fromInt
+		// Establish connection between box and unbox
 		decls.add(new Decl.Axiom(
 				FORALL("i", FIELDMAP, EQ(INVOKE("Record#unbox", INVOKE("Record#box", VAR("i"))), VAR("i")))));
+		// Establish no connection between records and Void
+		decls.add(new Decl.Axiom(FORALL("r", FIELDMAP, NEQ(INVOKE("Record#box", VAR("r")), VAR("Void")))));
 		// Defines the empty record (i.e. the base from which all other records are
 		// constructed).
 		decls.add(new Decl.Constant(true, "Record#Empty", FIELDMAP));
@@ -1983,6 +2048,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(new Decl.Variable("#HEAP", REFMAP));
 		decls.add(FUNCTION("Ref#box", REF, VALUE));
 		decls.add(FUNCTION("Ref#unbox", VALUE, REF));
+		// Establish connection between box and unbox
+		decls.add(new Decl.Axiom(
+				FORALL("r", REF, EQ(INVOKE("Ref#unbox", INVOKE("Ref#box", VAR("r"))), VAR("r")))));
+		// Establish no connection between references and Void
+		decls.add(new Decl.Axiom(FORALL("r", REF, NEQ(INVOKE("Ref#box", VAR("r")), VAR("Void")))));
 		// Construct the allocation procedure
 		Expr heap = VAR("#HEAP");
 		Expr.VariableAccess val = VAR("val");
