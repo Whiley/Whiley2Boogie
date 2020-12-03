@@ -24,10 +24,10 @@ import static wyboogie.core.BoogieFile.*;
 
 import wyboogie.core.BoogieFile;
 import wyboogie.core.BoogieFile.Decl;
-import wyboogie.core.BoogieFile.Decl.Parameter;
+import wyboogie.core.BoogieFile.Decl;
 import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.Stmt;
-import wyboogie.core.BoogieFile.Expr.DictionaryUpdate;
+import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.LVal;
 import wyboogie.util.AbstractTranslator;
 import wybs.lang.Build.Meter;
@@ -1300,12 +1300,28 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	@Override
 	public Expr constructIndirectInvoke(WyilFile.Expr.IndirectInvoke expr, Expr source, List<Expr> arguments) {
 		WyilFile.Type.Callable type = expr.getSource().getType().as(WyilFile.Type.Callable.class);
+		boolean isMethod = (type instanceof WyilFile.Type.Method);
+		String base = isMethod ? "m_apply$" : "f_apply$";
+		WyilFile.Type ret = type.getReturn();
 		ArrayList<Expr> args = new ArrayList<>();
+		args.add(CONST(1));
+		if(isMethod) {
+			args.add(VAR("#HEAP"));
+		}
 		args.add(source);
 		// Box all arguments as this is strictly required
 		args.addAll(box(type.getParameter(),arguments));
 		// Unbox return since it's always boxed
-		return unbox(expr.getType(), INVOKE("apply#" + arguments.size(), args));
+		if (ret.shape() == 1) {
+			return unbox(expr.getType(), INVOKE(base + arguments.size(), args));
+		} else {
+			List<Expr> items = new ArrayList<>();
+			for (int i = 0; i != ret.shape(); ++i) {
+				args.set(0, CONST(i + 1));
+				items.add(unbox(ret.dimension(i), INVOKE(base + arguments.size(), args)));
+			}
+			return new FauxTuple(items);
+		}
 	}
 
 	@Override
@@ -1774,14 +1790,27 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 				FORALL("l", LAMBDA, EQ(INVOKE("Lambda#unbox", INVOKE("Lambda#box", VAR("l"))), VAR("l")))));
 		// Establish no connection between lambdas and Void
 		decls.add(new Decl.Axiom(FORALL("l", LAMBDA, NEQ(INVOKE("Lambda#box", VAR("l")), VAR("Void")))));
-		// Add apply functions
-		for (int i = 0; i != 5; ++i) {
+		// Add f_apply functions
+		for (int p = 0; p != 5; ++p) {
 			List<Decl.Parameter> params = new ArrayList<>();
+			params.add(new Decl.Parameter(null, Type.Int));
 			params.add(new Decl.Parameter(null, LAMBDA));
-			for (int j = 0; j < i; ++j) {
+			for (int i = 0; i < p; ++i) {
 				params.add(new Decl.Parameter(null, ANY));
 			}
-			decls.add(FUNCTION("apply#" + i, params, ANY));
+			decls.add(FUNCTION("f_apply$" + p, params, ANY));
+		}
+		// Add m_apply functions
+		for (int p = 0; p != 5; ++p) {
+			List<Decl.Parameter> params = new ArrayList<>();
+			params.add(new Decl.Parameter(null, Type.Int));
+			params.add(new Decl.Parameter(null, REFMAP));
+			params.add(new Decl.Parameter(null, LAMBDA));
+			for (int i = 0; i < p; ++i) {
+				params.add(new Decl.Parameter(null, ANY));
+			}
+			// Add heap for method invocations
+			decls.add(FUNCTION("m_apply$" + p, params, ANY));
 		}
 		// done
 		return decls;
