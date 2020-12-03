@@ -539,7 +539,7 @@ public class BoogieFilePrinter {
 			out.print(" div ");
 			break;
 		case REM:
-			out.print(" % ");
+			out.print(" mod ");
 			break;
 		default:
 			throw new IllegalArgumentException("unknown binary operator kind encountered (" + k + ")");
