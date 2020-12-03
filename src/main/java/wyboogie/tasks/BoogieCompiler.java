@@ -24,6 +24,7 @@ import static wyboogie.core.BoogieFile.*;
 
 import wyboogie.core.BoogieFile;
 import wyboogie.core.BoogieFile.Decl;
+import wyboogie.core.BoogieFile.Decl.Parameter;
 import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.Stmt;
 import wyboogie.core.BoogieFile.Expr.DictionaryUpdate;
@@ -165,7 +166,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(FUNCTION(name + "#post", specParametersAndReturns, Type.Bool, AND(postcondition)));
 		// Construct prototype which can be called from expressions.
 		if (returns.isEmpty()) {
-			decls.add(FUNCTION(name, parameters, VALUE));
+			decls.add(FUNCTION(name, parameters, ANY));
 		} else if (returns.size() == 1) {
 			Type returnType = returns.get(0).getType();
 			decls.add(FUNCTION(name, protoParameters, returnType));
@@ -190,6 +191,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			// Construct axiom linking post-condition with prototype.
 			decls.add(constructPostconditionAxiom(d, name, parameters, returns));
 		}
+		// Add the "lambda" value
+		decls.add(new Decl.Constant(true, name + "#lambda", LAMBDA));
 		// Done
 		return new Decl.Sequence(decls);
 	}
@@ -767,7 +770,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	@Override
 	public Stmt constructIndirectInvokeStmt(WyilFile.Expr.IndirectInvoke expr, Expr source, List<Expr> arguments,
 			List<Expr> preconditions) {
-		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
 
@@ -1297,14 +1299,22 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructIndirectInvoke(WyilFile.Expr.IndirectInvoke expr, Expr source, List<Expr> arguments) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		WyilFile.Type.Callable type = expr.getSource().getType().as(WyilFile.Type.Callable.class);
+		ArrayList<Expr> args = new ArrayList<>();
+		args.add(source);
+		// Box all arguments as this is strictly required
+		args.addAll(box(type.getParameter(),arguments));
+		// Unbox return since it's always boxed
+		return unbox(expr.getType(), INVOKE("apply#" + arguments.size(), args));
 	}
 
 	@Override
 	public Expr constructLambdaAccess(WyilFile.Expr.LambdaAccess expr) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		WyilFile.Decl.Callable c = expr.getLink().getTarget();
+		// Determine the mangled name for the function in question
+		String name = toMangledName(c);
+		// Read out its "lambda" value
+		return VAR(name + "#lambda");
 	}
 
 	@Override
@@ -1414,11 +1424,62 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	// =========================================================================================
-	// Types
+	// Type Conversion
 	// =========================================================================================
 
-	public Type constructType(WyilFile.Type type) {
-		// FIXME: this should be moved into AbstractTranslator.
+	/**
+	 * The top-level (boxed) type representing all possible values in Whiley.
+	 */
+	public static final Type ANY = new Type.Synonym("Any");
+	/**
+	 * The type of all record fields used in the Whiley program.
+	 */
+	public static final Type FIELD = new Type.Synonym("Field");
+	/**
+	 * A user-defined type which used to represent Whiley reference values.
+	 */
+	public static final Type REF = new Type.Synonym("Ref");
+	/**
+	 * A user-defined type which used to represent Whiley lambda's (i.e. function
+	 * pointers, etc).
+	 */
+	public static final Type LAMBDA = new Type.Synonym("Lambda");
+	/**
+	 * A dictionary mapping integers to arbitrary boxed values. This is used to
+	 * represent Whiley arrays. Since it holds boxed values, we must always box any
+	 * value written into an array and unbox anything read out of it.
+	 */
+	public static final Type INTMAP = new Type.Dictionary(Type.Int, ANY);
+	/**
+	 * A dictionary mapping fields to arbitrary boxed values. This is used to
+	 * represent Whiley records. Since it holds boxed values, we must always box any
+	 * value written into an record and unbox anything read out of it.
+	 */
+	public static final Type FIELDMAP = new Type.Dictionary(FIELD, ANY);
+	/**
+	 * A dictionary mapping references to arbitrary boxed values. This is used to
+	 * represent the Whiley heap. Reference values index into this to give the
+	 * values held at location they refer. Unallocated cells must have the value
+	 * <code>Void</code> to indicate they are indeed unallocated.
+	 */
+	public static final Type REFMAP = new Type.Dictionary(REF, ANY);
+
+	/**
+	 * Convert a Whiley type into a Boogie type. The goal is maintain a close
+	 * relationship between Whiley types and Boogie types where possible. For
+	 * example, the Whiley <code>int</code> type is represented directly as the
+	 * Boogie type <code>int</code>, and likewise for <code>bool</code>. However,
+	 * some Whiley types have no correspondence in Boogie. For example, the Whiley
+	 * type <code>int|null</code> has no equivalent in Boogie and, instead, we
+	 * employ the <code>Value</code> type. Likewise, Whiley references have no
+	 * correspondance in Boogie, and we employ a user-defined type <code>Ref</code>
+	 * for this purpose.
+	 *
+	 * @param type
+	 * @return
+	 */
+	private Type constructType(WyilFile.Type type) {
+		// NOTE: this could be moved into AbstractTranslator?
 		switch (type.getOpcode()) {
 		case WyilFile.TYPE_bool:
 			return Type.Bool;
@@ -1429,35 +1490,27 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		case WyilFile.TYPE_reference:
 			return REF;
 		case WyilFile.TYPE_universal:
-			return VALUE;
+			return ANY;
 		case WyilFile.TYPE_nominal:
 			return constructNominalType((WyilFile.Type.Nominal) type);
 		case WyilFile.TYPE_array:
-			return constructArrayType((WyilFile.Type.Array) type);
+			// NOTE: could actually do better here? In principle, yes, but it would require
+			// generating axioms that could accept different types for arrays.
+			return INTMAP;
 		case WyilFile.TYPE_record:
-			return constructRecordType((WyilFile.Type.Record) type);
+			return FIELDMAP;
 		case WyilFile.TYPE_union:
-			return constructUnionType((WyilFile.Type.Union) type);
+			return ANY;
+		case WyilFile.TYPE_property:
+		case WyilFile.TYPE_function:
+		case WyilFile.TYPE_method:
+			return LAMBDA;
 		default:
 			throw new IllegalArgumentException("unknown type encoutnered (" + type.getClass().getName() + ")");
 		}
 	}
 
-	public Type constructArrayType(WyilFile.Type.Array type) {
-		// NOTE: could actually do better here? In principle, yes, but it would require
-		// generating axioms that could accept different types for arrays.
-		return INTMAP;
-	}
-
-	public Type constructRecordType(WyilFile.Type.Record type) {
-		return FIELDMAP;
-	}
-
-	public Type constructUnionType(WyilFile.Type.Union type) {
-		return VALUE;
-	}
-
-	public Type constructNominalType(WyilFile.Type.Nominal type) {
+	private Type constructNominalType(WyilFile.Type.Nominal type) {
 		// Apply name mangling
 		String name = toMangledName(type.getLink().getTarget());
 		// Done!
@@ -1469,6 +1522,274 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// TODO Auto-generated method stub
 		throw new UnsupportedOperationException("implement me");
 	}
+
+
+	// ==============================================================================
+	// Axioms
+	// ==============================================================================
+
+	/**
+	 * Generate declarations for all axioms used within the Boogie translation.
+	 *
+	 * @return
+	 */
+	private List<Decl> constructAxioms(WyilFile wf) {
+		ArrayList<Decl> axioms = new ArrayList<>();
+		//
+		axioms.add(new Decl.LineComment("=== Begin Preamble ==="));
+		// Define the top-level Whiley value which contains all others.
+		axioms.add(new Decl.TypeSynonym("Any", null));
+		// Define the top-level Whiley type which contains all others.
+		axioms.add(new Decl.TypeSynonym("Type", null));
+		// Add void constant
+		axioms.add(new Decl.Constant(true, "Void", ANY));
+		// Add null constant
+		axioms.add(new Decl.Constant(true, "null", ANY));
+		// Add all bool axioms
+		axioms.addAll(constructBoolAxioms(wf));
+		// Add all byte axioms
+		axioms.addAll(constructByteAxioms(wf));
+		// Add all int axioms
+		axioms.addAll(constructIntAxioms(wf));
+		// Add all array axioms
+		axioms.addAll(constructArrayAxioms(wf));
+		// Add all record axioms
+		axioms.addAll(constructRecordAxioms(wf));
+		// Add all array axioms
+		axioms.addAll(constructReferenceAxioms(wf));
+		// Add all array axioms
+		axioms.addAll(constructLambdaAxioms(wf));
+		//
+		axioms.add(new Decl.LineComment("=== End Preamble ==="));
+		// Done
+		return axioms;
+	}
+
+	/**
+	 * Construct axioms and functions relevant to integer types.
+	 *
+	 * @param wf
+	 * @return
+	 */
+	private List<Decl> constructBoolAxioms(WyilFile wf) {
+		ArrayList<Decl> decls = new ArrayList<>();
+		decls.add(new Decl.LineComment("Booleans"));
+		decls.add(FUNCTION("Bool#box", Type.Bool, ANY));
+		decls.add(FUNCTION("Bool#unbox", ANY, Type.Bool));
+		decls.add(FUNCTION("Bool#is", new Decl.Parameter("v", ANY), Type.Bool,
+				EXISTS("b", Type.Bool, EQ(INVOKE("Bool#box", VAR("b")), VAR("v")))));
+		// Establish connection between box and unbox
+		decls.add(new Decl.Axiom(FORALL("b", Type.Bool, EQ(INVOKE("Bool#unbox", INVOKE("Bool#box", VAR("b"))), VAR("b")))));
+		// Establish no connection between bools and Void
+		decls.add(new Decl.Axiom(FORALL("b", Type.Bool, NEQ(INVOKE("Bool#box", VAR("b")), VAR("Void")))));
+		// Done
+		return decls;
+	}
+
+	/**
+	 * Construct axioms and functions relevant to integer types.
+	 *
+	 * @param wf
+	 * @return
+	 */
+	private List<Decl> constructIntAxioms(WyilFile wf) {
+		ArrayList<Decl> decls = new ArrayList<>();
+		decls.add(new Decl.LineComment("Integers"));
+		decls.add(FUNCTION("Int#box", Type.Int, ANY));
+		decls.add(FUNCTION("Int#unbox", ANY, Type.Int));
+		decls.add(FUNCTION("Int#is", new Decl.Parameter("v", ANY), Type.Bool,
+				EXISTS("i", Type.Int, EQ(INVOKE("Int#box", VAR("i")), VAR("v")))));
+		// Establish connection between box and unbox
+		decls.add(new Decl.Axiom(
+				FORALL("i", Type.Int, EQ(INVOKE("Int#unbox", INVOKE("Int#box", VAR("i"))), VAR("i")))));
+		// Establish no connection between ints and Void
+		decls.add(new Decl.Axiom(FORALL("i", Type.Int, NEQ(INVOKE("Int#box", VAR("i")), VAR("Void")))));
+		// Done
+		return decls;
+	}
+
+	/**
+	 * Construct axioms and functions relevant to byte types.
+	 *
+	 * @param wf
+	 * @return
+	 */
+	private List<Decl> constructByteAxioms(WyilFile wf) {
+		ArrayList<Decl> decls = new ArrayList<>();
+		decls.add(new Decl.LineComment("Bytes"));
+		decls.add(FUNCTION("Byte#box", Type.BitVector8, ANY));
+		decls.add(FUNCTION("Byte#unbox", ANY, Type.BitVector8));
+		decls.add(FUNCTION("Byte#toInt", Type.BitVector8, Type.Int, ":bvbuiltin", "\"bv2int\""));
+		decls.add(FUNCTION("Byte#is", new Decl.Parameter("v", ANY), Type.Bool,
+				EXISTS("b", Type.BitVector8, EQ(INVOKE("Byte#box", VAR("b")), VAR("v")))));
+		// NOTE: figuring out int2bv was a challenge!
+		decls.add(FUNCTION("Byte#fromInt", Type.Int, Type.BitVector8, ":bvbuiltin", "\"(_ int2bv 8)\""));
+		decls.add(FUNCTION("Byte#Not", Type.BitVector8, Type.BitVector8, ":bvbuiltin", "\"bvnot\""));
+		decls.add(FUNCTION("Byte#And", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin", "\"bvand\""));
+		decls.add(FUNCTION("Byte#Or", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin", "\"bvor\""));
+		decls.add(FUNCTION("Byte#Xor", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin", "\"bvxor\""));
+		decls.add(FUNCTION("Byte#Shl", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin", "\"bvshl\""));
+		decls.add(FUNCTION("Byte#Shr", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin", "\"bvlshr\""));
+		// Establish connection between tbox and unbox
+		decls.add(new Decl.Axiom(
+				FORALL("b", Type.BitVector8, EQ(INVOKE("Byte#unbox", INVOKE("Byte#box", VAR("b"))), VAR("b")))));
+		// Establish no connection between bytes and Void
+		decls.add(new Decl.Axiom(FORALL("b", Type.BitVector8, NEQ(INVOKE("Byte#box", VAR("b")), VAR("Void")))));
+		// Done
+		return decls;
+	}
+
+	/**
+	 * Construct axioms relevant to array types.
+	 *
+	 * @return
+	 */
+	private List<Decl> constructArrayAxioms(WyilFile wf) {
+		// NOTE: we could reduce the amount of boxing / unboxing necessary by generating
+		// custom array types for each different array type encountered.
+		ArrayList<Decl> decls = new ArrayList<>();
+		decls.add(new Decl.LineComment("Arrays"));
+		decls.add(FUNCTION("Array#box", INTMAP, ANY));
+		decls.add(FUNCTION("Array#unbox", ANY, INTMAP));
+		// Establish connection between tbox and unbox
+		decls.add(new Decl.Axiom(FORALL("i", INTMAP, EQ(INVOKE("Array#unbox", INVOKE("Array#box", VAR("i"))), VAR("i")))));
+		// Establish no connection between arrays and Void
+		decls.add(new Decl.Axiom(FORALL("a", INTMAP, NEQ(INVOKE("Array#box", VAR("a")), VAR("Void")))));
+		// Array length function
+		decls.add(FUNCTION("Array#Length", INTMAP, Type.Int));
+		// Enforce array length is non-negative
+		decls.add(new Decl.Axiom(FORALL("a", INTMAP, LTEQ(CONST(0), INVOKE("Array#Length", VAR("a"))))));
+		// Empty arrays
+		decls.add(FUNCTION("Array#Empty", Type.Int, INTMAP));
+		decls.add(FUNCTION("Array#Generator", ANY, Type.Int, INTMAP));
+		// Ensure that all elements outside array length are void
+		decls.add(new Decl.Axiom(
+				FORALL("l", Type.Int, "i", Type.Int, OR(AND(LTEQ(CONST(0), VAR("i")), LT(VAR("i"), VAR("l"))),
+						EQ(GET(INVOKE("Array#Empty", VAR("l")), VAR("i")), VAR("Void"))))));
+		// Relate empty array with its length
+		decls.add(new Decl.Axiom(FORALL("a", INTMAP, "l", Type.Int,
+				OR(NEQ(INVOKE("Array#Empty", VAR("l")), VAR("a")), EQ(INVOKE("Array#Length", VAR("a")), VAR("l"))))));
+		// Ensure that all elements inside generator length are void
+		decls.add(new Decl.Axiom(FORALL("v", ANY, "l", Type.Int, "i", Type.Int, OR(LT(VAR("i"), CONST(0)),
+				LTEQ(VAR("l"), VAR("i")), EQ(GET(INVOKE("Array#Generator", VAR("v"), VAR("l")), VAR("i")), VAR("v"))))));
+		// Ensure that all elements outside generator length are void
+		decls.add(new Decl.Axiom(FORALL("v", ANY, "l", Type.Int, "i", Type.Int,
+				OR(AND(LTEQ(CONST(0), VAR("i")), LT(VAR("i"), VAR("l"))),
+						EQ(GET(INVOKE("Array#Generator", VAR("v"), VAR("l")), VAR("i")), VAR("Void"))))));
+		// Relate array generator with its length
+		decls.add(new Decl.Axiom(FORALL("a", INTMAP, "v", ANY, "l", Type.Int,
+				OR(NEQ(INVOKE("Array#Generator", VAR("v"), VAR("l")), VAR("a")),
+						EQ(INVOKE("Array#Length", VAR("a")), VAR("l"))))));
+		// Relate updated array with its length
+		decls.add(new Decl.Axiom(FORALL("a", INTMAP, "i", Type.Int, "v", ANY,
+				EQ(INVOKE("Array#Length", VAR("a")), INVOKE("Array#Length", PUT(VAR("a"), VAR("i"), VAR("v")))))));
+		// Done
+		return decls;
+	}
+
+	/**
+	 * Construct axioms relevant to record types. An import issue is to determine
+	 * the full set of field names which are in play.
+	 *
+	 * @return
+	 */
+	private List<Decl> constructRecordAxioms(WyilFile wf) {
+		ArrayList<Decl> decls = new ArrayList<>();
+		decls.add(new Decl.LineComment("Fields"));
+		// Defines the type of all fields
+		decls.add(new Decl.TypeSynonym("Field", null));
+		// Add all known field names
+		for (String field : determineFieldNames(wf)) {
+			String name = "$" + field;
+			decls.add(new Decl.Constant(true, name, FIELD));
+		}
+		//
+		decls.add(new Decl.LineComment("Records"));
+		decls.add(FUNCTION("Record#box", FIELDMAP, ANY));
+		decls.add(FUNCTION("Record#unbox", ANY, FIELDMAP));
+		// Establish connection between box and unbox
+		decls.add(new Decl.Axiom(
+				FORALL("i", FIELDMAP, EQ(INVOKE("Record#unbox", INVOKE("Record#box", VAR("i"))), VAR("i")))));
+		// Establish no connection between records and Void
+		decls.add(new Decl.Axiom(FORALL("r", FIELDMAP, NEQ(INVOKE("Record#box", VAR("r")), VAR("Void")))));
+		// Defines the empty record (i.e. the base from which all other records are
+		// constructed).
+		decls.add(new Decl.Constant(true, "Record#Empty", FIELDMAP));
+		decls.add(new Decl.Axiom(FORALL("f", FIELD, EQ(GET(VAR("Record#Empty"), VAR("f")), VAR("Void")))));
+		// Done
+		return decls;
+	}
+
+	/**
+	 * Construct axioms and functions relevant to reference types.
+	 *
+	 * @param wf
+	 * @return
+	 */
+	private List<Decl> constructReferenceAxioms(WyilFile wf) {
+		ArrayList<Decl> decls = new ArrayList<>();
+		decls.add(new Decl.LineComment("References"));
+		decls.add(new Decl.TypeSynonym("Ref", null));
+		decls.add(new Decl.Variable("#HEAP", REFMAP));
+		decls.add(FUNCTION("Ref#box", REF, ANY));
+		decls.add(FUNCTION("Ref#unbox", ANY, REF));
+		// Establish connection between box and unbox
+		decls.add(new Decl.Axiom(
+				FORALL("r", REF, EQ(INVOKE("Ref#unbox", INVOKE("Ref#box", VAR("r"))), VAR("r")))));
+		// Establish no connection between references and Void
+		decls.add(new Decl.Axiom(FORALL("r", REF, NEQ(INVOKE("Ref#box", VAR("r")), VAR("Void")))));
+		// Construct the allocation procedure
+		Expr heap = VAR("#HEAP");
+		Expr.VariableAccess val = VAR("val");
+		Expr.VariableAccess ref = VAR("ref");
+		//
+		List<Decl.Parameter> parameters = Arrays.asList(new Decl.Parameter(val.getVariable(), ANY));
+		List<Decl.Parameter> returns =  Arrays.asList(new Decl.Parameter(ref.getVariable(), REF));
+		// FIXME: there are still some problems below related to the Void constant which
+		// is not necessarily disjoint with all integer constants, etc.
+		List<Expr> requires = new ArrayList<>();
+		List<Expr> ensures = new ArrayList<>();
+		// Heap location at ref equals val
+		ensures.add(EQ(GET(heap,ref),val));
+		// Heap location not previously allocated!
+		ensures.add(EQ(GET(OLD(heap),ref),VAR("Void")));
+		// All allocated locations remain as before
+		ensures.add(FORALL("r",REF,OR(EQ(ref,VAR("r")),EQ(GET(OLD(heap),VAR("r")),GET(heap,VAR("r"))))));
+		//
+		List<String> modifies = Arrays.asList("#HEAP");
+		//
+		decls.add(new Decl.Procedure("Ref#new", parameters, returns, requires, ensures, modifies));
+		// Done
+		return decls;
+	}
+
+	private List<Decl> constructLambdaAxioms(WyilFile wf) {
+		ArrayList<Decl> decls = new ArrayList<>();
+		decls.add(new Decl.LineComment("Lambdas"));
+		decls.add(new Decl.TypeSynonym("Lambda", null));
+		decls.add(FUNCTION("Lambda#box", LAMBDA, ANY));
+		decls.add(FUNCTION("Lambda#unbox", ANY, LAMBDA));
+		// Establish connection between box and unbox
+		decls.add(new Decl.Axiom(
+				FORALL("l", LAMBDA, EQ(INVOKE("Lambda#unbox", INVOKE("Lambda#box", VAR("l"))), VAR("l")))));
+		// Establish no connection between lambdas and Void
+		decls.add(new Decl.Axiom(FORALL("l", LAMBDA, NEQ(INVOKE("Lambda#box", VAR("l")), VAR("Void")))));
+		// Add apply functions
+		for (int i = 0; i != 5; ++i) {
+			List<Decl.Parameter> params = new ArrayList<>();
+			params.add(new Decl.Parameter(null, LAMBDA));
+			for (int j = 0; j < i; ++j) {
+				params.add(new Decl.Parameter(null, ANY));
+			}
+			decls.add(FUNCTION("apply#" + i, params, ANY));
+		}
+		// done
+		return decls;
+	}
+
+	// ==============================================================================
+	// Type Invariant Extraction
+	// ==============================================================================
 
 	/**
 	 * Extract any constraints from a given type which must be enforced. If no such
@@ -1676,6 +1997,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		return null;
 	}
 
+	// ==============================================================================
+	// Runtime Type Tests
+	// ==============================================================================
+
 	/**
 	 * Construct a runtime type test for a given argument operand. For example,
 	 * consider the following:
@@ -1867,241 +2192,201 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		return OR(clauses);
 	}
 
-	/**
-	 * Generate declarations for all axioms used within the Boogie translation.
-	 *
-	 * @return
-	 */
-	private List<Decl> constructAxioms(WyilFile wf) {
-		ArrayList<Decl> axioms = new ArrayList<>();
-		//
-		axioms.add(new Decl.LineComment("=== Begin Preamble ==="));
-		// Define the top-level Whiley value which contains all others.
-		axioms.add(new Decl.TypeSynonym("Value", null));
-		// Define the top-level Whiley type which contains all others.
-		axioms.add(new Decl.TypeSynonym("Type", null));
-		// Add void constant
-		axioms.add(new Decl.Constant(true, "Void", VALUE));
-		// Add null constant
-		axioms.add(new Decl.Constant(true, "null", VALUE));
-		// Add all bool axioms
-		axioms.addAll(constructBoolAxioms(wf));
-		// Add all byte axioms
-		axioms.addAll(constructByteAxioms(wf));
-		// Add all int axioms
-		axioms.addAll(constructIntAxioms(wf));
-		// Add all array axioms
-		axioms.addAll(constructArrayAxioms(wf));
-		// Add all record axioms
-		axioms.addAll(constructRecordAxioms(wf));
-		// Add all array axioms
-		axioms.addAll(constructReferenceAxioms(wf));
-		//
-		axioms.add(new Decl.LineComment("=== End Preamble ==="));
-		// Done
-		return axioms;
-	}
+	// ==============================================================================
+	// Type Coercions
+	// ==============================================================================
 
 	/**
-	 * Construct axioms and functions relevant to integer types.
+	 * <p>
+	 * Box or Unbox a given type as necessary. For example. consider the following:
+	 * </p>
 	 *
-	 * @param wf
+	 * <pre>
+	 * int|null x= 1
+	 * </pre>
+	 *
+	 * <p>
+	 * On the right-hand side we have an (unboxed) value of Boogie type
+	 * <code>int</code>, but the left-hand side has (boxed) type <code>Value</code>.
+	 * Hence, we have to call <code>Int#box(1)</code> to box the right-hand side.
+	 * </p>
+	 *
+	 * <p>
+	 * The key difference between this method and <code>box()</code> and
+	 * <code>unbox()</code> is that, when calling this method, we don't know which
+	 * direction the boxing should occur.
+	 * </p>
+	 *
+	 * @param to
+	 * @param from
+	 * @param e
 	 * @return
 	 */
-	private List<Decl> constructBoolAxioms(WyilFile wf) {
-		ArrayList<Decl> decls = new ArrayList<>();
-		decls.add(new Decl.LineComment("Booleans"));
-		decls.add(FUNCTION("Bool#box", Type.Bool, VALUE));
-		decls.add(FUNCTION("Bool#unbox", VALUE, Type.Bool));
-		decls.add(FUNCTION("Bool#is", new Decl.Parameter("v", VALUE), Type.Bool,
-				EXISTS("b", Type.Bool, EQ(INVOKE("Bool#box", VAR("b")), VAR("v")))));
-		// Establish connection between box and unbox
-		decls.add(new Decl.Axiom(FORALL("b", Type.Bool, EQ(INVOKE("Bool#unbox", INVOKE("Bool#box", VAR("b"))), VAR("b")))));
-		// Establish no connection between bools and Void
-		decls.add(new Decl.Axiom(FORALL("b", Type.Bool, NEQ(INVOKE("Bool#box", VAR("b")), VAR("Void")))));
-		// Done
-		return decls;
-	}
-
-	/**
-	 * Construct axioms and functions relevant to integer types.
-	 *
-	 * @param wf
-	 * @return
-	 */
-	private List<Decl> constructIntAxioms(WyilFile wf) {
-		ArrayList<Decl> decls = new ArrayList<>();
-		decls.add(new Decl.LineComment("Integers"));
-		decls.add(FUNCTION("Int#box", Type.Int, VALUE));
-		decls.add(FUNCTION("Int#unbox", VALUE, Type.Int));
-		decls.add(FUNCTION("Int#is", new Decl.Parameter("v", VALUE), Type.Bool,
-				EXISTS("i", Type.Int, EQ(INVOKE("Int#box", VAR("i")), VAR("v")))));
-		// Establish connection between box and unbox
-		decls.add(new Decl.Axiom(
-				FORALL("i", Type.Int, EQ(INVOKE("Int#unbox", INVOKE("Int#box", VAR("i"))), VAR("i")))));
-		// Establish no connection between ints and Void
-		decls.add(new Decl.Axiom(FORALL("i", Type.Int, NEQ(INVOKE("Int#box", VAR("i")), VAR("Void")))));
-		// Done
-		return decls;
-	}
-
-	/**
-	 * Construct axioms and functions relevant to byte types.
-	 *
-	 * @param wf
-	 * @return
-	 */
-	private List<Decl> constructByteAxioms(WyilFile wf) {
-		ArrayList<Decl> decls = new ArrayList<>();
-		decls.add(new Decl.LineComment("Bytes"));
-		decls.add(FUNCTION("Byte#box", Type.BitVector8, VALUE));
-		decls.add(FUNCTION("Byte#unbox", VALUE, Type.BitVector8));
-		decls.add(FUNCTION("Byte#toInt", Type.BitVector8, Type.Int, ":bvbuiltin", "\"bv2int\""));
-		decls.add(FUNCTION("Byte#is", new Decl.Parameter("v", VALUE), Type.Bool,
-				EXISTS("b", Type.BitVector8, EQ(INVOKE("Byte#box", VAR("b")), VAR("v")))));
-		// NOTE: figuring out int2bv was a challenge!
-		decls.add(FUNCTION("Byte#fromInt", Type.Int, Type.BitVector8, ":bvbuiltin", "\"(_ int2bv 8)\""));
-		decls.add(FUNCTION("Byte#Not", Type.BitVector8, Type.BitVector8, ":bvbuiltin", "\"bvnot\""));
-		decls.add(FUNCTION("Byte#And", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin", "\"bvand\""));
-		decls.add(FUNCTION("Byte#Or", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin", "\"bvor\""));
-		decls.add(FUNCTION("Byte#Xor", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin", "\"bvxor\""));
-		decls.add(FUNCTION("Byte#Shl", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin", "\"bvshl\""));
-		decls.add(FUNCTION("Byte#Shr", Type.BitVector8, Type.BitVector8, Type.BitVector8, ":bvbuiltin", "\"bvlshr\""));
-		// Establish connection between tbox and unbox
-		decls.add(new Decl.Axiom(
-				FORALL("b", Type.BitVector8, EQ(INVOKE("Byte#unbox", INVOKE("Byte#box", VAR("b"))), VAR("b")))));
-		// Establish no connection between bytes and Void
-		decls.add(new Decl.Axiom(FORALL("b", Type.BitVector8, NEQ(INVOKE("Byte#box", VAR("b")), VAR("Void")))));
-		// Done
-		return decls;
-	}
-
-	/**
-	 * Construct axioms relevant to array types.
-	 *
-	 * @return
-	 */
-	private List<Decl> constructArrayAxioms(WyilFile wf) {
-		// NOTE: we could reduce the amount of boxing / unboxing necessary by generating
-		// custom array types for each different array type encountered.
-		ArrayList<Decl> decls = new ArrayList<>();
-		decls.add(new Decl.LineComment("Arrays"));
-		decls.add(FUNCTION("Array#box", INTMAP, VALUE));
-		decls.add(FUNCTION("Array#unbox", VALUE, INTMAP));
-		// Establish connection between tbox and unbox
-		decls.add(new Decl.Axiom(FORALL("i", INTMAP, EQ(INVOKE("Array#unbox", INVOKE("Array#box", VAR("i"))), VAR("i")))));
-		// Establish no connection between arrays and Void
-		decls.add(new Decl.Axiom(FORALL("a", INTMAP, NEQ(INVOKE("Array#box", VAR("a")), VAR("Void")))));
-		// Establish array equality (unsure why this is needed though)
-//		decls.add(new Decl.Axiom(FORALL("x", INTMAP, "y", INTMAP, "i", Type.Int,
-//				IMPLIES(EQ(GET(VAR("x"), VAR("i")), GET(VAR("y"), VAR("i"))), EQ(VAR("x"), VAR("y"))))));
-		// Array length function
-		decls.add(FUNCTION("Array#Length", INTMAP, Type.Int));
-		// Enforce array length is non-negative
-		decls.add(new Decl.Axiom(FORALL("a", INTMAP, LTEQ(CONST(0), INVOKE("Array#Length", VAR("a"))))));
-		// Empty arrays
-		decls.add(FUNCTION("Array#Empty", Type.Int, INTMAP));
-		decls.add(FUNCTION("Array#Generator", VALUE, Type.Int, INTMAP));
-		// Ensure that all elements outside array length are void
-		decls.add(new Decl.Axiom(
-				FORALL("l", Type.Int, "i", Type.Int, OR(AND(LTEQ(CONST(0), VAR("i")), LT(VAR("i"), VAR("l"))),
-						EQ(GET(INVOKE("Array#Empty", VAR("l")), VAR("i")), VAR("Void"))))));
-		// Relate empty array with its length
-		decls.add(new Decl.Axiom(FORALL("a", INTMAP, "l", Type.Int,
-				OR(NEQ(INVOKE("Array#Empty", VAR("l")), VAR("a")), EQ(INVOKE("Array#Length", VAR("a")), VAR("l"))))));
-		// Ensure that all elements inside generator length are void
-		decls.add(new Decl.Axiom(FORALL("v", VALUE, "l", Type.Int, "i", Type.Int, OR(LT(VAR("i"), CONST(0)),
-				LTEQ(VAR("l"), VAR("i")), EQ(GET(INVOKE("Array#Generator", VAR("v"), VAR("l")), VAR("i")), VAR("v"))))));
-		// Ensure that all elements outside generator length are void
-		decls.add(new Decl.Axiom(FORALL("v", VALUE, "l", Type.Int, "i", Type.Int,
-				OR(AND(LTEQ(CONST(0), VAR("i")), LT(VAR("i"), VAR("l"))),
-						EQ(GET(INVOKE("Array#Generator", VAR("v"), VAR("l")), VAR("i")), VAR("Void"))))));
-		// Relate array generator with its length
-		decls.add(new Decl.Axiom(FORALL("a", INTMAP, "v", VALUE, "l", Type.Int,
-				OR(NEQ(INVOKE("Array#Generator", VAR("v"), VAR("l")), VAR("a")),
-						EQ(INVOKE("Array#Length", VAR("a")), VAR("l"))))));
-		// Relate updated array with its length
-		decls.add(new Decl.Axiom(FORALL("a", INTMAP, "i", Type.Int, "v", VALUE,
-				EQ(INVOKE("Array#Length", VAR("a")), INVOKE("Array#Length", PUT(VAR("a"), VAR("i"), VAR("v")))))));
-		// Done
-		return decls;
-	}
-
-	/**
-	 * Construct axioms relevant to record types. An import issue is to determine
-	 * the full set of field names which are in play.
-	 *
-	 * @return
-	 */
-	private List<Decl> constructRecordAxioms(WyilFile wf) {
-		ArrayList<Decl> decls = new ArrayList<>();
-		decls.add(new Decl.LineComment("Fields"));
-		// Defines the type of all fields
-		decls.add(new Decl.TypeSynonym("Field", null));
-		// Add all known field names
-		for (String field : determineFieldNames(wf)) {
-			String name = "$" + field;
-			decls.add(new Decl.Constant(true, name, FIELD));
+	private static Expr cast(WyilFile.Type to, WyilFile.Type from, Expr e) {
+		// Determine boxed status of each
+		boolean t = isBoxed(to);
+		boolean f = isBoxed(from);
+		// box/unbox as necessary
+		if (t && !f) {
+			return box(from, e);
+		} else if (!t && f) {
+			return unbox(to, e);
+		} else {
+			return e;
 		}
-		//
-		decls.add(new Decl.LineComment("Records"));
-		decls.add(FUNCTION("Record#box", FIELDMAP, VALUE));
-		decls.add(FUNCTION("Record#unbox", VALUE, FIELDMAP));
-		// Establish connection between box and unbox
-		decls.add(new Decl.Axiom(
-				FORALL("i", FIELDMAP, EQ(INVOKE("Record#unbox", INVOKE("Record#box", VAR("i"))), VAR("i")))));
-		// Establish no connection between records and Void
-		decls.add(new Decl.Axiom(FORALL("r", FIELDMAP, NEQ(INVOKE("Record#box", VAR("r")), VAR("Void")))));
-		// Defines the empty record (i.e. the base from which all other records are
-		// constructed).
-		decls.add(new Decl.Constant(true, "Record#Empty", FIELDMAP));
-		decls.add(new Decl.Axiom(FORALL("f", FIELD, EQ(GET(VAR("Record#Empty"), VAR("f")), VAR("Void")))));
-		// Done
-		return decls;
 	}
 
 	/**
-	 * Construct axioms and functions relevant to reference types.
+	 * Box/unbox zero or more expressions as necessary based on their current type,
+	 * and their target type.
 	 *
-	 * @param wf
+	 * @param target
+	 * @param from
+	 * @param args
 	 * @return
 	 */
-	private List<Decl> constructReferenceAxioms(WyilFile wf) {
-		ArrayList<Decl> decls = new ArrayList<>();
-		decls.add(new Decl.LineComment("References"));
-		decls.add(new Decl.TypeSynonym("Ref", null));
-		decls.add(new Decl.Variable("#HEAP", REFMAP));
-		decls.add(FUNCTION("Ref#box", REF, VALUE));
-		decls.add(FUNCTION("Ref#unbox", VALUE, REF));
-		// Establish connection between box and unbox
-		decls.add(new Decl.Axiom(
-				FORALL("r", REF, EQ(INVOKE("Ref#unbox", INVOKE("Ref#box", VAR("r"))), VAR("r")))));
-		// Establish no connection between references and Void
-		decls.add(new Decl.Axiom(FORALL("r", REF, NEQ(INVOKE("Ref#box", VAR("r")), VAR("Void")))));
-		// Construct the allocation procedure
-		Expr heap = VAR("#HEAP");
-		Expr.VariableAccess val = VAR("val");
-		Expr.VariableAccess ref = VAR("ref");
-		//
-		List<Decl.Parameter> parameters = Arrays.asList(new Decl.Parameter(val.getVariable(), VALUE));
-		List<Decl.Parameter> returns =  Arrays.asList(new Decl.Parameter(ref.getVariable(), REF));
-		// FIXME: there are still some problems below related to the Void constant which
-		// is not necessarily disjoint with all integer constants, etc.
-		List<Expr> requires = new ArrayList<>();
-		List<Expr> ensures = new ArrayList<>();
-		// Heap location at ref equals val
-		ensures.add(EQ(GET(heap,ref),val));
-		// Heap location not previously allocated!
-		ensures.add(EQ(GET(OLD(heap),ref),VAR("Void")));
-		// All allocated locations remain as before
-		ensures.add(FORALL("r",REF,OR(EQ(ref,VAR("r")),EQ(GET(OLD(heap),VAR("r")),GET(heap,VAR("r"))))));
-		//
-		List<String> modifies = Arrays.asList("#HEAP");
-		//
-		decls.add(new Decl.Procedure("Ref#new", parameters, returns, requires, ensures, modifies));
-		// Done
-		return decls;
+	private static List<Expr> cast(WyilFile.Type target, Tuple<WyilFile.Expr> from, List<Expr> args) {
+		ArrayList<Expr> es = new ArrayList<>();
+		for (int i = 0; i != args.size(); ++i) {
+			es.add(cast(target.dimension(i), from.get(i).getType(), args.get(i)));
+		}
+		return es;
 	}
+
+
+	/**
+	 * Determine whether the Boogie representation of a given Whiley type is
+	 * naturally boxed or not. Boxed types are whose represented by `Value`.
+	 * However, some Whiley types (e.g. `int`) can be represented directly in Boogie
+	 * and, hence, are done so.
+	 *
+	 * @param type
+	 * @return
+	 */
+	private static boolean isBoxed(WyilFile.Type type) {
+		switch (type.getOpcode()) {
+		case WyilFile.TYPE_any:
+		case WyilFile.TYPE_universal:
+		case WyilFile.TYPE_union:
+			return true;
+		case WyilFile.TYPE_nominal: {
+			WyilFile.Type.Nominal n = (WyilFile.Type.Nominal) type;
+			// FIXME: problem with recursive types?
+			return isBoxed(n.getConcreteType());
+		}
+		}
+		return false;
+	}
+
+	/**
+	 * Box a given expression into a <code>WVal</code> as necessary. This is used in
+	 * situations where a given expression must have type <code>WVal</code> but, at
+	 * the given point, may be still unboxed.
+	 *
+	 * @param type The type the expression is being boxed from.
+	 * @param expr The expression being boxed.
+	 * @return
+	 */
+	private static Expr box(WyilFile.Type type, Expr expr) {
+		switch (type.getOpcode()) {
+		case WyilFile.TYPE_bool:
+			return coerce(expr, "Bool#unbox", "Bool#box");
+		case WyilFile.TYPE_byte:
+			return coerce(expr, "Byte#unbox", "Byte#box");
+		case WyilFile.TYPE_int:
+			return coerce(expr, "Int#unbox", "Int#box");
+		case WyilFile.TYPE_record:
+			return coerce(expr, "Record#unbox", "Record#box");
+		case WyilFile.TYPE_reference:
+			return coerce(expr, "Ref#unbox", "Ref#box");
+		case WyilFile.TYPE_property:
+		case WyilFile.TYPE_function:
+		case WyilFile.TYPE_method:
+			return coerce(expr, "Lambda#unbox", "Lambda#box");
+		case WyilFile.TYPE_array:
+			return coerce(expr, "Array#unbox", "Array#box");
+		case WyilFile.TYPE_nominal: {
+			WyilFile.Type.Nominal t = (WyilFile.Type.Nominal) type;
+			// Decision on whether boxing required depends on underlying type!
+			return box(t.getConcreteType(), expr);
+		}
+		}
+		return expr;
+	}
+
+	/**
+	 * Box zero or more argument values (using the main box function above).
+	 *
+	 * @param type The target type whose shape is expected to match the number of
+	 *             expressions being boxed.
+	 * @param exprs   The list of expressions to be boxed.
+	 * @return
+	 */
+	private static List<Expr> box(WyilFile.Type type, List<Expr> exprs) {
+		ArrayList<Expr> rs = new ArrayList<>();
+		for(int i=0;i!=exprs.size();++i) {
+			rs.add(box(type.dimension(i),exprs.get(i)));
+		}
+		return rs;
+	}
+
+	/**
+	 * Unbox a given expression into a <code>WVal</code> as necessary. This is
+	 * required, for example, when primitive values are moving into general
+	 * dictionaries.
+	 *
+	 * @param type
+	 * @param e
+	 * @return
+	 */
+	private static Expr unbox(WyilFile.Type type, Expr e) {
+		switch (type.getOpcode()) {
+		case WyilFile.TYPE_bool:
+			return coerce(e, "Bool#box", "Bool#unbox");
+		case WyilFile.TYPE_byte:
+			return coerce(e, "Byte#box", "Byte#unbox");
+		case WyilFile.TYPE_int:
+			return coerce(e, "Int#box", "Int#unbox");
+		case WyilFile.TYPE_record:
+			return coerce(e, "Record#box", "Record#unbox");
+		case WyilFile.TYPE_reference:
+			return coerce(e, "Ref#box", "Ref#unbox");
+		case WyilFile.TYPE_property:
+		case WyilFile.TYPE_function:
+		case WyilFile.TYPE_method:
+			return coerce(e, "Lambda#box", "Lambda#unbox");
+		case WyilFile.TYPE_array:
+			return coerce(e, "Array#box", "Array#unbox");
+		case WyilFile.TYPE_nominal: {
+			WyilFile.Type.Nominal t = (WyilFile.Type.Nominal) type;
+			// Decision on whether boxing required depends on underlying type!
+			return unbox(t.getConcreteType(), e);
+		}
+		}
+		return e;
+	}
+
+	/**
+	 * Convert a given expression using two coercion functions (to and from). This
+	 * performs some simple optimisations to eliminate chained coercions (e.g.
+	 * <code>box(unbox(x))</code> becomes <code>x</code>).
+	 *
+	 * @param e
+	 * @return
+	 */
+	private static Expr coerce(Expr e, String from, String to) {
+		if (e instanceof Expr.Invoke) {
+			Expr.Invoke i = (Expr.Invoke) e;
+			if (i.getName().equals(from)) {
+				return i.getArguments().get(0);
+			}
+		}
+		return new Expr.Invoke(to, e);
+	}
+
+	// ==============================================================================
+	// Misc
+	// ==============================================================================
 
 	/**
 	 * Check whether a given (loop) statement contains a break or continue (which is
@@ -2190,142 +2475,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		} else {
 			return getEnclosingLoop(stmt.getParent(WyilFile.Stmt.class));
 		}
-	}
-
-	private static List<Expr> cast(WyilFile.Type target, Tuple<WyilFile.Expr> from, List<Expr> args) {
-		ArrayList<Expr> es = new ArrayList<>();
-		for (int i = 0; i != args.size(); ++i) {
-			es.add(cast(target.dimension(i), from.get(i).getType(), args.get(i)));
-		}
-		return es;
-	}
-
-	/**
-	 * Box or Unbox a given type as necessary.
-	 *
-	 * @param to
-	 * @param from
-	 * @param e
-	 * @return
-	 */
-	private static Expr cast(WyilFile.Type to, WyilFile.Type from, Expr e) {
-		// Determine boxed status of each
-		boolean t = isBoxed(to);
-		boolean f = isBoxed(from);
-		// box/unbox as necessary
-		if (t && !f) {
-			return box(from, e);
-		} else if (!t && f) {
-			return unbox(to, e);
-		} else {
-			return e;
-		}
-	}
-
-	/**
-	 * Determine whether the Boogie representation of a given Whiley type is
-	 * naturally boxed or not. Boxed types are whose represented by `Value`.
-	 * However, some Whiley types (e.g. `int`) can be represented directly in Boogie
-	 * and, hence, are done so.
-	 *
-	 * @param type
-	 * @return
-	 */
-	private static boolean isBoxed(WyilFile.Type type) {
-		switch (type.getOpcode()) {
-		case WyilFile.TYPE_any:
-		case WyilFile.TYPE_universal:
-		case WyilFile.TYPE_union:
-			return true;
-		case WyilFile.TYPE_nominal: {
-			WyilFile.Type.Nominal n = (WyilFile.Type.Nominal) type;
-			// FIXME: problem with recursive types?
-			return isBoxed(n.getConcreteType());
-		}
-		}
-		return false;
-	}
-
-	/**
-	 * Box a given expression into a <code>WVal</code> as necessary. This is used in
-	 * situations where a given expression must have type <code>WVal</code> but, at
-	 * the given point, may be still unboxed.
-	 *
-	 * @param type
-	 * @param e
-	 * @return
-	 */
-	private static Expr box(WyilFile.Type type, Expr e) {
-		switch (type.getOpcode()) {
-		case WyilFile.TYPE_bool:
-			return coerce(e, "Bool#unbox", "Bool#box");
-		case WyilFile.TYPE_byte:
-			return coerce(e, "Byte#unbox", "Byte#box");
-		case WyilFile.TYPE_int:
-			return coerce(e, "Int#unbox", "Int#box");
-		case WyilFile.TYPE_record:
-			return coerce(e, "Record#unbox", "Record#box");
-		case WyilFile.TYPE_reference:
-			return coerce(e, "Ref#unbox", "Ref#box");
-		case WyilFile.TYPE_array:
-			return coerce(e, "Array#unbox", "Array#box");
-		case WyilFile.TYPE_nominal: {
-			WyilFile.Type.Nominal t = (WyilFile.Type.Nominal) type;
-			// Decision on whether boxing required depends on underlying type!
-			return box(t.getConcreteType(), e);
-		}
-		}
-		return e;
-	}
-
-	/**
-	 * Unbox a given expression into a <code>WVal</code> as necessary. This is
-	 * required, for example, when primitive values are moving into general
-	 * dictionaries.
-	 *
-	 * @param type
-	 * @param e
-	 * @return
-	 */
-	private static Expr unbox(WyilFile.Type type, Expr e) {
-		switch (type.getOpcode()) {
-		case WyilFile.TYPE_bool:
-			return coerce(e, "Bool#box", "Bool#unbox");
-		case WyilFile.TYPE_byte:
-			return coerce(e, "Byte#box", "Byte#unbox");
-		case WyilFile.TYPE_int:
-			return coerce(e, "Int#box", "Int#unbox");
-		case WyilFile.TYPE_record:
-			return coerce(e, "Record#box", "Record#unbox");
-		case WyilFile.TYPE_reference:
-			return coerce(e, "Ref#box", "Ref#unbox");
-		case WyilFile.TYPE_array:
-			return coerce(e, "Array#box", "Array#unbox");
-		case WyilFile.TYPE_nominal: {
-			WyilFile.Type.Nominal t = (WyilFile.Type.Nominal) type;
-			// Decision on whether boxing required depends on underlying type!
-			return unbox(t.getConcreteType(), e);
-		}
-		}
-		return e;
-	}
-
-	/**
-	 * Convert a given expression using two coercion functions (to and from). This
-	 * performs some simple optimisations to eliminate chained coercions (e.g.
-	 * <code>box(unbox(x))</code> becomes <code>x</code>).
-	 *
-	 * @param e
-	 * @return
-	 */
-	private static Expr coerce(Expr e, String from, String to) {
-		if (e instanceof Expr.Invoke) {
-			Expr.Invoke i = (Expr.Invoke) e;
-			if (i.getName().equals(from)) {
-				return i.getArguments().get(0);
-			}
-		}
-		return new Expr.Invoke(to, e);
 	}
 
 	/**
@@ -2438,15 +2587,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			return "$" + mangler.getMangle(types);
 		}
 	}
-
-	public static final Type VALUE = new Type.Synonym("Value");
-	public static final Type VOID = new Type.Synonym("Void");
-	public static final Type FIELD = new Type.Synonym("Field");
-	public static final Type TYPE = new Type.Synonym("Type");
-	public static final Type REF = new Type.Synonym("Ref");
-	public static final Type INTMAP = new Type.Dictionary(Type.Int, VALUE);
-	public static final Type FIELDMAP = new Type.Dictionary(FIELD, VALUE);
-	public static final Type REFMAP = new Type.Dictionary(REF, VALUE);
 
 	/**
 	 * A "fake" tuple constructor. This is used to work around the
