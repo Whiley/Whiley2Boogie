@@ -25,18 +25,14 @@ import static wyboogie.core.BoogieFile.*;
 
 import wyboogie.core.BoogieFile;
 import wyboogie.core.BoogieFile.Decl;
-import wyboogie.core.BoogieFile.Decl;
 import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.Stmt;
-import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.LVal;
 import wyboogie.util.AbstractTranslator;
 import wybs.lang.Build.Meter;
 import wybs.util.AbstractCompilationUnit.Tuple;
-import wyfs.util.ArrayUtils;
 import wyfs.util.Pair;
 import wyil.lang.WyilFile;
-import wyil.lang.WyilFile.Type.Array;
 import wyil.util.AbstractVisitor;
 import wyil.util.IncrementalSubtypingEnvironment;
 import wyil.util.Subtyping;
@@ -89,7 +85,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Create parameter for type test function
 		Decl.Parameter p = new Decl.Parameter(var.getName().get(), type);
 		// Generate any constraints implied by the type itself
-		Expr constraints = constructTypeTest(var.getType(),var.getType(),VAR(p.getName()));
+		Expr constraints = constructTypeTest(var.getType(),var.getType(),VAR(p.getName()),"#HEAP");
 		/// Determine mangled name for type declaration
 		String name = toMangledName(d);
 		// Create an appropriate synonym
@@ -125,7 +121,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Construct container for type constraints
 		ArrayList<Expr> constraints = new ArrayList<>();
 		//
-		List<Decl.Parameter> parameters = constructParameters(d.getParameters(), constraints);
+		List<Decl.Parameter> parameters = constructParameters(d.getParameters(), constraints, null);
 		// FIXME: what to do with the type constraints?
 		Expr body = new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, clauses);
 		return FUNCTION(name, parameters, Type.Bool, body);
@@ -137,8 +133,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		ArrayList<Decl> decls = new ArrayList<>();
 		// Apply name mangling
 		String name = toMangledName(d);
-		List<Decl.Parameter> parameters = constructParameters(d.getParameters(), precondition);
-		List<Decl.Parameter> returns = constructParameters(d.getReturns(), postcondition);
+		List<Decl.Parameter> parameters = constructParameters(d.getParameters(), precondition, null);
+		List<Decl.Parameter> returns = constructParameters(d.getReturns(), postcondition, null);
 		// Construct parameters and arguments for specification helpers
 		ArrayList<Decl.Parameter> specParametersAndReturns = new ArrayList<>();
 		specParametersAndReturns.addAll(parameters);
@@ -161,6 +157,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(new Decl.Implementation(name + "#impl", shadows, returns, locals, body));
 		// Add the "lambda" value
 		decls.add(new Decl.Constant(true, name + "#lambda", LAMBDA));
+		// Add any lambda's used within the function
+		decls.addAll(constructLambdas(d));
 		// Done
 		return new Decl.Sequence(decls);
 	}
@@ -170,8 +168,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		ArrayList<Decl> decls = new ArrayList<>();
 		// Apply name mangling
 		String name = toMangledName(d);
-		List<Decl.Parameter> parameters = constructParameters(d.getParameters(), precondition);
-		List<Decl.Parameter> returns = constructParameters(d.getReturns(), postcondition);
+		List<Decl.Parameter> parameters = constructParameters(d.getParameters(), precondition, "#HEAP");
+		List<Decl.Parameter> returns = constructParameters(d.getReturns(), postcondition, "##HEAP");
 		// Construct parameters and arguments for specification helpers
 		ArrayList<Decl.Parameter> specParametersAndReturns = new ArrayList<>();
 		// Add the obligatory heap parameter
@@ -198,6 +196,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(new Decl.Implementation(name, shadows, returns, locals, body));
 		// Add the "lambda" value
 		decls.add(new Decl.Constant(true, name + "#lambda", LAMBDA));
+		// Add any lambda's used within the method
+		decls.addAll(constructLambdas(d));
 		// Done
 		return new Decl.Sequence(decls);
 	}
@@ -245,12 +245,16 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * @param parameters.  Whiley parameter / return declarations for conversion.
 	 * @param constraints. Any constraints generated from parameter types will be
 	 *                     added to this list of constraints.
+	 * @param heap.        Identifies the correct name to use when referring to the
+	 *                     heap. This matters as in some contexts one must refer to
+	 *                     the new heap, and in others to the "old" heap.
+	 *
 	 * @return
 	 */
-	public List<Decl.Parameter> constructParameters(WyilFile.Tuple<WyilFile.Decl.Variable> parameters, List<Expr> constraints) {
+	public List<Decl.Parameter> constructParameters(WyilFile.Tuple<WyilFile.Decl.Variable> parameters, List<Expr> constraints, String heap) {
 		ArrayList<Decl.Parameter> ps = new ArrayList<>();
 		for (int i = 0; i != parameters.size(); ++i) {
-			ps.add(constructParameter(parameters.get(i), constraints));
+			ps.add(constructParameter(parameters.get(i), constraints, heap));
 		}
 		return ps;
 	}
@@ -291,10 +295,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 *                     be added to this list of constraints.
 	 * @return
 	 */
-	public Decl.Parameter constructParameter(WyilFile.Decl.Variable parameter, List<Expr> constraints) {
+	public Decl.Parameter constructParameter(WyilFile.Decl.Variable parameter, List<Expr> constraints, String heap) {
 		String name = parameter.getName().get();
 		// Construct any constraints arising from the parameter's type
-		Expr constraint = constructTypeConstraint(parameter.getType(), VAR(name));
+		Expr constraint = constructTypeConstraint(parameter.getType(), VAR(name), heap);
 		//
 		if(constraint != null) {
 			constraints.add(constraint);
@@ -341,10 +345,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * @param blk
 	 * @return
 	 */
-	public List<Decl.Variable> constructLocals(WyilFile.Stmt.Block blk) {
+	public List<Decl.Variable> constructLocals(WyilFile.Stmt blk) {
 		ArrayList<Decl.Variable> decls = new ArrayList<>();
 		// Handle local variables
 		new AbstractVisitor(meter) {
+			@Override
+			public void visitLambda(WyilFile.Decl.Lambda decl) {
+				// NOTE: we don't construct locals through a lambda since the body of the lambda
+				// will be extracted into a standalone procedure.
+			}
 			@Override
 			public void visitInitialiser(WyilFile.Stmt.Initialiser stmt) {
 				super.visitInitialiser(stmt);
@@ -433,7 +442,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			public void visitType(WyilFile.Type t) {
 				// Prevent unexpected traverals of types
 			}
-		}.visitBlock(blk);
+		}.visitStatement(blk);
 		// Done
 		return decls;
 	}
@@ -483,10 +492,113 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		}
 	}
 
+	/**
+	 * Construct any lambda's which are used within a given declaration (e.g. for a
+	 * function). These are translated as separate functions. For example, consider
+	 * this Whiely code:
+	 *
+	 * <pre>
+	 * method test():
+	 *    fun_t fn = &(int x -> x+1)
+	 * </pre>
+	 *
+	 * Then, the translation corresponds roughly as though we had written in like
+	 * so:
+	 *
+	 * <pre>
+	 * method test():
+	 *    fun_t fn = &l255
+	 *
+	 * function l255(int x) -> int:
+	 *    return x+1
+	 * </pre>
+	 *
+	 * @param d
+	 * @return
+	 */
+	public List<Decl> constructLambdas(WyilFile.Decl d) {
+		ArrayList<Decl> decls = new ArrayList<>();
+		List<WyilFile.Decl.Lambda> lambdas = extractLambdaDeclarations(d);
+		//
+		for(int i=0;i!=lambdas.size();++i) {
+			decls.addAll(constructStandaloneLambda(lambdas.get(i)));
+		}
+		//
+		return decls;
+	}
+
+	private List<Decl> constructStandaloneLambda(WyilFile.Decl.Lambda l) {
+		WyilFile.Type.Callable type = l.getType();
+		WyilFile.Type returnType = type.getReturn();
+		boolean method = (type instanceof WyilFile.Type.Method);
+		// Extract variables captured in the lambda
+		Set<WyilFile.Decl.Variable> captured = l.getCapturedVariables(meter);
+		//
+		String name = "lambda#" + l.getIndex();
+		ArrayList<Decl> decls = new ArrayList<>();
+		ArrayList<Expr> precondition = new ArrayList<>();
+		ArrayList<Expr> postcondition = new ArrayList<>();
+		ArrayList<Stmt> stmts = new ArrayList<>();
+		// Extract any necessary local variable declarations
+		List<Decl.Variable> locals = constructLocals(l.getBody());
+		// Convert explicit parameters
+		List<Decl.Parameter> parameters = constructParameters(l.getParameters(), precondition, "#HEAP");
+		// Convert implicit parameters
+		parameters.addAll(constructParameters(new Tuple<>(captured),precondition,"#HEAP"));
+		List<Decl.Parameter> protoParameters = new ArrayList<>(parameters);
+		// Will contain convert return parameters
+		List<Decl.Parameter> returns = new ArrayList<>();
+		// Add Heap variable if necessary
+		if(method) {
+			parameters.add(0, new Decl.Parameter("#HEAP#", REFMAP));
+			protoParameters.add(0, new Decl.Parameter("#HEAP", REFMAP));
+			returns.add(new Decl.Parameter("##HEAP", REFMAP));
+			locals.add(new Decl.Variable("#HEAP", REFMAP));
+			stmts.add(new Stmt.Assignment(VAR("#HEAP"),VAR("#HEAP#")));
+		}
+		// Construct return values
+		for(int i=0;i!=returnType.shape();++i) {
+			WyilFile.Type ret = returnType.dimension(i);
+			// Construct any constraints arising from the parameter's type
+			Expr constraint = constructTypeConstraint(ret, VAR("r" + i), "##HEAP");
+			//
+			if(constraint != null) {
+				postcondition.add(constraint);
+			}
+			// Convert the Whiley type into a Boogie type.
+			returns.add(new Decl.Parameter("r" + i, constructType(ret)));
+		}
+		// Translate lambda body
+		Expr body = visitExpression(l.getBody());
+		// Add all preconditions arising. If there are any, they will likely fail!
+		stmts.addAll(constructAssertions(visitExpressionPrecondition(l.getBody())));
+		// Apply any heap allocations arising.
+		stmts.addAll(constructSideEffects(l.getBody()));
+		//
+		for(int i=0;i!=returns.size();++i) {
+			Decl.Parameter ith = returns.get(i);
+			if(method && i == 0) {
+				// Heap variable always first return for methods.
+				stmts.add(new Stmt.Assignment(VAR("##HEAP"),VAR("#HEAP")));
+			} else {
+				// FIXME: broken for multiple returns
+				stmts.add(new Stmt.Assignment(VAR(ith.getName()),body));
+			}
+		}
+		// Add lambda implementation
+		decls.add(new Decl.Procedure(name, protoParameters, returns, precondition, postcondition,
+				Collections.EMPTY_LIST));
+		decls.add(new Decl.Implementation(name, parameters, returns, locals, SEQUENCE(stmts)));
+		// Add the "lambda" value
+		decls.add(new Decl.Constant(true, name, LAMBDA));
+		// Done
+		return decls;
+	}
+
 	@Override
 	public Expr constructLambda(WyilFile.Decl.Lambda decl, Expr body) {
-		// TODO Auto-generated method stub
-		throw new UnsupportedOperationException("implement me");
+		// Read out its "lambda" value
+		return VAR("lambda#" + decl.getIndex());
 	}
 
 	@Override
@@ -1077,6 +1189,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		new AbstractVisitor(meter) {
 
 			@Override
+			public void visitLambda(WyilFile.Decl.Lambda decl) {
+				// NOTE: we don't extract side-effects from lambda declarations. That's because
+				// they are effectively encompassed in their own methods.
+			}
+
+			@Override
 			public void visitNew(WyilFile.Expr.New expr) {
 				super.visitNew(expr);
 				String name = "l#" + expr.getIndex();
@@ -1413,7 +1531,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructIs(WyilFile.Expr.Is expr, Expr operand) {
-		return constructTypeTest(expr.getTestType(), expr.getOperand().getType(), operand);
+		return constructTypeTest(expr.getTestType(), expr.getOperand().getType(), operand, "#HEAP");
 	}
 
 	@Override
@@ -2073,7 +2191,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 *             parameter or local variable).
 	 * @return
 	 */
-	private Expr constructTypeConstraint(WyilFile.Type type, Expr expr) {
+	private Expr constructTypeConstraint(WyilFile.Type type, Expr expr, String heap) {
 		switch(type.getOpcode()) {
 		case WyilFile.TYPE_null:
 		case WyilFile.TYPE_bool:
@@ -2084,7 +2202,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			return null;
 		default:
 			// Fall back to primitive test
-			return constructTypeTest(type,type,expr);
+			return constructTypeTest(type,type,expr,heap);
 		}
 	}
 
@@ -2111,7 +2229,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * @param argument The argument being tested.
 	 * @return
 	 */
-	private Expr constructTypeTest(WyilFile.Type to, WyilFile.Type from, Expr argument) {
+	private Expr constructTypeTest(WyilFile.Type to, WyilFile.Type from, Expr argument, String heap) {
 		switch (to.getOpcode()) {
 		case WyilFile.TYPE_null:
 			return EQ(argument, CONST(null));
@@ -2129,13 +2247,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		case WyilFile.TYPE_nominal:
 			return constructNominalTypeTest((WyilFile.Type.Nominal) to, from, argument);
 		case WyilFile.TYPE_array:
-			return constructArrayTypeTest((WyilFile.Type.Array) to, from, argument);
+			return constructArrayTypeTest((WyilFile.Type.Array) to, from, argument, heap);
 		case WyilFile.TYPE_record:
-			return constructRecordTypeTest((WyilFile.Type.Record) to, from, argument);
+			return constructRecordTypeTest((WyilFile.Type.Record) to, from, argument, heap);
 		case WyilFile.TYPE_reference:
-			return constructReferenceTypeTest((WyilFile.Type.Reference) to, from, argument);
+			return constructReferenceTypeTest((WyilFile.Type.Reference) to, from, argument, heap);
 		case WyilFile.TYPE_union:
-			return constructUnionTypeTest((WyilFile.Type.Union) to, from, argument);
+			return constructUnionTypeTest((WyilFile.Type.Union) to, from, argument, heap);
 		default:
 			throw new IllegalArgumentException("unknown type encoutnered (" + to.getClass().getName() + ")");
 		}
@@ -2195,7 +2313,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * @param argument The argument being tested.
 	 * @return
 	 */
-	private Expr constructRecordTypeTest(WyilFile.Type.Record to, WyilFile.Type from, Expr argument) {
+	private Expr constructRecordTypeTest(WyilFile.Type.Record to, WyilFile.Type from, Expr argument, String heap) {
 		// NOTE: this method for describing a type test should be deprecated in the
 		// future in favour of something based around type tags.
 		//
@@ -2207,7 +2325,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		for (int i = 0; i != clauses.length; ++i) {
 			WyilFile.Type.Field f = fields.get(i);
 			String field = "$" + f.getName().get();
-			clauses[i] = constructTypeTest(f.getType(), WyilFile.Type.Any, GET(argument, VAR(field)));
+			clauses[i] = constructTypeTest(f.getType(), WyilFile.Type.Any, GET(argument, VAR(field)), heap);
 		}
 		// Done
 		return AND(clauses);
@@ -2234,7 +2352,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * @param argument The argument being tested.
 	 * @return
 	 */
-	private Expr constructArrayTypeTest(WyilFile.Type.Array to, WyilFile.Type from, Expr argument) {
+	private Expr constructArrayTypeTest(WyilFile.Type.Array to, WyilFile.Type from, Expr argument, String heap) {
 		// NOTE: this method for describing a type test should be deprecated in the
 		// future in favour of something based around type tags.
 		//
@@ -2245,18 +2363,18 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Construct bounds check for index variable
 		Expr lhs = AND(LTEQ(CONST(0), i), LT(i, INVOKE("Array#Length", argument)));
 		// Recursively construct type test for element
-		Expr rhs = constructTypeTest(to.getElement(), WyilFile.Type.Any, GET(argument, i));
+		Expr rhs = constructTypeTest(to.getElement(), WyilFile.Type.Any, GET(argument, i), heap);
 		// Done
 		return FORALL(i.getVariable(), Type.Int, IMPLIES(lhs, rhs));
 	}
 
-	private Expr constructReferenceTypeTest(WyilFile.Type.Reference to, WyilFile.Type from, Expr argument) {
+	private Expr constructReferenceTypeTest(WyilFile.Type.Reference to, WyilFile.Type from, Expr argument, String heap) {
 		// Cast argument to (unboxed) reference type
 		argument = cast(to, from, argument);
 		// Dereference argument
-		Expr deref = GET(VAR("#HEAP"),argument);
+		Expr deref = GET(VAR(heap),argument);
 		//
-		return constructTypeTest(to.getElement(), WyilFile.Type.Any, deref);
+		return constructTypeTest(to.getElement(), WyilFile.Type.Any, deref, heap);
 	}
 
 	/**
@@ -2280,10 +2398,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * @param argument The argument being tested.
 	 * @return
 	 */
-	private Expr constructUnionTypeTest(WyilFile.Type.Union to, WyilFile.Type from, Expr argument) {
+	private Expr constructUnionTypeTest(WyilFile.Type.Union to, WyilFile.Type from, Expr argument, String heap) {
 		Expr[] clauses = new Expr[to.size()];
 		for (int i = 0; i != clauses.length; ++i) {
-			clauses[i] = constructTypeTest(to.get(i), from, argument);
+			clauses[i] = constructTypeTest(to.get(i), from, argument, heap);
 		}
 		return OR(clauses);
 	}
@@ -2641,6 +2759,32 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 		}
 		return names;
+	}
+
+	/**
+	 * Extract all lambda declarations used within this WyilFile so that they can be
+	 * converted into standalone functions.
+	 *
+	 * @param wf
+	 * @return
+	 */
+	private List<WyilFile.Decl.Lambda> extractLambdaDeclarations(WyilFile.Decl d) {
+		ArrayList<WyilFile.Decl.Lambda> decls = new ArrayList<>();
+		//
+		new AbstractVisitor(meter) {
+			@Override
+			public void visitLambda(WyilFile.Decl.Lambda l) {
+				super.visitLambda(l);
+				decls.add(l);
+			}
+			@Override
+			public void visitType(WyilFile.Type t) {
+				// Terminate traversing types
+			}
+
+		}.visitDeclaration(d);
+		//
+		return decls;
 	}
 
 	/**

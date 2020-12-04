@@ -222,7 +222,8 @@ public abstract class AbstractTranslator<D,S,E> extends wyil.util.AbstractTransl
 		case EXPR_lambdaaccess:
 			return visitLambdaAccessPrecondition((Expr.LambdaAccess) expr);
 		case DECL_lambda:
-			throw new IllegalArgumentException("implement me");
+			// FIXME: this is clearly broken
+			return Collections.EMPTY_LIST;
 		case EXPR_staticvariable:
 			return visitStaticVariableAccessPrecondition((Expr.StaticVariableAccess) expr);
 		case EXPR_variablecopy:
