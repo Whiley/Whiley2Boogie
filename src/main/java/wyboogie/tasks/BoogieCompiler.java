@@ -89,7 +89,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Create parameter for type test function
 		Decl.Parameter p = new Decl.Parameter(var.getName().get(), type);
 		// Generate any constraints implied by the type itself
-		Expr constraints = constructTypeConstraint(var.getType(), VAR(p.getName()));
+		Expr constraints = constructTypeTest(var.getType(),var.getType(),VAR(p.getName()));
 		/// Determine mangled name for type declaration
 		String name = toMangledName(d);
 		// Create an appropriate synonym
@@ -295,7 +295,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		String name = parameter.getName().get();
 		// Construct any constraints arising from the parameter's type
 		Expr constraint = constructTypeConstraint(parameter.getType(), VAR(name));
-		// If any did arise, add them to the constraint set.
+		//
 		if(constraint != null) {
 			constraints.add(constraint);
 		}
@@ -870,29 +870,37 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Stmt constructInvokeStmt(WyilFile.Expr.Invoke expr, List<Expr> arguments, List<Expr> preconditions) {
-		WyilFile.Type.Method mt = (WyilFile.Type.Method) expr.getLink().getTarget().getType();
-		WyilFile.Type type = mt.getReturn();
-		// Apply name mangling
-		String name = toMangledName(expr.getLink().getTarget());
-		// Determine lvals. Observe that we have to assign any return values from the
-		// procedure called, even if they are never used.
-		List<LVal> lvals = new ArrayList<>();
-		lvals.add(VAR("#HEAP"));
-		if (type.shape() == 1) {
-			lvals.add(VAR("m#" + expr.getIndex()));
-		} else {
-			for (int i = 0; i != type.shape(); ++i) {
-				lvals.add(VAR("m#" + expr.getIndex() + "#" + i));
+		WyilFile.Type.Callable ft = expr.getLink().getTarget().getType();
+		if(ft instanceof WyilFile.Type.Method) {
+			WyilFile.Type.Method mt = (WyilFile.Type.Method) ft;
+			WyilFile.Type type = mt.getReturn();
+			// Apply name mangling
+			String name = toMangledName(expr.getLink().getTarget());
+			// Determine lvals. Observe that we have to assign any return values from the
+			// procedure called, even if they are never used.
+			List<LVal> lvals = new ArrayList<>();
+			lvals.add(VAR("#HEAP"));
+			if (type.shape() == 1) {
+				lvals.add(VAR("m#" + expr.getIndex()));
+			} else {
+				for (int i = 0; i != type.shape(); ++i) {
+					lvals.add(VAR("m#" + expr.getIndex() + "#" + i));
+				}
 			}
+			// Recursively (re)construct argument expressions
+			List<Expr> args = BoogieCompiler.this.visitExpressions(expr.getOperands());
+			// Apply conversions to arguments as necessary
+			args = cast(mt.getParameter(), expr.getOperands(), args);
+			// Chaing through heap variable
+			args.add(0,VAR("#HEAP"));
+			// Done
+			return CALL(name, lvals, args);
+		} else {
+			// NOTE: this case arises when for a function invocation which discards the
+			// return value. That doesn't really make sense, and for now we just treat as a
+			// "skip".
+			return new Stmt.Assert(new Expr.Constant(true));
 		}
-		// Recursively (re)construct argument expressions
-		List<Expr> args = BoogieCompiler.this.visitExpressions(expr.getOperands());
-		// Apply conversions to arguments as necessary
-		args = cast(mt.getParameter(), expr.getOperands(), args);
-		// Chaing through heap variable
-		args.add(0,VAR("#HEAP"));
-		// Done
-		return CALL(name, lvals, args);
 	}
 
 	@Override
@@ -2002,6 +2010,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(new Decl.TypeSynonym("Lambda", null));
 		decls.add(FUNCTION("Lambda#box", LAMBDA, ANY));
 		decls.add(FUNCTION("Lambda#unbox", ANY, LAMBDA));
+		decls.add(FUNCTION("Lambda#is", new Decl.Parameter("v", ANY), Type.Bool,
+				EXISTS("l", LAMBDA, EQ(INVOKE("Lambda#box", VAR("l")), VAR("v")))));
 		// Establish connection between box and unbox
 		decls.add(new Decl.Axiom(
 				FORALL("l", LAMBDA, EQ(INVOKE("Lambda#unbox", INVOKE("Lambda#box", VAR("l"))), VAR("l")))));
@@ -2072,167 +2082,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		case WyilFile.TYPE_universal:
 			// No constraints exist on primitive types.
 			return null;
-		case WyilFile.TYPE_nominal:
-			return constructNominalTypeConstraint((WyilFile.Type.Nominal) type, expr);
-		case WyilFile.TYPE_array:
-			return constructArrayTypeConstraint((WyilFile.Type.Array) type, expr);
-		case WyilFile.TYPE_record:
-			return constructRecordTypeConstraint((WyilFile.Type.Record) type, expr);
-		case WyilFile.TYPE_reference:
-			return constructReferenceTypeConstraint((WyilFile.Type.Reference) type, expr);
-		case WyilFile.TYPE_union:
-			return constructUnionTypeConstraint((WyilFile.Type.Union) type, expr);
-		case WyilFile.TYPE_function:
-		case WyilFile.TYPE_method:
-		case WyilFile.TYPE_property:
-			return constructCallableTypeConstraint((WyilFile.Type.Callable) type, expr);
 		default:
-			throw new IllegalArgumentException("unknown type encoutnered (" + type.getClass().getName() + ")");
+			// Fall back to primitive test
+			return constructTypeTest(type,type,expr);
 		}
-	}
-
-	/**
-	 * Generate constraints for a nominal type. This is done by simply calling the
-	 * <code>is</code> method for the corresponding nominal type. For example,
-	 * consider the following:
-	 *
-	 * <pre>
-	 * type nat is (int x) where ...
-	 * </pre>
-	 *
-	 * For example, given a parameter declaration <code>nat x</code> we will
-	 * generate the constraint <code>nat#is(x)</code>, etc.
-	 *
-	 * @param type The type from which constraints are being generated
-	 * @param expr An expression representing the item being constrained (e.g. a
-	 *             parameter or local variable).
-	 * @return
-	 */
-	private Expr constructNominalTypeConstraint(WyilFile.Type.Nominal type, Expr expr) {
-		// Construct appropriate name mangle
-		String name = toMangledName(type.getLink().getTarget());
-		// Ensure argument is boxed
-		return INVOKE(name + "#is", expr);
-	}
-
-	/**
-	 * Construct a type test for an unadorned array type. This is done using a
-	 * universal quantifier over the array's elements. For example, given a
-	 * parameter declaration <code>nat[] xs</code>, the following constraint would
-	 * be generated:
-	 *
-	 * <pre>
-	 *   (forall i:int :: 0 <= i && i < length(xs) ==> nat#is(xs[i]))
-	 * </pre>
-	 *
-	 * Observe that such a quantifier is only generated when actual constraints on
-	 * the element type exist.
-	 *
-	 * @param type The type from which constraints are being generated
-	 * @param expr An expression representing the item being constrained (e.g. a
-	 *             parameter or local variable).
-	 * @return
-	 */
-	private Expr constructArrayTypeConstraint(WyilFile.Type.Array type, Expr expr) {
-		// Construct a unique variable to use within the quantifier
-		Expr.VariableAccess i = VAR("i#" + type.getIndex());
-		// Determine what constraint (if any) exists on the element type
-		Expr rhs = constructTypeConstraint(type.getElement(), unbox(type.getElement(), GET(expr, i)));
-		// If any constraint exists, employ a universal quantifier.
-		if (rhs != null) {
-			// Construct bounds check for index variable
-			Expr lhs = AND(LTEQ(CONST(0), i), LT(i, INVOKE("Array#Length", expr)));
-			return FORALL(i.getVariable(), Type.Int, IMPLIES(lhs, rhs));
-		} else {
-			// No constraints required.
-			return null;
-		}
-	}
-
-	/**
-	 * Construct a type test for an unadorned record type. This is done by
-	 * conjuncting together constraints from each field as necessary. For example,
-	 * given a parameter declaration <code>{nat f, nat g} x</code>, the following
-	 * constraint would be generated:
-	 *
-	 * <pre>
-	 *   nat#is(x[$f]) && nat#is(x[$g])
-	 * </pre>
-	 *
-	 * Observe that each constraints is only when there are actual constraints on
-	 * the field in question.
-	 *
-	 * @param type The type from which constraints are being generated
-	 * @param expr An expression representing the item being constrained (e.g. a
-	 *             parameter or local variable).
-	 * @return
-	 */
-	private Expr constructRecordTypeConstraint(WyilFile.Type.Record type, Expr expr) {
-		Tuple<WyilFile.Type.Field> fields = type.getFields();
-		Expr[] clauses = new Expr[fields.size()];
-		// Iterate fields constructing tests for each.
-		for (int i = 0; i != clauses.length; ++i) {
-			WyilFile.Type.Field f = fields.get(i);
-			String field = "$" + f.getName().get();
-			clauses[i] = constructTypeConstraint(f.getType(), unbox(f.getType(), GET(expr, VAR(field))));
-		}
-		// Remove all <code>null</code> values from the clauses array.
-		clauses = ArrayUtils.removeAll(clauses, null);
-		// Done
-		return (clauses.length == 0) ? null : AND(clauses);
-	}
-
-	/**
-	 * Construct a type test for an unadorned reference type. This is done by
-	 * extracting any constraints from the element type as necessary. For example,
-	 * given a parameter declaration <code>&nat x</code>, the following constraint
-	 * would be generated:
-	 *
-	 * <pre>
-	 *   nat#is(Heap[x])
-	 * </pre>
-	 *
-	 * Observe that such a constraint is only when there are actual constraints on
-	 * the element type in question.
-	 *
-	 * @param type The type from which constraints are being generated
-	 * @param expr An expression representing the item being constrained (e.g. a
-	 *             parameter or local variable).
-	 * @return
-	 */
-	private Expr constructReferenceTypeConstraint(WyilFile.Type.Reference type, Expr expr) {
-		// Construct a dereference to access the element value
-		Expr deref = unbox(type, new Expr.DictionaryAccess(VAR("#HEAP"), expr));
-		// Determine what constraint (if any) exists on the element type
-		return constructTypeConstraint(type.getElement(), unbox(type.getElement(), deref));
-	}
-
-	/**
-	 * Construct a type test for an unadorned union type. This is done by
-	 * disjunction together constraints from each field as necessary. For example,
-	 * given a parameter declaration <code>nat|null x</code>, the following
-	 * constraint would be generated:
-	 *
-	 * <pre>
-	 *   nat#is(x[$f]) || ???
-	 * </pre>
-	 *
-	 * Observe that constraints are only generated when there is at least one
-	 * constraint on a component type.
-	 *
-	 * @param type The type from which constraints are being generated
-	 * @param expr An expression representing the item being constrained (e.g. a
-	 *             parameter or local variable).
-	 * @return
-	 */
-	private Expr constructUnionTypeConstraint(WyilFile.Type.Union type, Expr expr) {
-		// First, check whether any constraints actually exist.
-		return constructUnionTypeTest(type, WyilFile.Type.Any, expr);
-	}
-
-	private Expr constructCallableTypeConstraint(WyilFile.Type.Callable type, Expr expr) {
-		// NOTE: unclear how to proceed here.
-		return null;
 	}
 
 	// ==============================================================================
@@ -2268,6 +2121,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			return INVOKE("Byte#is", box(from, argument));
 		case WyilFile.TYPE_int:
 			return INVOKE("Int#is", box(from, argument));
+		case WyilFile.TYPE_property:
+		case WyilFile.TYPE_function:
+		case WyilFile.TYPE_method:
+			// NOTE: this is not sufficient, but it will do for now.
+			return INVOKE("Lambda#is", box(from, argument));
 		case WyilFile.TYPE_nominal:
 			return constructNominalTypeTest((WyilFile.Type.Nominal) to, from, argument);
 		case WyilFile.TYPE_array:
