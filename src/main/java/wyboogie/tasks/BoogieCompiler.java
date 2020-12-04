@@ -760,9 +760,27 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	@Override
 	public Stmt constructDoWhile(WyilFile.Stmt.DoWhile stmt, Stmt body, Expr condition, List<Expr> invariant,
 			List<Expr> preconditions) {
-		Stmt loop = new Stmt.While(condition, invariant, body);
-		// FIXME: handle preconditions
-		return SEQUENCE(body, loop);
+		boolean needContinueLabel = containsContinueOrBreak(stmt, false);
+		boolean needBreakLabel = containsContinueOrBreak(stmt, true);
+		ArrayList<Stmt> stmts = new ArrayList<>();
+		// Add all preconditions arising.
+		stmts.addAll(constructAssertions(preconditions));
+		// Apply any heap allocations arising.
+		stmts.addAll(constructSideEffects(stmt.getCondition()));
+		//
+		stmts.add(body);
+		// Add continue label (if necessary)
+		if (needContinueLabel) {
+			stmts.add(new Stmt.Label("CONTINUE_" + stmt.getIndex()));
+		}
+		// FIXME: handle preconditions and side-effects for subsequent iterations.
+		stmts.add(new Stmt.While(condition, invariant, body));
+		// Add break label (if necessary)
+		if (needBreakLabel) {
+			stmts.add(new Stmt.Label("BREAK_" + stmt.getIndex()));
+		}
+		// Done
+		return SEQUENCE(stmts);
 	}
 
 	@Override
@@ -773,6 +791,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	@Override
 	public Stmt constructFor(WyilFile.Stmt.For stmt, Pair<Expr, Expr> range, List<Expr> invariant, Stmt body,
 			List<Expr> preconditions) {
+		boolean needContinueLabel = containsContinueOrBreak(stmt, false);
+		boolean needBreakLabel = containsContinueOrBreak(stmt, true);
 		// Determine name of loop variable
 		String name = stmt.getVariable().getName().get();
 		Expr.VariableAccess var = new Expr.VariableAccess(name);
@@ -789,10 +809,20 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		Expr condition = LT(var, range.second());
 		// Add variable increment for completeness
 		loopBody.add(new Stmt.Assignment(var, ADD(var, CONST(1))));
+		// UPdate the invariant
+		invariant.add(0,AND(LTEQ(range.first(),var),LTEQ(var,range.second())));
+		// Add continue label (if necessary)
+		if (needContinueLabel) {
+			stmts.add(new Stmt.Label("CONTINUE_" + stmt.getIndex()));
+		}
 		// Construct the loop
 		stmts.add(new Stmt.While(condition, invariant, SEQUENCE(loopBody)));
-		// FIXME: handle preconditions and allocations arising from conditions /
-		// invariant at end of loop.
+		// Add break label (if necessary)
+		if (needBreakLabel) {
+			stmts.add(new Stmt.Label("BREAK_" + stmt.getIndex()));
+		}
+		// FIXME: handle preconditions and side-effects arising from subsequent
+		// iterations.
 		// Done.
 		return SEQUENCE(stmts);
 	}
@@ -989,7 +1019,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		if (needContinueLabel) {
 			stmts.add(new Stmt.Label("CONTINUE_" + stmt.getIndex()));
 		}
-		// FIXME: Handle preconditions and allocations arising from condition at the end of the loop body.
+		// FIXME: handle preconditions and side-effects arising from subsequent
+		// iterations.
 		stmts.add(new Stmt.While(condition, invariant, body));
 		// Add break label (if necessary)
 		if (needBreakLabel) {

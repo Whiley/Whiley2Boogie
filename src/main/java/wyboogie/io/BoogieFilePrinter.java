@@ -360,10 +360,9 @@ public class BoogieFilePrinter {
 			writeExpression(invariant.get(i));
 			out.println(";");
 		}
-		tab(indent);
-		out.println("{");
+		tab(indent);out.println("{");
 		writeStmt(indent + 1, s.getBody());
-		out.println("}");
+		tab(indent);out.println("}");
 	}
 	private void writeExpressionWithBraces(Expr e) {
 		if (e instanceof Expr.UnaryOperator || e instanceof Expr.BinaryOperator || e instanceof Expr.NaryOperator) {
