@@ -85,7 +85,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Create parameter for type test function
 		Decl.Parameter p = new Decl.Parameter(var.getName().get(), type);
 		// Generate any constraints implied by the type itself
-		Expr constraints = constructTypeTest(var.getType(),var.getType(),VAR(p.getName()),"#HEAP");
+		Expr constraints = constructTypeConstraint(var.getType(), VAR(p.getName()), "#HEAP");
 		/// Determine mangled name for type declaration
 		String name = toMangledName(d);
 		// Create an appropriate synonym
@@ -2239,6 +2239,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			return INVOKE("Byte#is", box(from, argument));
 		case WyilFile.TYPE_int:
 			return INVOKE("Int#is", box(from, argument));
+		case WyilFile.TYPE_universal:
+			return NEQ(argument, VAR("Void"));
 		case WyilFile.TYPE_property:
 		case WyilFile.TYPE_function:
 		case WyilFile.TYPE_method:
