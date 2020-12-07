@@ -832,6 +832,9 @@ public class BoogieFile {
 			private final String variable;
 
 			public VariableAccess(String var) {
+				if(var == null) {
+					throw new IllegalArgumentException();
+				}
 				this.variable = var;
 			}
 

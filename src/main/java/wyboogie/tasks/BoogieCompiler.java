@@ -27,6 +27,7 @@ import wyboogie.core.BoogieFile;
 import wyboogie.core.BoogieFile.Decl;
 import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.Stmt;
+import wyboogie.core.BoogieFile.Decl.Parameter;
 import wyboogie.core.BoogieFile.LVal;
 import wyboogie.util.AbstractTranslator;
 import wybs.lang.Build.Meter;
@@ -79,13 +80,17 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Decl constructType(WyilFile.Decl.Type d, List<Expr> invariant) {
+		ArrayList<Decl.Parameter> parameters = new ArrayList<>();
 		WyilFile.Decl.Variable var = d.getVariableDeclaration();
+		String varname = toVariableName(var);
 		// Convert the Whiley type into a Boogie type
 		Type type = constructType(var.getType());
 		// Create parameter for type test function
-		Decl.Parameter p = new Decl.Parameter(var.getName().get(), type);
+		parameters.add(new Decl.Parameter(varname, type));
+		// Construct heap parameter
+		parameters.add(new Decl.Parameter("#HEAP", REFMAP));
 		// Generate any constraints implied by the type itself
-		Expr constraints = constructTypeConstraint(var.getType(), VAR(p.getName()), "#HEAP");
+		Expr constraints = constructTypeConstraint(var.getType(), VAR(varname), "#HEAP");
 		/// Determine mangled name for type declaration
 		String name = toMangledName(d);
 		// Create an appropriate synonym
@@ -94,7 +99,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Add type constraints (f applicable)
 		inv = (constraints == null) ? inv : AND(constraints, inv);
 		// Done!
-		return new Decl.Sequence(t, FUNCTION(name + "#is", p, Type.Bool, inv));
+		return new Decl.Sequence(t, FUNCTION(name + "#is", parameters, Type.Bool, inv));
 	}
 
 	@Override
@@ -133,8 +138,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		ArrayList<Decl> decls = new ArrayList<>();
 		// Apply name mangling
 		String name = toMangledName(d);
-		List<Decl.Parameter> parameters = constructParameters(d.getParameters(), precondition, null);
-		List<Decl.Parameter> returns = constructParameters(d.getReturns(), postcondition, null);
+		List<Decl.Parameter> parameters = constructParameters(d.getParameters(), precondition, "Ref#Empty");
+		List<Decl.Parameter> returns = constructParameters(d.getReturns(), postcondition, "Ref#Empty");
 		// Construct parameters and arguments for specification helpers
 		ArrayList<Decl.Parameter> specParametersAndReturns = new ArrayList<>();
 		specParametersAndReturns.addAll(parameters);
@@ -296,7 +301,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * @return
 	 */
 	public Decl.Parameter constructParameter(WyilFile.Decl.Variable parameter, List<Expr> constraints, String heap) {
-		String name = parameter.getName().get();
+		String name = toVariableName(parameter);
 		// Construct any constraints arising from the parameter's type
 		Expr constraint = constructTypeConstraint(parameter.getType(), VAR(name), heap);
 		//
@@ -360,7 +365,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 				WyilFile.Tuple<WyilFile.Decl.Variable> vars = stmt.getVariables();
 				for (int i = 0; i != vars.size(); ++i) {
 					WyilFile.Decl.Variable ith = vars.get(i);
-					decls.add(new Decl.Variable(ith.getName().get(), constructType(ith.getType())));
+					String name = toVariableName(ith);
+					decls.add(new Decl.Variable(name, constructType(ith.getType())));
 				}
 			}
 
@@ -385,7 +391,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			public void visitFor(WyilFile.Stmt.For stmt) {
 				super.visitFor(stmt);
 				WyilFile.Decl.StaticVariable v = stmt.getVariable();
-				String name = v.getName().toString();
+				String name = toVariableName(v);
 				Type type = constructType(v.getType());
 				decls.add(new Decl.Variable(name, type));
 			}
@@ -906,7 +912,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		boolean needContinueLabel = containsContinueOrBreak(stmt, false);
 		boolean needBreakLabel = containsContinueOrBreak(stmt, true);
 		// Determine name of loop variable
-		String name = stmt.getVariable().getName().get();
+		String name = toVariableName(stmt.getVariable());
 		Expr.VariableAccess var = new Expr.VariableAccess(name);
 		ArrayList<Stmt> stmts = new ArrayList<>();
 		// Add all preconditions arising.
@@ -972,7 +978,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			// Assign to each variable
 			for (int i = 0; i != vars.size(); ++i) {
 				WyilFile.Decl.Variable ith = vars.get(i);
-				String name = ith.getName().toString();
+				String name = toVariableName(ith);
 				stmts.add(ASSIGN(new Expr.VariableAccess(name), cast(ith.getType(), initT.dimension(i), inits.get(i))));
 			}
 			// FIXME: need post condition!
@@ -1047,7 +1053,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			//
 			for (int i = 0; i != rvs.size(); ++i) {
 				WyilFile.Decl.Variable ith = returns.get(i);
-				String rv = ith.getName().get();
+				String rv = toVariableName(ith);
 				// Cast returned value as necessary
 				Expr re = cast(ith.getType(), type.dimension(i), rvs.get(i));
 				// Done
@@ -1531,7 +1537,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructIs(WyilFile.Expr.Is expr, Expr operand) {
-		return constructTypeTest(expr.getTestType(), expr.getOperand().getType(), operand, "#HEAP");
+		// NOTE: by inspecting the type in question, we could avoid the need to supply a
+		// heap parameter in cases where this doesn't make sense.
+		WyilFile.Decl.Method m = expr.getAncestor(WyilFile.Decl.Method.class);
+		// NOTE: in a functional setting, there is no heap variable in play. Therefore,
+		// we provide an empty heap in its place.
+		String heap = m != null ? "#HEAP" : "Ref#Empty";
+		return constructTypeTest(expr.getTestType(), expr.getOperand().getType(), operand, heap);
 	}
 
 	@Override
@@ -1567,7 +1579,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		List<Expr> clauses = new ArrayList<>();
 		for (int i = 0; i != params.size(); ++i) {
 			Pair<Expr, Expr> ith = ranges.get(i);
-			String name = params.get(i).getName().get();
+			String name = toVariableName(params.get(i));
 			ps.add(new Decl.Parameter(name, Type.Int));
 			clauses.add(LTEQ(ith.first(), VAR(name)));
 			clauses.add(LT(VAR(name), ith.second()));
@@ -1584,7 +1596,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		List<Expr> clauses = new ArrayList<>();
 		for (int i = 0; i != params.size(); ++i) {
 			Pair<Expr, Expr> ith = ranges.get(i);
-			String name = params.get(i).getName().get();
+			String name = toVariableName(params.get(i));
 			ps.add(new Decl.Parameter(name, Type.Int));
 			clauses.add(LTEQ(ith.first(), VAR(name)));
 			clauses.add(LT(VAR(name), ith.second()));
@@ -1747,7 +1759,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	public Expr constructVariableAccess(WyilFile.Expr.VariableAccess expr) {
 		WyilFile.Type declared = expr.getVariableDeclaration().getType();
 		WyilFile.Type actual = expr.getType();
-		return cast(actual, declared, VAR(expr.getVariableDeclaration().getName().toString()));
+		// Determine mangled name of this variable
+		String name = toVariableName(expr.getVariableDeclaration());
+		//
+		return cast(actual, declared, VAR(name));
 	}
 
 	// =========================================================================================
@@ -2089,6 +2104,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		ArrayList<Decl> decls = new ArrayList<>();
 		decls.add(new Decl.LineComment("References"));
 		decls.add(new Decl.TypeSynonym("Ref", null));
+		decls.add(new Decl.Constant(true, "Ref#Empty", REFMAP));
 		decls.add(FUNCTION("Ref#box", REF, ANY));
 		decls.add(FUNCTION("Ref#unbox", ANY, REF));
 		// Establish connection between box and unbox
@@ -2247,7 +2263,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			// NOTE: this is not sufficient, but it will do for now.
 			return INVOKE("Lambda#is", box(from, argument));
 		case WyilFile.TYPE_nominal:
-			return constructNominalTypeTest((WyilFile.Type.Nominal) to, from, argument);
+			return constructNominalTypeTest((WyilFile.Type.Nominal) to, from, argument, heap);
 		case WyilFile.TYPE_array:
 			return constructArrayTypeTest((WyilFile.Type.Array) to, from, argument, heap);
 		case WyilFile.TYPE_record:
@@ -2287,11 +2303,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * @param argument The argument being tested.
 	 * @return
 	 */
-	private Expr constructNominalTypeTest(WyilFile.Type.Nominal to, WyilFile.Type from, Expr argument) {
+	private Expr constructNominalTypeTest(WyilFile.Type.Nominal to, WyilFile.Type from, Expr argument, String heap) {
+		// FIXME: we don't always have to pass through the heap variable, as it depends
+		// on the type in question.
+		//
 		// Construct appropriate name mangle
 		String name = toMangledName(to.getLink().getTarget());
 		// Ensure argument is boxed
-		return INVOKE(name + "#is", cast(to, from, argument));
+		System.out.println("HEAP: " + heap);
+		return INVOKE(name + "#is", cast(to, from, argument), VAR(heap));
 	}
 
 	/**
@@ -2603,6 +2623,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	// ==============================================================================
 	// Misc
 	// ==============================================================================
+
+
+	private static String toVariableName(WyilFile.Decl.Variable v) {
+		return v.getName().get() + "$" + v.getIndex();
+	}
+
 
 	/**
 	 * Check whether a given (loop) statement contains a break or continue (which is
