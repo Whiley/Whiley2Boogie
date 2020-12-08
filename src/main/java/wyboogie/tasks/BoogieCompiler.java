@@ -90,12 +90,18 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Create an appropriate synonym
 		decls.add(new Decl.TypeSynonym(name, type));
 		// Create invariant
+		ArrayList<Decl.Parameter> parameters = new ArrayList<>();
+		parameters.add(new Decl.Parameter(varName, type));
+		parameters.add(new Decl.Parameter("#HEAP", REFMAP));
 		Expr inv = AND(invariant);
-		decls.add(FUNCTION(name + "#inv", new Decl.Parameter(varName, type), Type.Bool, inv));
+		decls.add(FUNCTION(name + "#inv", parameters, Type.Bool, inv));
 		// Generate test for the type itself
 		Expr test = constructTypeTest(var.getType(), WyilFile.Type.Any, VAR(varName), "#HEAP");
-		test = AND(test, INVOKE(name + "#inv", unbox(var.getType(), VAR(varName))));
-		decls.add(FUNCTION(name + "#is", new Decl.Parameter(varName, ANY), Type.Bool, test));
+		test = AND(test, INVOKE(name + "#inv", unbox(var.getType(), VAR(varName)), VAR("#HEAP")));
+		parameters = new ArrayList<>();
+		parameters.add(new Decl.Parameter(varName, ANY));
+		parameters.add(new Decl.Parameter("#HEAP", REFMAP));
+		decls.add(FUNCTION(name + "#is", parameters, Type.Bool, test));
 		// Done!
 		return new Decl.Sequence(decls);
 	}
@@ -124,7 +130,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Construct container for type constraints
 		ArrayList<Expr> constraints = new ArrayList<>();
 		//
-		List<Decl.Parameter> parameters = constructParameters(d.getParameters(), constraints, null);
+		List<Decl.Parameter> parameters = constructParameters(d.getParameters(), constraints, "Ref#Empty");
 		// FIXME: what to do with the type constraints?
 		Expr body = new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, clauses);
 		return FUNCTION(name, parameters, Type.Bool, body);
@@ -136,8 +142,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		ArrayList<Decl> decls = new ArrayList<>();
 		// Apply name mangling
 		String name = toMangledName(d);
-		List<Decl.Parameter> parameters = constructParameters(d.getParameters(), precondition, null);
-		List<Decl.Parameter> returns = constructParameters(d.getReturns(), postcondition, null);
+		List<Decl.Parameter> parameters = constructParameters(d.getParameters(), precondition, "Ref#Empty");
+		List<Decl.Parameter> returns = constructParameters(d.getReturns(), postcondition, "Ref#Empty");
 		// Construct parameters and arguments for specification helpers
 		ArrayList<Decl.Parameter> specParametersAndReturns = new ArrayList<>();
 		specParametersAndReturns.addAll(parameters);
@@ -464,7 +470,16 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		//
 		if (d instanceof WyilFile.Decl.Function && parameters.size() == 0) {
 			// Easy case, since we don't even need a quantifier.
-			return new Decl.Axiom(INVOKE(name + "#post", INVOKE(name)));
+			if(returns.size() == 1) {
+				return new Decl.Axiom(INVOKE(name + "#post", INVOKE(name)));
+			} else {
+				ArrayList<Expr> args = new ArrayList<>();
+				// Functions with multiple returns require special handling
+				for (int i = 0; i != returns.size(); ++i) {
+					args.add(INVOKE(name + "#" + i));
+				}
+				return new Decl.Axiom(INVOKE(name + "#post", args));
+			}
 		} else {
 			// A universal quantifier is required!
 			List<Expr> args = new ArrayList<>();
@@ -1534,7 +1549,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructIs(WyilFile.Expr.Is expr, Expr operand) {
-		return constructTypeTest(expr.getTestType(), expr.getOperand().getType(), operand, "#HEAP");
+		boolean isMethod = expr.getAncestor(WyilFile.Decl.Callable.class) instanceof WyilFile.Decl.Method;
+		String heap = isMethod ? "#HEAP" : "Ref#Empty";
+		return constructTypeTest(expr.getTestType(), expr.getOperand().getType(), operand, heap);
 	}
 
 	@Override
@@ -2094,6 +2111,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(new Decl.TypeSynonym("Ref", null));
 		decls.add(FUNCTION("Ref#box", REF, ANY));
 		decls.add(FUNCTION("Ref#unbox", ANY, REF));
+		decls.add(new Decl.Constant(true, "Ref#Empty", REFMAP));
 		// Establish connection between box and unbox
 		decls.add(new Decl.Axiom(
 				FORALL("r", REF, EQ(INVOKE("Ref#unbox", INVOKE("Ref#box", VAR("r"))), VAR("r")))));
@@ -2250,7 +2268,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			// NOTE: this is not sufficient, but it will do for now.
 			return INVOKE("Lambda#is", box(from, argument));
 		case WyilFile.TYPE_nominal:
-			return constructNominalTypeTest((WyilFile.Type.Nominal) to, from, argument);
+			return constructNominalTypeTest((WyilFile.Type.Nominal) to, from, argument, heap);
 		case WyilFile.TYPE_array:
 			return constructArrayTypeTest((WyilFile.Type.Array) to, from, argument, heap);
 		case WyilFile.TYPE_record:
@@ -2290,11 +2308,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * @param argument The argument being tested.
 	 * @return
 	 */
-	private Expr constructNominalTypeTest(WyilFile.Type.Nominal to, WyilFile.Type from, Expr argument) {
+	private Expr constructNominalTypeTest(WyilFile.Type.Nominal to, WyilFile.Type from, Expr argument, String heap) {
 		// Construct appropriate name mangle
 		String name = toMangledName(to.getLink().getTarget());
 		// Ensure argument is boxed!
-		return INVOKE(name + "#is", box(from, argument));
+		return INVOKE(name + "#is", box(from, argument), VAR(heap));
 	}
 
 	/**
