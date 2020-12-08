@@ -98,7 +98,6 @@ public class RuntimeValidTests {
 				name); // name of test to compile
 
 		boolean r = p.first();
-		System.out.print(p.second());
 
 		if (!r) {
 			fail("Test failed to compile!");

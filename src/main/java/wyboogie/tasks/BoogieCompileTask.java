@@ -86,7 +86,10 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 			String id = source.getEntry().id().toString();
 			Boogie.Error[] errors = verifier.check(timeout, id, target);
 			//
-			if(verbose && errors != null) {
+			if(verbose && errors != null && errors.length > 0) {
+				System.out.println("=================================================");
+				System.out.println("Errors: " + id);
+				System.out.println("=================================================");
 				// Debugging output
 				for(int i=0;i!=errors.length;++i) {
 					System.out.println(errors[i]);

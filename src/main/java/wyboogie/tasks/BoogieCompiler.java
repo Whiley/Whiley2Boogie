@@ -80,26 +80,31 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Decl constructType(WyilFile.Decl.Type d, List<Expr> invariant) {
-		ArrayList<Decl.Parameter> parameters = new ArrayList<>();
+		ArrayList<Decl> decls = new ArrayList<>();
 		WyilFile.Decl.Variable var = d.getVariableDeclaration();
-		String varname = toVariableName(var);
+		// Determine the (mangled) variable name
+		String varName = toVariableName(var);
 		// Convert the Whiley type into a Boogie type
 		Type type = constructType(var.getType());
-		// Create parameter for type test function
-		parameters.add(new Decl.Parameter(varname, type));
-		// Construct heap parameter
-		parameters.add(new Decl.Parameter("#HEAP", REFMAP));
-		// Generate any constraints implied by the type itself
-		Expr constraints = constructTypeConstraint(var.getType(), VAR(varname), "#HEAP");
 		/// Determine mangled name for type declaration
 		String name = toMangledName(d);
 		// Create an appropriate synonym
-		Decl t = new Decl.TypeSynonym(name, type);
+		decls.add(new Decl.TypeSynonym(name, type));
+		// Create invariant
+		ArrayList<Decl.Parameter> parameters = new ArrayList<>();
+		parameters.add(new Decl.Parameter(varName, type));
+		parameters.add(new Decl.Parameter("#HEAP", REFMAP));
 		Expr inv = AND(invariant);
-		// Add type constraints (f applicable)
-		inv = (constraints == null) ? inv : AND(constraints, inv);
+		decls.add(FUNCTION(name + "#inv", parameters, Type.Bool, inv));
+		// Generate test for the type itself
+		Expr test = constructTypeTest(var.getType(), WyilFile.Type.Any, VAR(varName), "#HEAP");
+		test = AND(test, INVOKE(name + "#inv", unbox(var.getType(), VAR(varName)), VAR("#HEAP")));
+		parameters = new ArrayList<>();
+		parameters.add(new Decl.Parameter(varName, ANY));
+		parameters.add(new Decl.Parameter("#HEAP", REFMAP));
+		decls.add(FUNCTION(name + "#is", parameters, Type.Bool, test));
 		// Done!
-		return new Decl.Sequence(t, FUNCTION(name + "#is", parameters, Type.Bool, inv));
+		return new Decl.Sequence(decls);
 	}
 
 	@Override
@@ -126,7 +131,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Construct container for type constraints
 		ArrayList<Expr> constraints = new ArrayList<>();
 		//
-		List<Decl.Parameter> parameters = constructParameters(d.getParameters(), constraints, null);
+		List<Decl.Parameter> parameters = constructParameters(d.getParameters(), constraints, "Ref#Empty");
 		// FIXME: what to do with the type constraints?
 		Expr body = new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, clauses);
 		return FUNCTION(name, parameters, Type.Bool, body);
@@ -467,7 +472,16 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		//
 		if (d instanceof WyilFile.Decl.Function && parameters.size() == 0) {
 			// Easy case, since we don't even need a quantifier.
-			return new Decl.Axiom(INVOKE(name + "#post", INVOKE(name)));
+			if(returns.size() == 1) {
+				return new Decl.Axiom(INVOKE(name + "#post", INVOKE(name)));
+			} else {
+				ArrayList<Expr> args = new ArrayList<>();
+				// Functions with multiple returns require special handling
+				for (int i = 0; i != returns.size(); ++i) {
+					args.add(INVOKE(name + "#" + i));
+				}
+				return new Decl.Axiom(INVOKE(name + "#post", args));
+			}
 		} else {
 			// A universal quantifier is required!
 			List<Expr> args = new ArrayList<>();
@@ -2107,6 +2121,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(new Decl.Constant(true, "Ref#Empty", REFMAP));
 		decls.add(FUNCTION("Ref#box", REF, ANY));
 		decls.add(FUNCTION("Ref#unbox", ANY, REF));
+		decls.add(new Decl.Constant(true, "Ref#Empty", REFMAP));
 		// Establish connection between box and unbox
 		decls.add(new Decl.Axiom(
 				FORALL("r", REF, EQ(INVOKE("Ref#unbox", INVOKE("Ref#box", VAR("r"))), VAR("r")))));
@@ -2304,14 +2319,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * @return
 	 */
 	private Expr constructNominalTypeTest(WyilFile.Type.Nominal to, WyilFile.Type from, Expr argument, String heap) {
-		// FIXME: we don't always have to pass through the heap variable, as it depends
-		// on the type in question.
-		//
 		// Construct appropriate name mangle
 		String name = toMangledName(to.getLink().getTarget());
-		// Ensure argument is boxed
-		System.out.println("HEAP: " + heap);
-		return INVOKE(name + "#is", cast(to, from, argument), VAR(heap));
+		// Ensure argument is boxed!
+		return INVOKE(name + "#is", box(from, argument), VAR(heap));
 	}
 
 	/**
@@ -2395,7 +2406,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		argument = cast(to, from, argument);
 		// Dereference argument
 		Expr deref = GET(VAR(heap),argument);
-		//
+		// Done
 		return constructTypeTest(to.getElement(), WyilFile.Type.Any, deref, heap);
 	}
 

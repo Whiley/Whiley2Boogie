@@ -89,7 +89,6 @@ public class Boogie {
 	public Error[] check(int timeout, String id, BoogieFile boogie) {
 		String filename = null;
 		try {
-			System.err.println(new String(boogie.getBytes()));
 			// Create the temporary file.
 			filename = createTemporaryFile(id, ".bpl", boogie.getBytes());
 			// ===================================================
@@ -121,8 +120,6 @@ public class Boogie {
 				boolean success = child.waitFor(timeout, TimeUnit.MILLISECONDS);
 				byte[] stdout = readInputStream(input);
 				byte[] stderr = readInputStream(error);
-				System.out.println("STDOUT: " + new String(stdout));
-				System.out.println("STDERR: " + new String(stdout));
 				if(success && child.exitValue() == 0) {
 					return parseErrors(new String(stdout));
 				}
