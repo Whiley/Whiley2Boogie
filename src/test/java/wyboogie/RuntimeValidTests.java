@@ -100,6 +100,7 @@ public class RuntimeValidTests {
 		boolean r = p.first();
 
 		if (!r) {
+			System.out.println(p.second());
 			fail("Test failed to compile!");
 		}
 	}

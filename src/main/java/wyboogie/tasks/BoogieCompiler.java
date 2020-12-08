@@ -93,15 +93,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Create invariant
 		ArrayList<Decl.Parameter> parameters = new ArrayList<>();
 		parameters.add(new Decl.Parameter(varName, type));
-		parameters.add(new Decl.Parameter("#HEAP", REFMAP));
+		parameters.add(new Decl.Parameter(HEAP_VARNAME, REFMAP));
 		Expr inv = AND(invariant);
 		decls.add(FUNCTION(name + "#inv", parameters, Type.Bool, inv));
 		// Generate test for the type itself
-		Expr test = constructTypeTest(var.getType(), WyilFile.Type.Any, VAR(varName), "#HEAP");
-		test = AND(test, INVOKE(name + "#inv", unbox(var.getType(), VAR(varName)), VAR("#HEAP")));
+		Expr test = constructTypeTest(var.getType(), WyilFile.Type.Any, VAR(varName), HEAP_VARNAME);
+		test = AND(test, INVOKE(name + "#inv", unbox(var.getType(), VAR(varName)), VAR(HEAP_VARNAME)));
 		parameters = new ArrayList<>();
 		parameters.add(new Decl.Parameter(varName, ANY));
-		parameters.add(new Decl.Parameter("#HEAP", REFMAP));
+		parameters.add(new Decl.Parameter(HEAP_VARNAME, REFMAP));
 		decls.add(FUNCTION(name + "#is", parameters, Type.Bool, test));
 		// Done!
 		return new Decl.Sequence(decls);
@@ -178,19 +178,19 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		ArrayList<Decl> decls = new ArrayList<>();
 		// Apply name mangling
 		String name = toMangledName(d);
-		List<Decl.Parameter> parameters = constructParameters(d.getParameters(), precondition, "#HEAP");
-		List<Decl.Parameter> returns = constructParameters(d.getReturns(), postcondition, "##HEAP");
+		List<Decl.Parameter> parameters = constructParameters(d.getParameters(), precondition, HEAP_VARNAME);
+		List<Decl.Parameter> returns = constructParameters(d.getReturns(), postcondition, "#" + HEAP_VARNAME);
 		// Construct parameters and arguments for specification helpers
 		ArrayList<Decl.Parameter> specParametersAndReturns = new ArrayList<>();
 		// Add the obligatory heap parameter
-		parameters.add(0, new Decl.Variable("#HEAP", REFMAP));
-		returns.add(0, new Decl.Variable("##HEAP", REFMAP));
+		parameters.add(0, new Decl.Variable(HEAP_VARNAME, REFMAP));
+		returns.add(0, new Decl.Variable("#" + HEAP_VARNAME, REFMAP));
 		specParametersAndReturns.addAll(parameters);
 		// Construct function representation precondition
 		decls.add(FUNCTION(name + "#pre", specParametersAndReturns, Type.Bool, AND(precondition)));
 		// Construct shadow parameters (if applicable, and before heap variable)
 		List<Decl.Parameter> shadows = constructShadowParameters(d.getParameters(), parameters);
-		shadows.add(0, new Decl.Variable("#HEAP#", REFMAP));
+		shadows.add(0, new Decl.Variable(HEAP_VARNAME + "#", REFMAP));
 		// Determine local variables
 		List<Decl.Variable> locals = constructLocals(d.getBody());
 		// Add shadown assignments to the body
@@ -198,7 +198,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Check whether last statement is a return or not.
 		if(!hasFinalReturn(d)) {
 			// Return the updated program heap (only for methods).
-			body = SEQUENCE(body,new Stmt.Assignment(VAR("##HEAP"), VAR("#HEAP")));
+			body = SEQUENCE(body,new Stmt.Assignment(VAR("#" + HEAP_VARNAME), VAR(HEAP_VARNAME)));
 		}
 		// Construct procedure prototype
 		decls.add(new Decl.Procedure(name, parameters, returns, precondition, postcondition, Collections.EMPTY_LIST));
@@ -264,7 +264,30 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	public List<Decl.Parameter> constructParameters(WyilFile.Tuple<WyilFile.Decl.Variable> parameters, List<Expr> constraints, String heap) {
 		ArrayList<Decl.Parameter> ps = new ArrayList<>();
 		for (int i = 0; i != parameters.size(); ++i) {
-			ps.add(constructParameter(parameters.get(i), constraints, heap));
+			WyilFile.Decl.Variable ith = parameters.get(i);
+			ps.add(constructParameter(toVariableName(ith), ith.getType(), constraints, heap));
+		}
+		return ps;
+	}
+
+	/**
+	 * Construct a set of parameters which have no explictly declared name in the
+	 * original Whiley source file. This situation arises for lambda's primarily.
+	 *
+	 * @param prefix       Prefix to use for variable names.
+	 * @param types        Types of anonymous parameters.
+	 * @param constraints  Any constraints generated from parameter types will be
+	 *                     added to this list of constraints.
+	 * @param heap         Identifies the correct name to use when referring to the
+	 *                     heap. This matters as in some contexts one must refer to
+	 *                     the new heap, and in others to the "old" heap.
+	 * @return
+	 */
+	public List<Decl.Parameter> constructAnonymousParameters(String prefix, WyilFile.Type type, List<Expr> constraints,
+			String heap) {
+		ArrayList<Decl.Parameter> ps = new ArrayList<>();
+		for (int i = 0; i != type.shape(); ++i) {
+			ps.add(constructParameter(prefix + "#" + i, type.dimension(i), constraints, heap));
 		}
 		return ps;
 	}
@@ -305,18 +328,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 *                     be added to this list of constraints.
 	 * @return
 	 */
-	public Decl.Parameter constructParameter(WyilFile.Decl.Variable parameter, List<Expr> constraints, String heap) {
-		String name = toVariableName(parameter);
+	public Decl.Parameter constructParameter(String name, WyilFile.Type type, List<Expr> constraints, String heap) {
 		// Construct any constraints arising from the parameter's type
-		Expr constraint = constructTypeConstraint(parameter.getType(), VAR(name), heap);
+		Expr constraint = constructTypeConstraint(type, VAR(name), heap);
 		//
 		if(constraint != null) {
 			constraints.add(constraint);
 		}
-		// Convert the Whiley type into a Boogie type.
-		Type type = constructType(parameter.getType());
 		// Done
-		return new Decl.Parameter(name, type);
+		return new Decl.Parameter(name, constructType(type));
 	}
 
 	/**
@@ -490,7 +510,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 				// Clone parameters list to prevent side-effects
 				parameters = new ArrayList<>(parameters);
 				// Insert new parameter at the beginning
-				parameters.add(0, new Decl.Variable("#HEAP", REFMAP));
+				parameters.add(0, new Decl.Variable(HEAP_VARNAME, REFMAP));
 			}
 			// Add remaining arguments
 			for (int i = 0; i != parameters.size(); ++i) {
@@ -562,31 +582,21 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Extract any necessary local variable declarations
 		List<Decl.Variable> locals = constructLocals(l.getBody());
 		// Convert explicit parameters
-		List<Decl.Parameter> parameters = constructParameters(l.getParameters(), precondition, "#HEAP");
+		String heap = method ? HEAP_VARNAME : "Ref#Empty";
+		String nheap = method ? "#" + HEAP_VARNAME : "Ref#Empty";
+		List<Decl.Parameter> parameters = constructParameters(l.getParameters(), precondition, heap);
 		// Convert implicit parameters
-		parameters.addAll(constructParameters(new Tuple<>(captured),precondition,"#HEAP"));
+		parameters.addAll(constructParameters(new Tuple<>(captured), precondition, heap));
 		List<Decl.Parameter> protoParameters = new ArrayList<>(parameters);
 		// Will contain convert return parameters
-		List<Decl.Parameter> returns = new ArrayList<>();
+		List<Decl.Parameter> returns = constructAnonymousParameters("r",returnType,postcondition,nheap);
 		// Add Heap variable if necessary
 		if(method) {
-			parameters.add(0, new Decl.Parameter("#HEAP#", REFMAP));
-			protoParameters.add(0, new Decl.Parameter("#HEAP", REFMAP));
-			returns.add(new Decl.Parameter("##HEAP", REFMAP));
-			locals.add(new Decl.Variable("#HEAP", REFMAP));
-			stmts.add(new Stmt.Assignment(VAR("#HEAP"),VAR("#HEAP#")));
-		}
-		// Construct return values
-		for(int i=0;i!=returnType.shape();++i) {
-			WyilFile.Type ret = returnType.dimension(i);
-			// Construct any constraints arising from the parameter's type
-			Expr constraint = constructTypeConstraint(ret, VAR("r" + i), "##HEAP");
-			//
-			if(constraint != null) {
-				postcondition.add(constraint);
-			}
-			// Convert the Whiley type into a Boogie type.
-			returns.add(new Decl.Parameter("r" + i, constructType(ret)));
+			parameters.add(0, new Decl.Parameter(HEAP_VARNAME + "#", REFMAP));
+			protoParameters.add(0, new Decl.Parameter(HEAP_VARNAME, REFMAP));
+			returns.add(0,new Decl.Parameter("#" + HEAP_VARNAME, REFMAP));
+			locals.add(new Decl.Variable(HEAP_VARNAME, REFMAP));
+			stmts.add(new Stmt.Assignment(VAR(HEAP_VARNAME),VAR(HEAP_VARNAME + "#")));
 		}
 		// Translate lambda body
 		Expr body = visitExpression(l.getBody());
@@ -599,7 +609,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			Decl.Parameter ith = returns.get(i);
 			if(method && i == 0) {
 				// Heap variable always first return for methods.
-				stmts.add(new Stmt.Assignment(VAR("##HEAP"),VAR("#HEAP")));
+				stmts.add(new Stmt.Assignment(VAR("#" + HEAP_VARNAME),VAR(HEAP_VARNAME)));
 			} else {
 				// FIXME: broken for multiple returns
 				stmts.add(new Stmt.Assignment(VAR(ith.getName()),body));
@@ -803,7 +813,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			// Box the right-hand side (as necessary)
 			rhs = box(lval.getType(),rhs);
 			//
-			return new Stmt.Assignment(VAR("#HEAP"), PUT(VAR("#HEAP"),src,rhs));
+			return new Stmt.Assignment(VAR(HEAP_VARNAME), PUT(VAR(HEAP_VARNAME),src,rhs));
 		}
 		case WyilFile.EXPR_fielddereference: {
 			WyilFile.Expr.FieldDereference r = (WyilFile.Expr.FieldDereference) lval;
@@ -818,11 +828,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			// Box the right-hand side (as necessary)
 			rhs = box(lval.getType(),rhs);
 			// Make the field assignment
-			rhs = PUT(unbox(recT,GET(VAR("#HEAP"), src)), index, rhs);
+			rhs = PUT(unbox(recT,GET(VAR(HEAP_VARNAME), src)), index, rhs);
 			// Box again!
 			rhs = box(recT,rhs);
 			// Done
-			return new Stmt.Assignment(VAR("#HEAP"), PUT(VAR("#HEAP"), src, rhs));
+			return new Stmt.Assignment(VAR(HEAP_VARNAME), PUT(VAR(HEAP_VARNAME), src, rhs));
 		}
 		case WyilFile.EXPR_recordaccess:
 		case WyilFile.EXPR_recordborrow: {
@@ -1011,7 +1021,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			// Determine lvals. Observe that we have to assign any return values from the
 			// procedure called, even if they are never used.
 			List<LVal> lvals = new ArrayList<>();
-			lvals.add(VAR("#HEAP"));
+			lvals.add(VAR(HEAP_VARNAME));
 			if (type.shape() == 1) {
 				lvals.add(VAR("m#" + expr.getIndex()));
 			} else {
@@ -1024,7 +1034,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			// Apply conversions to arguments as necessary
 			args = cast(mt.getParameter(), expr.getOperands(), args);
 			// Chaing through heap variable
-			args.add(0,VAR("#HEAP"));
+			args.add(0,VAR(HEAP_VARNAME));
 			// Done
 			return CALL(name, lvals, args);
 		} else {
@@ -1076,7 +1086,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		}
 		if(enclosing instanceof WyilFile.Decl.Method) {
 			// Return the updated program heap (only for methods).
-			stmts.add(new Stmt.Assignment(VAR("##HEAP"), VAR("#HEAP")));
+			stmts.add(new Stmt.Assignment(VAR("#" + HEAP_VARNAME), VAR(HEAP_VARNAME)));
 		}
 		// Add the actual return statement!
 		stmts.add(new Stmt.Return());
@@ -1223,9 +1233,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 				// Box operand (as necessary)
 				operand = box(expr.getOperand().getType(),operand);
 				// Construct lvals
-				List<LVal> lvals = Arrays.asList(VAR("#HEAP"), VAR(name));
+				List<LVal> lvals = Arrays.asList(VAR(HEAP_VARNAME), VAR(name));
 				// Done
-				allocations.add(CALL("Ref#new", lvals, VAR("#HEAP"), operand));
+				allocations.add(CALL("Ref#new", lvals, VAR(HEAP_VARNAME), operand));
 			}
 
 			@Override
@@ -1237,7 +1247,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 					WyilFile.Type type = expr.getType();
 					// Construct temporary variable(s)
 					List<LVal> lvals = new ArrayList<>();
-					lvals.add(VAR("#HEAP"));
+					lvals.add(VAR(HEAP_VARNAME));
 					if(type.shape() == 1) {
 						lvals.add(VAR("m#" + expr.getIndex()));
 					} else {
@@ -1252,7 +1262,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 					// Apply conversions to arguments as necessary
 					args = cast(mt.getType().getParameter(), expr.getOperands(), args);
 					// Chaing through heap variable
-					args.add(0,VAR("#HEAP"));
+					args.add(0,VAR(HEAP_VARNAME));
 					// Done
 					allocations.add(CALL(name, lvals, args));
 				}
@@ -1267,7 +1277,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 					WyilFile.Type type = expr.getType();
 					// Construct temporary variable(s)
 					List<LVal> lvals = new ArrayList<>();
-					lvals.add(VAR("#HEAP"));
+					lvals.add(VAR(HEAP_VARNAME));
 					if(type.shape() == 1) {
 						lvals.add(VAR("m#" + expr.getIndex()));
 					} else {
@@ -1282,7 +1292,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 					// Apply conversions to arguments as necessary
 					args = box(ft.getParameter(), args);
 					// Chain through heap variable
-					args.add(0,VAR("#HEAP"));
+					args.add(0,VAR(HEAP_VARNAME));
 					// Add method pointer
 					args.add(1, source);
 					// Determine the methods name
@@ -1316,13 +1326,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructDereferenceLVal(WyilFile.Expr.Dereference expr, Expr operand) {
-		return new Expr.DictionaryAccess(VAR("#HEAP"), operand);
+		return new Expr.DictionaryAccess(VAR(HEAP_VARNAME), operand);
 	}
 
 	@Override
 	public Expr constructFieldDereferenceLVal(WyilFile.Expr.FieldDereference expr, Expr operand) {
 		// First dereference the pointer.
-		Expr deref = new Expr.DictionaryAccess(VAR("#HEAP"), operand);
+		Expr deref = new Expr.DictionaryAccess(VAR(HEAP_VARNAME), operand);
 		// Second access the given field.
 		return new Expr.DictionaryAccess(deref,VAR("$" + expr.getField()));
 	}
@@ -1457,7 +1467,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructDereference(WyilFile.Expr.Dereference expr, Expr operand) {
-		return unbox(expr.getType(), new Expr.DictionaryAccess(VAR("#HEAP"), operand));
+		return unbox(expr.getType(), new Expr.DictionaryAccess(VAR(HEAP_VARNAME), operand));
 	}
 
 	@Override
@@ -1468,7 +1478,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Extract the source record type
 		WyilFile.Type.Record recT = refT.getElement().as(WyilFile.Type.Record.class);
 		// Reconstruct source expression
-		Expr deref = unbox(recT, new Expr.DictionaryAccess(VAR("#HEAP"), operand));
+		Expr deref = unbox(recT, new Expr.DictionaryAccess(VAR(HEAP_VARNAME), operand));
 		//
 		return unbox(expr.getType(),GET(deref,field));
 	}
@@ -1556,7 +1566,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		WyilFile.Decl.Method m = expr.getAncestor(WyilFile.Decl.Method.class);
 		// NOTE: in a functional setting, there is no heap variable in play. Therefore,
 		// we provide an empty heap in its place.
-		String heap = m != null ? "#HEAP" : "Ref#Empty";
+		String heap = m != null ? HEAP_VARNAME : "Ref#Empty";
 		return constructTypeTest(expr.getTestType(), expr.getOperand().getType(), operand, heap);
 	}
 
@@ -1804,7 +1814,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		if (c instanceof WyilFile.Decl.Function) {
 			return INVOKE(name + "#pre", args);
 		} else if (c instanceof WyilFile.Decl.Method) {
-			args.add(0, VAR("#HEAP"));
+			args.add(0, VAR(HEAP_VARNAME));
 			return INVOKE(name + "#pre", args);
 		} else {
 			return null;
@@ -2118,7 +2128,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		ArrayList<Decl> decls = new ArrayList<>();
 		decls.add(new Decl.LineComment("References"));
 		decls.add(new Decl.TypeSynonym("Ref", null));
-		decls.add(new Decl.Constant(true, "Ref#Empty", REFMAP));
 		decls.add(FUNCTION("Ref#box", REF, ANY));
 		decls.add(FUNCTION("Ref#unbox", ANY, REF));
 		decls.add(new Decl.Constant(true, "Ref#Empty", REFMAP));
@@ -2128,14 +2137,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		// Establish no connection between references and Void
 		decls.add(new Decl.Axiom(FORALL("r", REF, NEQ(INVOKE("Ref#box", VAR("r")), VAR("Void")))));
 		// Construct the allocation procedure
-		Expr heap = VAR("#HEAP");
-		Expr nheap = VAR("##HEAP");
+		Expr heap = VAR(HEAP_VARNAME);
+		Expr nheap = VAR("#" + HEAP_VARNAME);
 		Expr.VariableAccess val = VAR("val");
 		Expr.VariableAccess ref = VAR("ref");
 		//
-		List<Decl.Parameter> parameters = Arrays.asList(new Decl.Parameter("#HEAP", REFMAP),
+		List<Decl.Parameter> parameters = Arrays.asList(new Decl.Parameter(HEAP_VARNAME, REFMAP),
 				new Decl.Parameter(val.getVariable(), ANY));
-		List<Decl.Parameter> returns = Arrays.asList(new Decl.Parameter("##HEAP", REFMAP),
+		List<Decl.Parameter> returns = Arrays.asList(new Decl.Parameter("#" + HEAP_VARNAME, REFMAP),
 				new Decl.Parameter(ref.getVariable(), REF));
 		// FIXME: there are still some problems below related to the Void constant which
 		// is not necessarily disjoint with all integer constants, etc.
@@ -2917,4 +2926,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	private static String TEMP(WyilFile.Stmt s, int id) {
 		return "t" + s.getIndex() + "#" + id;
 	}
+
+	private static String HEAP_VARNAME = "HEAP";
 }
