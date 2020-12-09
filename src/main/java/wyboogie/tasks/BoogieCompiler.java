@@ -646,6 +646,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Stmt constructAssign(WyilFile.Stmt.Assign stmt, List<Expr> _, List<Expr> rhs, List<Expr> preconditions) {
+		WyilFile.Decl.Method m = stmt.getAncestor(WyilFile.Decl.Method.class);
+		// NOTE: in a functional setting, there is no heap variable in play. Therefore,
+		// we provide an empty heap in its place.
+		String heap = m != null ? HEAP_VARNAME : "Ref#Empty";
 		ArrayList<Stmt> stmts = new ArrayList<>();
 		// Add all preconditions arising.
 		stmts.addAll(constructAssertions(preconditions));
@@ -669,9 +673,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 				rvals.set(i, VAR(TEMP(stmt, i)));
 			}
 		}
-		// Finally, action final assignments.
+		// Finally, action assignments and type tests
 		for (int i = 0; i != lvals.size(); ++i) {
-			stmts.add(constructAssign(lvals.get(i), rvals.get(i)));
+			WyilFile.LVal ith = lvals.get(i);
+			stmts.add(constructAssign(ith, rvals.get(i)));
+			Expr c = constructTypeConstraint(ith.getType(),visitExpression(ith),heap);
+			if(c != null) {
+				stmts.add(new Stmt.Assert(c));
+			}
 		}
 		// Done
 		return SEQUENCE(stmts);
@@ -902,8 +911,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	@Override
 	public Stmt constructDoWhile(WyilFile.Stmt.DoWhile stmt, Stmt body, Expr condition, List<Expr> invariant,
 			List<Expr> preconditions) {
+		String heap = determineHeapName(stmt);
+		//
 		boolean needContinueLabel = containsContinueOrBreak(stmt, false);
 		boolean needBreakLabel = containsContinueOrBreak(stmt, true);
+		Tuple<WyilFile.Decl.Variable> modified = stmt.getModified();
 		ArrayList<Stmt> stmts = new ArrayList<>();
 		// Add all preconditions arising.
 		stmts.addAll(constructAssertions(preconditions));
@@ -916,6 +928,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			stmts.add(new Stmt.Label("CONTINUE_" + stmt.getIndex()));
 		}
 		// FIXME: handle preconditions and side-effects for subsequent iterations.
+
+		// Add type constraints arising from modified variables
+		invariant.addAll(0,constructTypeConstraints(modified,heap));
+		// Add the loop itself
 		stmts.add(new Stmt.While(condition, invariant, body));
 		// Add break label (if necessary)
 		if (needBreakLabel) {
@@ -933,8 +949,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	@Override
 	public Stmt constructFor(WyilFile.Stmt.For stmt, Pair<Expr, Expr> range, List<Expr> invariant, Stmt body,
 			List<Expr> preconditions) {
+		String heap = determineHeapName(stmt);
+		//
 		boolean needContinueLabel = containsContinueOrBreak(stmt, false);
 		boolean needBreakLabel = containsContinueOrBreak(stmt, true);
+		Tuple<WyilFile.Decl.Variable> modified = stmt.getModified();
 		// Determine name of loop variable
 		String name = toVariableName(stmt.getVariable());
 		Expr.VariableAccess var = new Expr.VariableAccess(name);
@@ -957,6 +976,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		if (needContinueLabel) {
 			stmts.add(new Stmt.Label("CONTINUE_" + stmt.getIndex()));
 		}
+		// Add any type constraints arising
+		invariant.addAll(0,constructTypeConstraints(modified,heap));
 		// Construct the loop
 		stmts.add(new Stmt.While(condition, invariant, SEQUENCE(loopBody)));
 		// Add break label (if necessary)
@@ -985,6 +1006,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Stmt constructInitialiser(WyilFile.Stmt.Initialiser stmt, Expr init, List<Expr> preconditions) {
+		String heap = determineHeapName(stmt);
 		WyilFile.Tuple<WyilFile.Decl.Variable> vars = stmt.getVariables();
 		//
 		if (init == null) {
@@ -999,11 +1021,16 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			List<Expr> inits = (init instanceof FauxTuple) ? ((FauxTuple) init).getItems() : Arrays.asList(init);
 			// Determine type of initialiser expression
 			WyilFile.Type initT = stmt.getInitialiser().getType();
-			// Assign to each variable
+			// Assign to each variable and check constraints
 			for (int i = 0; i != vars.size(); ++i) {
 				WyilFile.Decl.Variable ith = vars.get(i);
 				String name = toVariableName(ith);
-				stmts.add(ASSIGN(new Expr.VariableAccess(name), cast(ith.getType(), initT.dimension(i), inits.get(i))));
+				stmts.add(ASSIGN(VAR(name), cast(ith.getType(), initT.dimension(i), inits.get(i))));
+				// Add assertion for type constraints (if applicable)
+				Expr c = constructTypeConstraint(ith.getType(),VAR(name),heap);
+				if(c != null) {
+					stmts.add(new Stmt.Assert(c));
+				}
 			}
 			// FIXME: need post condition!
 			return SEQUENCE(stmts);
@@ -1158,8 +1185,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	@Override
 	public Stmt constructWhile(WyilFile.Stmt.While stmt, Expr condition, List<Expr> invariant, Stmt body,
 			List<Expr> preconditions) {
+		String heap = determineHeapName(stmt);
+		//
 		boolean needContinueLabel = containsContinueOrBreak(stmt, false);
 		boolean needBreakLabel = containsContinueOrBreak(stmt, true);
+		Tuple<WyilFile.Decl.Variable> modified = stmt.getModified();
 		ArrayList<Stmt> stmts = new ArrayList<>();
 		// Add all preconditions arising.
 		stmts.addAll(constructAssertions(preconditions));
@@ -1171,6 +1201,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		}
 		// FIXME: handle preconditions and side-effects arising from subsequent
 		// iterations.
+		// Add type constraints arising from modified variables
+		invariant.addAll(0,constructTypeConstraints(modified,heap));
+		//
 		stmts.add(new Stmt.While(condition, invariant, body));
 		// Add break label (if necessary)
 		if (needBreakLabel) {
@@ -1561,12 +1594,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructIs(WyilFile.Expr.Is expr, Expr operand) {
-		// NOTE: by inspecting the type in question, we could avoid the need to supply a
-		// heap parameter in cases where this doesn't make sense.
-		WyilFile.Decl.Method m = expr.getAncestor(WyilFile.Decl.Method.class);
-		// NOTE: in a functional setting, there is no heap variable in play. Therefore,
-		// we provide an empty heap in its place.
-		String heap = m != null ? HEAP_VARNAME : "Ref#Empty";
+		// Determine enclosing heap name
+		String heap = determineHeapName(expr);
+		//
 		return constructTypeTest(expr.getTestType(), expr.getOperand().getType(), operand, heap);
 	}
 
@@ -2246,6 +2276,27 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		}
 	}
 
+	/**
+	 * Construct a sequence of zero or more constraints arising from zero or more
+	 * variables.
+	 *
+	 * @param vars
+	 * @param heap
+	 * @return
+	 */
+	private List<Expr> constructTypeConstraints(Tuple<WyilFile.Decl.Variable> vars, String heap) {
+		List<Expr> constraints = new ArrayList<>();
+		for(int i=0;i!=vars.size();++i) {
+			WyilFile.Decl.Variable ith = vars.get(i);
+			Expr c = constructTypeConstraint(ith.getType(),VAR(toVariableName(ith)),heap);
+			if(c != null) {
+				constraints.add(0,c);
+			}
+		}
+		return constraints;
+	}
+
+
 	// ==============================================================================
 	// Runtime Type Tests
 	// ==============================================================================
@@ -2647,6 +2698,21 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	private static String toVariableName(WyilFile.Decl.Variable v) {
 		return v.getName().get() + "$" + v.getIndex();
+	}
+
+	/**
+	 * Determine the appropriate heap name to use in a given context. For example,
+	 * in a pure functional context we always use the empty heap. In contrast,
+	 * within a method we will use the heap parameter passed in .
+	 *
+	 * @param stmt
+	 * @return
+	 */
+	private static String determineHeapName(WyilFile.Stmt stmt) {
+		WyilFile.Decl.Method m = stmt.getAncestor(WyilFile.Decl.Method.class);
+		// NOTE: in a functional setting, there is no heap variable in play. Therefore,
+		// we provide an empty heap in its place.
+		return m != null ? HEAP_VARNAME : "Ref#Empty";
 	}
 
 
