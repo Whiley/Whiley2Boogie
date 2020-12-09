@@ -653,7 +653,6 @@ public class BoogieFile {
 		}
 
 		public static class Constant implements Expr {
-			public final static Constant NULL = new Constant((String) null);
 			public final static Constant TRUE = new Constant(true);
 			public final static Constant FALSE = new Constant(false);
 

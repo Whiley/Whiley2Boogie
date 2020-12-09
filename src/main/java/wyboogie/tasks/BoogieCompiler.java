@@ -1500,7 +1500,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		WyilFile.Value v = expr.getValue();
 		switch (v.getOpcode()) {
 		case WyilFile.ITEM_null: {
-			return Expr.Constant.NULL;
+			return VAR("Null");
 		}
 		case WyilFile.ITEM_bool: {
 			boolean b = ((WyilFile.Value.Bool) v).get();
@@ -2399,7 +2399,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	private Expr constructTypeTest(WyilFile.Type to, WyilFile.Type from, Expr argument, String heap) {
 		switch (to.getOpcode()) {
 		case WyilFile.TYPE_null:
-			return EQ(argument, CONST(null));
+			return EQ(argument, VAR("Null"));
 		case WyilFile.TYPE_bool:
 			return INVOKE("Bool#is", box(from, argument));
 		case WyilFile.TYPE_byte:
