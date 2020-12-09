@@ -2267,7 +2267,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		case WyilFile.TYPE_bool:
 		case WyilFile.TYPE_byte:
 		case WyilFile.TYPE_int:
-		case WyilFile.TYPE_universal:
 			// No constraints exist on primitive types.
 			return null;
 		default:
