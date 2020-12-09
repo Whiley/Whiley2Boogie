@@ -2012,8 +2012,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		axioms.add(new Decl.TypeSynonym("Type", null));
 		// Add void constant
 		axioms.add(new Decl.Constant(true, "Void", ANY));
-		// Add null constant
-		axioms.add(new Decl.Constant(true, "null", ANY));
+		// Add all bool axioms
+		axioms.addAll(constructNullAxioms(wf));
 		// Add all bool axioms
 		axioms.addAll(constructBoolAxioms(wf));
 		// Add all byte axioms
@@ -2028,10 +2028,21 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		axioms.addAll(constructReferenceAxioms(wf));
 		// Add all array axioms
 		axioms.addAll(constructLambdaAxioms(wf));
+		// Add type exclusion axioms
+		axioms.addAll(constructExclusionAxioms(wf));
 		//
 		axioms.add(new Decl.LineComment("=== End Preamble ==="));
 		// Done
 		return axioms;
+	}
+
+	private List<Decl> constructNullAxioms(WyilFile wf) {
+		ArrayList<Decl> decls = new ArrayList<>();
+		// Add null constant
+		decls.add(new Decl.Constant(true, "Null", ANY));
+		decls.add(FUNCTION("Null#is", new Decl.Parameter("v", ANY), Type.Bool, EQ(VAR("v"), VAR("Null"))));
+		//
+		return decls;
 	}
 
 	/**
@@ -2120,6 +2131,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(new Decl.LineComment("Arrays"));
 		decls.add(FUNCTION("Array#box", INTMAP, ANY));
 		decls.add(FUNCTION("Array#unbox", ANY, INTMAP));
+		decls.add(FUNCTION("Array#is", new Decl.Parameter("v", ANY), Type.Bool,
+				EXISTS("a", INTMAP, EQ(INVOKE("Array#box", VAR("a")), VAR("v")))));
 		// Establish connection between tbox and unbox
 		decls.add(new Decl.Axiom(FORALL("i", INTMAP, EQ(INVOKE("Array#unbox", INVOKE("Array#box", VAR("i"))), VAR("i")))));
 		// Establish no connection between arrays and Void
@@ -2176,6 +2189,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(new Decl.LineComment("Records"));
 		decls.add(FUNCTION("Record#box", FIELDMAP, ANY));
 		decls.add(FUNCTION("Record#unbox", ANY, FIELDMAP));
+		// FIXME: something tells me we should be considering a field count here.
+		decls.add(FUNCTION("Record#is", new Decl.Parameter("v", ANY), Type.Bool,
+				EXISTS("r", FIELDMAP, EQ(INVOKE("Record#box", VAR("r")), VAR("v")))));
 		// Establish connection between box and unbox
 		decls.add(new Decl.Axiom(
 				FORALL("i", FIELDMAP, EQ(INVOKE("Record#unbox", INVOKE("Record#box", VAR("i"))), VAR("i")))));
@@ -2201,6 +2217,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(new Decl.TypeSynonym("Ref", null));
 		decls.add(FUNCTION("Ref#box", REF, ANY));
 		decls.add(FUNCTION("Ref#unbox", ANY, REF));
+		decls.add(FUNCTION("Ref#is", new Decl.Parameter("v", ANY), Type.Bool,
+				EXISTS("r", REF, EQ(INVOKE("Ref#box", VAR("r")), VAR("v")))));
 		decls.add(new Decl.Constant(true, "Ref#Empty", REFMAP));
 		// Establish connection between box and unbox
 		decls.add(new Decl.Axiom(
@@ -2275,6 +2293,24 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			}
 		}
 		// done
+		return decls;
+	}
+
+	private List<Decl> constructExclusionAxioms(WyilFile wf) {
+		ArrayList<Decl> decls = new ArrayList<>();
+		String[] types = { "Null", "Byte", "Bool", "Int", "Array", "Record", "Ref", "Lambda" };
+		Expr.VariableAccess var = VAR("v");
+		//
+		for(int i=0;i!=types.length;++i) {
+			Expr[] negs = new Expr[types.length-1];
+			for(int j=0,k=0;j!=types.length;++j) {
+				if(j != i) {
+					negs[k++] = NOT(INVOKE(types[j] + "#is", var));
+				}
+			}
+			Expr pos = INVOKE(types[i] + "#is", var);
+			decls.add(new Decl.Axiom(FORALL("v",ANY,IMPLIES(pos,AND(negs)))));
+		}
 		return decls;
 	}
 
@@ -2551,7 +2587,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		WyilFile.Type ret = to.getReturn();
 		// Setup arguments for invocation
 		Expr[] vs = new Expr[n + 2];
-		vs[1] = unbox(to,argument);
+		vs[1] = cast(to,from,argument);
 		for (int i = 0; i != n; ++i) {
 			vs[i + 2] = VAR("x" + i);
 		}
