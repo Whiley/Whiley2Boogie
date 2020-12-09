@@ -730,11 +730,6 @@ public class BoogieFile {
 			private final String name;
 			private final List<Expr> arguments;
 
-			public Invoke(String name, Expr... arguments) {
-				this.name = name;
-				this.arguments = Arrays.asList(arguments);
-			}
-
 			public Invoke(String name, Collection<Expr> arguments) {
 				this.name = name;
 				this.arguments = new ArrayList<>(arguments);
@@ -1155,7 +1150,7 @@ public class BoogieFile {
 		return new Stmt.Call(name, lvals, parameters);
 	}
 	public static Expr.Invoke INVOKE(String name, Expr... parameters) {
-		return new Expr.Invoke(name, parameters);
+		return new Expr.Invoke(name, Arrays.asList(parameters));
 	}
 
 	public static Expr.Invoke INVOKE(String name, List<Expr> parameters) {

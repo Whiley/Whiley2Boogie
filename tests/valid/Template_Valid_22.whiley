@@ -3,7 +3,7 @@ requires |arr| > 0:
     //
     S[] marr = [fn(arr[0]);|arr|]
     int i=1
-    while i < |arr|:
+    while i < |arr| where i >= 1:
         //
         marr[i] = fn(arr[i])
         i = i + 1

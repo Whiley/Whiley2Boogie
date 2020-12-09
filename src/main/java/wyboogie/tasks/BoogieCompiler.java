@@ -165,12 +165,39 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		decls.add(new Decl.Procedure(name + "#impl", parameters, returns, precondition, postcondition, Collections.EMPTY_LIST));
 		// Construct implementation which can be checked against its specification.
 		decls.add(new Decl.Implementation(name + "#impl", shadows, returns, locals, body));
-		// Add the "lambda" value
-		decls.add(new Decl.Constant(true, name + "#lambda", LAMBDA));
+		// Add "lambda" value axioms
+		decls.addAll(constructLambdaAxioms(d));
 		// Add any lambda's used within the function
 		decls.addAll(constructLambdas(d));
 		// Done
 		return new Decl.Sequence(decls);
+	}
+
+	private List<Decl> constructLambdaAxioms(WyilFile.Decl.FunctionOrMethod d) {
+		String heap = (d instanceof WyilFile.Decl.Method) ? HEAP_VARNAME : "Ref#Empty";
+		WyilFile.Type param = d.getType().getParameter();
+		WyilFile.Type ret = d.getType().getReturn();
+		final int n = param.shape();
+		String name = toMangledName(d) + "#lambda";
+		ArrayList<Decl> decls = new ArrayList<>();
+		// Add the lambda value
+		decls.add(new Decl.Constant(true, name, LAMBDA));
+		// Add axiom(s) for the return values
+		Expr[] axioms = new Expr[ret.shape()];
+		Expr[] args = new Expr[param.shape() + 2];
+		ArrayList<Decl.Parameter> vars = new ArrayList<>();
+		args[1] = VAR(name);
+		for(int i=0;i!=n;++i) {
+			args[i+2] = VAR("x" + i);
+			vars.add(new Decl.Parameter("x" + i, ANY));
+		}
+		for (int i = 0; i != axioms.length; ++i) {
+			args[0] = CONST(i);
+			Expr ivk = constructTypeTest(ret.dimension(i), WyilFile.Type.Any, INVOKE("f_apply$" + n, args), heap);
+			Expr axiom = (n == 0) ? ivk : FORALL(vars, ivk);
+			decls.add(new Decl.Axiom(axiom));
+		}
+		return decls;
 	}
 
 	@Override
@@ -1699,37 +1726,45 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	public Expr constructIndirectInvoke(WyilFile.Expr.IndirectInvoke expr, Expr source, List<Expr> arguments) {
 		WyilFile.Type.Callable type = expr.getSource().getType().as(WyilFile.Type.Callable.class);
 		boolean method = (type instanceof WyilFile.Type.Method);
-		String base = method ? "m_apply$" : "f_apply$";
-		WyilFile.Type ret = type.getReturn();
-		if(method) {
-			// This is a side-effecting method invocation which would have been translated
-			// previously.
-			if(ret.shape() == 1) {
-				return unbox(expr.getType(), VAR("m#" + expr.getIndex()));
-			} else {
-				List<Expr> items = new ArrayList<>();
-				for(int i=0;i!=ret.shape();++i) {
-					items.add(unbox(ret.dimension(i),VAR("m#" + expr.getIndex() + "#" + i)));
-				}
-				return new FauxTuple(items);
-			}
+		if (method) {
+			return constructIndirectMethodInvoke(expr.getIndex(), expr.getType(), source, arguments);
 		} else {
-			ArrayList<Expr> args = new ArrayList<>();
-			args.add(CONST(1));
-			args.add(source);
-			// Box all arguments as this is strictly required
-			args.addAll(box(type.getParameter(),arguments));
-			// Unbox return since it's always boxed
-			if (ret.shape() == 1) {
-				return unbox(expr.getType(), INVOKE(base + arguments.size(), args));
-			} else {
-				List<Expr> items = new ArrayList<>();
-				for (int i = 0; i != ret.shape(); ++i) {
-					args.set(0, CONST(i + 1));
-					items.add(unbox(ret.dimension(i), INVOKE(base + arguments.size(), args)));
-				}
-				return new FauxTuple(items);
+			return constructIndirectFunctionInvoke((WyilFile.Type.Function) type, expr.getType(), source, arguments);
+		}
+	}
+
+	private Expr constructIndirectFunctionInvoke(WyilFile.Type.Function type, WyilFile.Type ret, Expr source,
+			List<Expr> arguments) {
+		String base = "f_apply$";
+		ArrayList<Expr> args = new ArrayList<>();
+		args.add(CONST(0));
+		args.add(source);
+		// Box all arguments as this is strictly required
+		args.addAll(box(type.getParameter(), arguments));
+		// Unbox return since it's always boxed
+		if (ret.shape() == 1) {
+			return unbox(ret, INVOKE(base + arguments.size(), args));
+		} else {
+			List<Expr> items = new ArrayList<>();
+			for (int i = 0; i != ret.shape(); ++i) {
+				args.set(0, CONST(i));
+				items.add(unbox(ret.dimension(i), INVOKE(base + arguments.size(), args)));
 			}
+			return new FauxTuple(items);
+		}
+	}
+
+	private Expr constructIndirectMethodInvoke(int index, WyilFile.Type ret, Expr source, List<Expr> arguments) {
+		// This is a side-effecting method invocation which would have been translated
+		// previously.
+		if (ret.shape() == 1) {
+			return unbox(ret, VAR("m#" + index));
+		} else {
+			List<Expr> items = new ArrayList<>();
+			for (int i = 0; i != ret.shape(); ++i) {
+				items.add(unbox(ret.dimension(i), VAR("m#" + index + "#" + i)));
+			}
+			return new FauxTuple(items);
 		}
 	}
 
@@ -2332,10 +2367,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		case WyilFile.TYPE_universal:
 			return NEQ(argument, VAR("Void"));
 		case WyilFile.TYPE_property:
-		case WyilFile.TYPE_function:
-		case WyilFile.TYPE_method:
-			// NOTE: this is not sufficient, but it will do for now.
 			return INVOKE("Lambda#is", box(from, argument));
+		case WyilFile.TYPE_function:
+			return constructFunctionTypeTest((WyilFile.Type.Function) to, from, argument, heap);
+		case WyilFile.TYPE_method:
+			return constructMethodTypeTest((WyilFile.Type.Method) to, from, argument, heap);
 		case WyilFile.TYPE_nominal:
 			return constructNominalTypeTest((WyilFile.Type.Nominal) to, from, argument, heap);
 		case WyilFile.TYPE_array:
@@ -2496,6 +2532,38 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			clauses[i] = constructTypeTest(to.get(i), from, argument, heap);
 		}
 		return OR(clauses);
+	}
+
+	private Expr constructMethodTypeTest(WyilFile.Type.Method to, WyilFile.Type from, Expr argument, String heap) {
+		throw new IllegalArgumentException();
+	}
+
+	private Expr constructFunctionTypeTest(WyilFile.Type.Function to, WyilFile.Type from, Expr argument, String heap) {
+		// Determine number of requirement argtuments
+		int n = to.getParameter().shape();
+		// Extract Return Type
+		WyilFile.Type ret = to.getReturn();
+		// Setup arguments for invocation
+		Expr[] vs = new Expr[n + 2];
+		vs[1] = unbox(to,argument);
+		for (int i = 0; i != n; ++i) {
+			vs[i + 2] = VAR("x" + i);
+		}
+		// setup parameters for quantifier (if required)
+		ArrayList<Decl.Parameter> params = new ArrayList<>();
+		for (int i = 0; i != n; ++i) {
+			params.add(new Decl.Parameter("x" + i, ANY));
+		}
+		// Construct one clause for each return value
+		Expr[] clauses = new Expr[ret.shape()];
+		for (int i = 0; i != clauses.length; ++i) {
+			WyilFile.Type ith = ret.dimension(i);
+			vs[0] = CONST(i);
+			Expr clause = constructTypeTest(ith, WyilFile.Type.Any, INVOKE("f_apply$" + n, vs), heap);
+			clauses[i] = (n == 0) ? clause : FORALL(params, clause);
+		}
+		// Done
+		return AND(INVOKE("Lambda#is", box(from, argument)), AND(clauses));
 	}
 
 	// ==============================================================================
@@ -2687,7 +2755,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 				return i.getArguments().get(0);
 			}
 		}
-		return new Expr.Invoke(to, e);
+		return INVOKE(to, e);
 	}
 
 	// ==============================================================================
