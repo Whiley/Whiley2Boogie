@@ -174,11 +174,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	}
 
 	private List<Decl> constructLambdaAxioms(WyilFile.Decl.FunctionOrMethod d) {
-		String heap = (d instanceof WyilFile.Decl.Method) ? HEAP_VARNAME : "Ref#Empty";
 		WyilFile.Type param = d.getType().getParameter();
 		WyilFile.Type ret = d.getType().getReturn();
-		final int n = param.shape();
 		String name = toMangledName(d) + "#lambda";
+		return constructLambdaAxioms(name, param, ret);
+	}
+
+	private List<Decl> constructLambdaAxioms(String name, WyilFile.Type param, WyilFile.Type ret) {
+		String heap = "Ref#Empty"; // not sure what makes sense for methods?
+		final int n = param.shape();
 		ArrayList<Decl> decls = new ArrayList<>();
 		// Add the lambda value
 		decls.add(new Decl.Constant(true, name, LAMBDA));
@@ -187,8 +191,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 		Expr[] args = new Expr[param.shape() + 2];
 		ArrayList<Decl.Parameter> vars = new ArrayList<>();
 		args[1] = VAR(name);
-		for(int i=0;i!=n;++i) {
-			args[i+2] = VAR("x" + i);
+		for (int i = 0; i != n; ++i) {
+			args[i + 2] = VAR("x" + i);
 			vars.add(new Decl.Parameter("x" + i, ANY));
 		}
 		for (int i = 0; i != axioms.length; ++i) {
@@ -647,7 +651,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 				Collections.EMPTY_LIST));
 		decls.add(new Decl.Implementation(name, parameters, returns, locals, SEQUENCE(stmts)));
 		// Add the "lambda" value
-		decls.add(new Decl.Constant(true, name, LAMBDA));
+		decls.addAll(constructLambdaAxioms(name, type.getParameter(), returnType));
 		// Done
 		return decls;
 	}
@@ -1347,7 +1351,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 					}
 					// Recursively (re)construct source expression
 					Expr source = BoogieCompiler.this.visitExpression(expr.getSource());
-					// Recursively (re)construct argument expressions
+					// Rec)ursively (re)construct argument expressions
 					List<Expr> args = BoogieCompiler.this.visitExpressions(expr.getArguments());
 					// Apply conversions to arguments as necessary
 					args = box(ft.getParameter(), args);
@@ -1944,6 +1948,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	private Type constructType(WyilFile.Type type) {
 		// NOTE: this could be moved into AbstractTranslator?
 		switch (type.getOpcode()) {
+		case WyilFile.TYPE_null:
+			return ANY;
 		case WyilFile.TYPE_bool:
 			return Type.Bool;
 		case WyilFile.TYPE_byte:
@@ -2639,6 +2645,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 */
 	private static boolean isBoxed(WyilFile.Type type) {
 		switch (type.getOpcode()) {
+		case WyilFile.TYPE_null:
 		case WyilFile.TYPE_any:
 		case WyilFile.TYPE_universal:
 		case WyilFile.TYPE_union:
