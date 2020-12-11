@@ -42,7 +42,9 @@ public class BoogieFilePrinter {
 	}
 
 	private void writeDecl(int indent, Decl d) {
-		if(d instanceof Decl.Axiom) {
+		if(d == null) {
+			out.println();
+		} else if(d instanceof Decl.Axiom) {
 			writeAxiom(indent, (Decl.Axiom) d);
 		} else if(d instanceof Decl.Constant) {
 			writeConstant(indent,(Decl.Constant) d);

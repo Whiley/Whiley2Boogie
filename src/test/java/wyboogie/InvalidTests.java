@@ -50,42 +50,20 @@ import wyfs.util.DirectoryRoot;
 import wyfs.util.Pair;
 import wyil.lang.WyilFile;
 
-/**
- * Run through all valid test cases with verification enabled. Since every test
- * file is valid, a successful test occurs when the compiler succeeds and, when
- * executed, the compiled file produces the expected output. Note that an
- * internal failure does not count as a valid pass, and indicates the test
- * exposed some kind of compiler bug.
- *
- * @author David J. Pearce
- *
- */
+
 @RunWith(Parameterized.class)
-public class RuntimeValidTests {
+public class InvalidTests {
 
 	/**
 	 * The directory containing the source files for each test case. Every test
 	 * corresponds to a file in this directory.
 	 */
-	public final static String WHILEY_SRC_DIR = "tests/valid".replace('/', File.separatorChar);
+	public final static String WHILEY_SRC_DIR = "tests/invalid".replace('/', File.separatorChar);
 
 	/**
 	 * Ignored tests and a reason why we ignore them.
 	 */
 	public final static Map<String, String> IGNORED = new HashMap<>();
-
-	static {
-		// ===================================================
-		// WyC problems
-		// ===================================================
-		// Bring over all the currently failing tests for the compiler. There's
-		// absolutely no point trying to see whether these work or not, since we
-		// already know they will not.
-		IGNORED.putAll(TestUtils.VALID_IGNORED);
-		// ===================================================
-		// WyJS problems
-		// ===================================================
-	}
 
 	// ======================================================================
 	// Test Harness
@@ -98,10 +76,10 @@ public class RuntimeValidTests {
 				name); // name of test to compile
 
 		boolean r = p.first();
+		System.out.print(p.second());
 
-		if (!r) {
-			System.out.println(p.second());
-			fail("Test failed to compile!");
+		if (r) {
+			fail("Test should have failed to compile / verify!");
 		}
 	}
 
@@ -196,7 +174,7 @@ public class RuntimeValidTests {
 	// Parameter to test case is the name of the current test.
 	// It will be passed to the constructor by JUnit.
 	private final String testName;
-	public RuntimeValidTests(String testName) {
+	public InvalidTests(String testName) {
 		this.testName = testName;
 	}
 
