@@ -13,11 +13,11 @@
 // limitations under the License.
 package wyboogie.io;
 
+import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.math.BigInteger;
 import java.util.List;
-import java.util.Objects;
 
 import wyboogie.core.BoogieFile;
 import wyboogie.core.BoogieFile.Decl;
@@ -25,13 +25,16 @@ import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.LVal;
 import wyboogie.core.BoogieFile.Stmt;
 import wyboogie.core.BoogieFile.Type;
-import wyboogie.core.BoogieFile.Type.BitVector;
 
 public class BoogieFilePrinter {
 	private final PrintWriter out;
 
 	public BoogieFilePrinter(OutputStream output) {
 		this.out = new PrintWriter(output);
+	}
+
+	public void flush() {
+		out.flush();
 	}
 
 	public void write(BoogieFile file) {
@@ -161,8 +164,8 @@ public class BoogieFilePrinter {
 		} else {
 			out.println();
 		}
-		List<Expr> requires = d.getRequires();
-		List<Expr> ensures = d.getEnsures();
+		List<Expr.Logical> requires = d.getRequires();
+		List<Expr.Logical> ensures = d.getEnsures();
 		for(int i=0;i!=requires.size();++i) {
 			out.print("requires ");
 			writeExpression(requires.get(i));
@@ -355,7 +358,7 @@ public class BoogieFilePrinter {
 		out.print("while(");
 		writeExpression(s.getCondition());
 		out.println(")");
-		List<Expr> invariant = s.getInvariant();
+		List<Expr.Logical> invariant = s.getInvariant();
 		for(int i=0;i!=invariant.size();++i) {
 			tab(indent);
 			out.print("invariant ");
@@ -381,18 +384,54 @@ public class BoogieFilePrinter {
 			writeDictionaryAccess((Expr.DictionaryAccess) e);
 		} else if(e instanceof Expr.DictionaryUpdate) {
 			writeDictionaryUpdate((Expr.DictionaryUpdate) e);
-		} else if(e instanceof Expr.BinaryOperator) {
-			writeBinaryOperator((Expr.BinaryOperator) e);
-		} else if(e instanceof Expr.Constant) {
-			writeConstant((Expr.Constant) e);
-		} else if(e instanceof Expr.NaryOperator) {
-			writeNaryOperator((Expr.NaryOperator) e);
+		} else if(e instanceof Expr.Equals) {
+			writeEquals((Expr.Equals) e);
+		} else if(e instanceof Expr.NotEquals) {
+			writeNotEquals((Expr.NotEquals) e);
+		} else if(e instanceof Expr.Iff) {
+			writeIff((Expr.Iff) e);
+		} else if(e instanceof Expr.Implies) {
+			writeImplies((Expr.Implies) e);
+		} else if(e instanceof Expr.LessThan) {
+			writeLessThan((Expr.LessThan) e);
+		} else if(e instanceof Expr.LessThanOrEqual) {
+			writeLessThanOrEqual((Expr.LessThanOrEqual) e);
+		} else if(e instanceof Expr.GreaterThan) {
+			writeGreaterThan((Expr.GreaterThan) e);
+		} else if(e instanceof Expr.GreaterThanOrEqual) {
+			writeGreaterThanOrEqual((Expr.GreaterThanOrEqual) e);
+		} else if(e instanceof Expr.Addition) {
+			writeAddition((Expr.Addition) e);
+		} else if(e instanceof Expr.Subtraction) {
+			writeSubtraction((Expr.Subtraction) e);
+		} else if(e instanceof Expr.Multiplication) {
+			writeMultiplication((Expr.Multiplication) e);
+		} else if(e instanceof Expr.Division) {
+			writeDivision((Expr.Division) e);
+		} else if(e instanceof Expr.IntegerDivision) {
+			writeIntegerDivision((Expr.IntegerDivision) e);
+		} else if(e instanceof Expr.Remainder) {
+			writeModulus((Expr.Remainder) e);
+		} else if(e instanceof Expr.Boolean) {
+			writeBoolean((Expr.Boolean) e);
+		} else if(e instanceof Expr.Bytes) {
+			writeBytes((Expr.Bytes) e);
+		} else if(e instanceof Expr.Integer) {
+			writeInteger((Expr.Integer) e);
+		} else if(e instanceof Expr.LogicalAnd) {
+			writeAnd((Expr.LogicalAnd) e);
+		} else if(e instanceof Expr.LogicalOr) {
+			writeOr((Expr.LogicalOr) e);
 		} else if(e instanceof Expr.Quantifier) {
 			writeQuantifier((Expr.Quantifier) e);
 		} else if(e instanceof Expr.Invoke) {
 			writeInvoke((Expr.Invoke) e);
-		} else if(e instanceof Expr.UnaryOperator) {
-			writeUnaryOperator((Expr.UnaryOperator) e);
+		} else if(e instanceof Expr.LogicalNot) {
+			writeLogicalNot((Expr.LogicalNot) e);
+		} else if(e instanceof Expr.Old) {
+			writeOld((Expr.Old) e);
+		} else if(e instanceof Expr.Negation) {
+			writeNegation((Expr.Negation) e);
 		} else if(e instanceof Expr.VariableAccess) {
 			writeVariableAccess((Expr.VariableAccess) e);
 		} else {
@@ -400,24 +439,103 @@ public class BoogieFilePrinter {
 		}
 	}
 
-	private void writeBinaryOperator(Expr.BinaryOperator e) {
+	private void writeEquals(Expr.Equals e) {
 		writeExpressionWithBraces(e.getLeftHandSide());
-		writeBinaryOperatorKind(e.getKind());
+		out.print(" == ");
 		writeExpressionWithBraces(e.getRightHandSide());
 	}
 
-	private void writeConstant(Expr.Constant e) {
-		Object v = e.getValue();
-		//
-		if(v instanceof byte[]) {
-			byte[] bv = (byte[]) v;
-			out.write(new BigInteger(1,bv).toString());
-			out.write("bv");
-			out.write(Integer.toString(bv.length * 8));
-		} else {
-			// NOTE: have to handle possibility of null here
-			out.write(Objects.toString(e.getValue()));
-		}
+	private void writeNotEquals(Expr.NotEquals e) {
+		writeExpressionWithBraces(e.getLeftHandSide());
+		out.print(" != ");
+		writeExpressionWithBraces(e.getRightHandSide());
+	}
+
+	private void writeLessThan(Expr.LessThan e) {
+		writeExpressionWithBraces(e.getLeftHandSide());
+		out.print(" < ");
+		writeExpressionWithBraces(e.getRightHandSide());
+	}
+
+	private void writeLessThanOrEqual(Expr.LessThanOrEqual e) {
+		writeExpressionWithBraces(e.getLeftHandSide());
+		out.print(" <= ");
+		writeExpressionWithBraces(e.getRightHandSide());
+	}
+
+	private void writeGreaterThan(Expr.GreaterThan e) {
+		writeExpressionWithBraces(e.getLeftHandSide());
+		out.print(" > ");
+		writeExpressionWithBraces(e.getRightHandSide());
+	}
+
+	private void writeGreaterThanOrEqual(Expr.GreaterThanOrEqual e) {
+		writeExpressionWithBraces(e.getLeftHandSide());
+		out.print(" >= ");
+		writeExpressionWithBraces(e.getRightHandSide());
+	}
+
+	private void writeIff(Expr.Iff e) {
+		writeExpressionWithBraces(e.getLeftHandSide());
+		out.print(" <==> ");
+		writeExpressionWithBraces(e.getRightHandSide());
+	}
+
+	private void writeImplies(Expr.Implies e) {
+		writeExpressionWithBraces(e.getLeftHandSide());
+		out.print(" ==> ");
+		writeExpressionWithBraces(e.getRightHandSide());
+	}
+
+	private void writeAddition(Expr.Addition e) {
+		writeExpressionWithBraces(e.getLeftHandSide());
+		out.print(" + ");
+		writeExpressionWithBraces(e.getRightHandSide());
+	}
+
+	private void writeSubtraction(Expr.Subtraction e) {
+		writeExpressionWithBraces(e.getLeftHandSide());
+		out.print(" - ");
+		writeExpressionWithBraces(e.getRightHandSide());
+	}
+
+	private void writeMultiplication(Expr.Multiplication e) {
+		writeExpressionWithBraces(e.getLeftHandSide());
+		out.print(" * ");
+		writeExpressionWithBraces(e.getRightHandSide());
+	}
+
+	private void writeDivision(Expr.Division e) {
+		writeExpressionWithBraces(e.getLeftHandSide());
+		out.print(" / ");
+		writeExpressionWithBraces(e.getRightHandSide());
+	}
+
+	private void writeIntegerDivision(Expr.IntegerDivision e) {
+		writeExpressionWithBraces(e.getLeftHandSide());
+		out.print(" div ");
+		writeExpressionWithBraces(e.getRightHandSide());
+	}
+
+	private void writeModulus(Expr.Remainder e) {
+		writeExpressionWithBraces(e.getLeftHandSide());
+		out.print(" mod ");
+		writeExpressionWithBraces(e.getRightHandSide());
+	}
+
+	private void writeBoolean(Expr.Boolean e) {
+		out.write(Boolean.toString(e.getValue()));
+	}
+
+	private void writeInteger(Expr.Integer e) {
+		out.write(e.getValue().toString());
+	}
+
+	private void writeBytes(Expr.Bytes e) {
+		byte[] bv = e.getValue();
+		out.write(new BigInteger(1,bv).toString());
+		out.write("bv");
+		out.write(Integer.toString(bv.length * 8));
 	}
 
 	private void writeDictionaryAccess(Expr.DictionaryAccess e) {
@@ -436,16 +554,28 @@ public class BoogieFilePrinter {
 		out.print("]");
 	}
 
-	private void writeNaryOperator(Expr.NaryOperator e) {
-		List<Expr> operands = e.getOperands();
+	private void writeAnd(Expr.LogicalAnd e) {
+		List<Expr.Logical> operands = e.getOperands();
 		//
 		for(int i=0;i!=operands.size();++i) {
 			if(i != 0) {
-				writeNaryOperatorKind(e.getKind());
+				out.print(" && ");
 			}
 			writeExpressionWithBraces(operands.get(i));
 		}
 	}
+
+	private void writeOr(Expr.LogicalOr e) {
+		List<Expr.Logical> operands = e.getOperands();
+		//
+		for(int i=0;i!=operands.size();++i) {
+			if(i != 0) {
+				out.print(" || ");
+			}
+			writeExpressionWithBraces(operands.get(i));
+		}
+	}
+
 	private void writeInvoke(Expr.Invoke e) {
 		out.print(e.getName());
 		out.print("(");
@@ -462,7 +592,7 @@ public class BoogieFilePrinter {
 	private void writeQuantifier(Expr.Quantifier e) {
 		out.print("(");
 		List<Decl.Parameter> params = e.getParameters();
-		if(e.isUniversal()) {
+		if(e instanceof Expr.UniversalQuantifier) {
 			out.print("forall ");
 		} else {
 			out.print("exists ");
@@ -481,24 +611,20 @@ public class BoogieFilePrinter {
 		out.print(")");
 	}
 
-	private void writeUnaryOperator(Expr.UnaryOperator e) {
-		switch(e.getKind()) {
-		case NEG:
+	private void writeOld(Expr.Old e) {
+		out.print("old(");
+		writeExpression(e.getOperand());
+		out.print(")");
+	}
+
+	private void writeNegation(Expr.Negation e) {
 			out.print("-");
 			writeExpressionWithBraces(e.getOperand());
-			break;
-		case NOT:
-			out.print("!");
-			writeExpressionWithBraces(e.getOperand());
-			break;
-		case OLD:
-			out.print("old(");
-			writeExpression(e.getOperand());
-			out.print(")");
-			break;
-		default:
-			throw new IllegalArgumentException("unknown unary operator encountered (" + e.getClass().getName() + ")");
-		}
+	}
+
+	private void writeLogicalNot(Expr.LogicalNot e) {
+		out.print("!");
+		writeExpressionWithBraces(e.getOperand());
 	}
 	private void writeVariableAccess(Expr.VariableAccess e) {
 		out.write(e.getVariable());
@@ -526,72 +652,17 @@ public class BoogieFilePrinter {
 		}
 	}
 
-	private void writeBinaryOperatorKind(Expr.BinaryOperator.Kind k) {
-		switch(k) {
-		case EQ:
-			out.print(" == ");
-			break;
-		case NEQ:
-			out.print(" != ");
-			break;
-		case LT:
-			out.print(" < ");
-			break;
-		case LTEQ:
-			out.print(" <= ");
-			break;
-		case GT:
-			out.print(" > ");
-			break;
-		case GTEQ:
-			out.print(" >= ");
-			break;
-		case IFF:
-			out.print(" <==> ");
-			break;
-		case IF:
-			out.print(" ==> ");
-			break;
-		case ADD:
-			out.print(" + ");
-			break;
-		case SUB:
-			out.print(" - ");
-			break;
-		case MUL:
-			out.print(" * ");
-			break;
-		case DIV:
-			out.print(" / ");
-			break;
-		case IDIV:
-			out.print(" div ");
-			break;
-		case REM:
-			out.print(" mod ");
-			break;
-		default:
-			throw new IllegalArgumentException("unknown binary operator kind encountered (" + k + ")");
-		}
-	}
-
-	private void writeNaryOperatorKind(Expr.NaryOperator.Kind k) {
-		switch(k) {
-		case AND:
-			out.print(" && ");
-			break;
-		case OR:
-			out.print(" || ");
-			break;
-		default:
-			throw new IllegalArgumentException("unknown nary operator kind encountered (" + k + ")");
-		}
-	}
-
-
 	private void tab(int indent) {
 		for (int i = 0; i != indent; ++i) {
 			out.print("   ");
 		}
+	}
+
+	public static String toString(BoogieFile.Expr expr) {
+		ByteArrayOutputStream buf = new ByteArrayOutputStream();
+		BoogieFilePrinter p = new BoogieFilePrinter(buf);
+		p.writeExpression(expr);
+		p.flush();
+		return buf.toString();
 	}
 }
