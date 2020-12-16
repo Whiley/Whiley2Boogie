@@ -2409,9 +2409,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         for (WyilFile.Type type : types) {
             decls.add(null);
             // Remove any unversal types
-            System.out.println("GOT: " + type);
             type = substituteUniversalTypes(type);
-            System.out.println("NOW: " + type);
             // Construct meta constant
             String name = "Type#" + mangler.getMangle(type);
             decls.add(new Decl.Constant(true, name, TYPE));
