@@ -69,6 +69,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 }
             }
         }
+        // Translate non-local units
+        for (WyilFile.Decl.Unit unit : wf.getModule().getExterns()) {
+            for (WyilFile.Decl decl : unit.getDeclarations()) {
+                BoogieFile.Decl d = visitDeclaration(decl);
+                if (d != null) {
+                    boogieFile.getDeclarations().add(d);
+                }
+            }
+        }
     }
 
     @Override
@@ -173,26 +182,29 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         decls.addAll(constructCommentHeading("FUNCTION: " + d.getQualifiedName() + " : " + d.getType()));
         // Construct prototype which can be called from expressions.
         decls.addAll(constructFunctionPrototypes(d, precondition, postcondition));
-        // Apply name mangling
-        String name = toMangledName(d);
-        List<Decl.Parameter> parameters = constructParameters(d.getParameters(), precondition, "Ref#Empty");
-        List<Decl.Parameter> returns = constructParameters(d.getReturns(), postcondition, "Ref#Empty");
-        // Construct shadow parameters (if applicable, and before heap variable)
-        List<Decl.Parameter> shadows = constructShadowParameters(d.getParameters(), parameters);
-        // Determine local variables
-        List<Decl.Variable> locals = constructLocals(d.getBody());
-        // Add shadown assignments to the body
-        body = addShadowAssignments(locals, body, parameters, shadows);
-        // Add template parameters
-        shadows.addAll(0,constructTemplateParameters(d.getTemplate()));
-        parameters.addAll(0,constructTemplateParameters(d.getTemplate()));
-        // Construct procedure prototype
-        decls.addAll(constructCommentSubheading("Implementation"));
-        decls.add(new Decl.Procedure(name + "#impl", parameters, returns, precondition, postcondition, Collections.EMPTY_LIST));
-        // Construct implementation which can be checked against its specification.
-        decls.add(new Decl.Implementation(name + "#impl", shadows, returns, locals, body));
         // Add any lambda's used within the function
         decls.addAll(constructLambdas(d));
+        // Add implementation (if one exists)
+        if(d.getBody().size() > 0) {
+            // Apply name mangling
+            String name = toMangledName(d);
+            List<Decl.Parameter> parameters = constructParameters(d.getParameters(), precondition, "Ref#Empty");
+            List<Decl.Parameter> returns = constructParameters(d.getReturns(), postcondition, "Ref#Empty");
+            // Construct shadow parameters (if applicable, and before heap variable)
+            List<Decl.Parameter> shadows = constructShadowParameters(d.getParameters(), parameters);
+            // Determine local variables
+            List<Decl.Variable> locals = constructLocals(d.getBody());
+            // Add shadown assignments to the body
+            body = addShadowAssignments(locals, body, parameters, shadows);
+            // Add template parameters
+            shadows.addAll(0,constructTemplateParameters(d.getTemplate()));
+            parameters.addAll(0,constructTemplateParameters(d.getTemplate()));
+            // Construct procedure implementation
+            decls.addAll(constructCommentSubheading("Implementation"));
+            decls.add(new Decl.Procedure(name + "#impl", parameters, returns, precondition, postcondition, Collections.EMPTY_LIST));
+            // Construct implementation which can be checked against its specification.
+            decls.add(new Decl.Implementation(name + "#impl", shadows, returns, locals, body));
+        }
         // Done
         return new Decl.Sequence(decls);
     }
@@ -228,10 +240,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         }
         // Construct procedure prototype
         decls.add(new Decl.Procedure(name, parameters, returns, precondition, postcondition, Collections.EMPTY_LIST));
-        // Construct implementation which can be checked against its specification.
-        decls.add(new Decl.Implementation(name, shadows, returns, locals, body));
-        // Add the "lambda" value
-        decls.add(new Decl.Constant(true, name + "#lambda", LAMBDA));
+        // Add implementation (if one exists)
+        if(d.getBody().size() > 0) {
+            // Construct implementation which can be checked against its specification.
+            decls.add(new Decl.Implementation(name, shadows, returns, locals, body));
+            // Add the "lambda" value
+            decls.add(new Decl.Constant(true, name + "#lambda", LAMBDA));
+        }
         // Add any lambda's used within the method
         decls.addAll(constructLambdas(d));
         // Done
