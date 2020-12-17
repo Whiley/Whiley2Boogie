@@ -958,9 +958,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             }
             case WyilFile.EXPR_variablecopy:
             case WyilFile.EXPR_variablemove: {
-                LVal l = (LVal) constructVariableAccess((WyilFile.Expr.VariableAccess) lval);
-                // Done
-                return new Stmt.Assignment(l, rhs);
+                WyilFile.Expr.VariableAccess expr = (WyilFile.Expr.VariableAccess) lval;
+                WyilFile.Decl.Variable decl = expr.getVariableDeclaration();
+                String name = toVariableName(expr.getVariableDeclaration());
+                // NOTE: the manner in which the following cast is applied seems odd to me, and is an artifact of how WyC is currently typing assignments.
+                return new Stmt.Assignment(VAR(name), cast(decl.getType(), expr.getType(), rhs));
             }
             default:
                 throw new UnsupportedOperationException("invalid lval");
