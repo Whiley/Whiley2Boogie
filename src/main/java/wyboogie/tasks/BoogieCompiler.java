@@ -154,9 +154,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Final static variables declared as constants with corresponding axiom
         decls.add(new Decl.Constant(name, type));
         if (initialiser != null) {
-            Expr lhs = box(d.getType(), VAR(name));
-            Expr rhs = box(d.getInitialiser().getType(), initialiser);
-            decls.add(new Decl.Axiom(EQ(lhs, rhs)));
+            Expr rhs = cast(d.getType(), d.getInitialiser().getType(), initialiser);
+            decls.add(new Decl.Axiom(EQ(VAR(name), rhs)));
         }
         return new Decl.Sequence(decls);
     }
@@ -1912,10 +1911,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Expr constructStaticVariableAccess(WyilFile.Expr.StaticVariableAccess expr) {
+        WyilFile.Type declared = expr.getLink().getTarget().getType();
+        WyilFile.Type actual = expr.getType();
         // Apply name mangling
         String name = toMangledName(expr.getLink().getTarget());
         // Done
-        return VAR(name);
+        return cast(actual, declared, VAR(name));
     }
 
     @Override
@@ -1932,7 +1933,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     // Preconditions
     // =========================================================================================
 
-
     /**
      * Construct assertions to ensure all preconditions for a given expression are met.  For example, consider the
      * following statement:
@@ -1946,16 +1946,21 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * <pre>
      *    if(i < |xs| && xs[i] >= 0)
      * </pre>
-     * This is more complex because we cannot simply create an assertion that <code>i >= 0 && i < |xs|</code> as before.
-     * This is because such an assertion would exist before the conditional and, hence, must additionally take into
-     * account the we know <code>i < |xs|</code> from the condition itself.  We need to generate the assertion <code>(i
-     * < |xs|) ==> (i >= 0 && i < |xs|)</></code> instead.
+     * <p>This is more complex because we cannot simply create an assertion that <code>i >= 0 && i < |xs|</code> as
+     * before. This is because such an assertion would exist before the conditional and, hence, must additionally take
+     * into account the we know <code>i < |xs|</code> from the condition itself.  We need to generate the assertion
+     * <code>(i < |xs|) ==> (i >= 0 && i < |xs|)</></code> instead.</p>
+     * <p><h2>References</h2>
+     * <ol>
+     *     <li><b>Formalizing a hierarchical structure of practical mathematical reasoning</b>, Robison and Staples, Journal of Logical and Computation.</li>
+     * </ol>
+     * </p>
      *
      * @param condition
      * @return
      */
     public List<Stmt> constructAssertions(WyilFile.Expr condition) {
-        // Construct a formal in CNF
+
         Expr.Logical precondition = new AbstractExpressionProducer<Expr.Logical>() {
             @Override
             protected Expr.Logical BOTTOM() {
