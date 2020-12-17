@@ -1,18 +1,15 @@
-type Board is bool[][]
+type Board is (bool[][] flags)
+where |flags| == 3
+where all { k in 0 .. |flags| | |flags[k]| == 3 }
 
-function update(Board board) -> Board
-requires |board| == 3
-requires all { k in 0 .. |board| | |board[k]| == 3 }:
-    bool[][] nboard = board
+function update(Board board) -> Board:
+    Board nboard = board
     int i = 0
     while i < 3 
-        where i >= 0 && |board| == |nboard|
-        where all { k in 0..|board| | |board[k]| == |nboard[k]| }:
+        where i >= 0:
         int j = 0
         while j < 3 
-            where j >= 0
-            where |board| == |nboard|
-            where all { k in 0..3 | |board[k]| == |nboard[k]| }:
+            where j >= 0:
             int c = countLiving(board, i, j)
             if board[i][j]:
                 switch c:
@@ -23,9 +20,7 @@ requires all { k in 0 .. |board| | |board[k]| == 3 }:
         i = i + 1
     return nboard
 
-function countLiving(Board board, int row, int col) -> int
-requires |board| == 3
-requires all { k in 0 .. |board| | |board[k]| == 3 }:
+function countLiving(Board board, int row, int col) -> int:
     int count = isAlive(board, row - 1, col - 1)
     count = count + isAlive(board, row - 1, col)
     count = count + isAlive(board, row - 1, col + 1)
@@ -36,9 +31,7 @@ requires all { k in 0 .. |board| | |board[k]| == 3 }:
     count = count + isAlive(board, row + 1, col + 1)
     return count
 
-function isAlive(Board board, int row, int col) -> int
-requires |board| == 3
-requires all { k in 0 .. |board| | |board[k]| == 3 }:
+function isAlive(Board board, int row, int col) -> int:
     int nrows = |board|
     if (row < 0) || (row >= nrows):
         return 0
@@ -51,7 +44,7 @@ requires all { k in 0 .. |board| | |board[k]| == 3 }:
         return 0
 
 public export method test() :
-    bool[][] board = [[false, true, false], [false, true, false], [false, true, false]]
-    bool[][] nboard = update(board)
+    Board board = [[false, true, false], [false, true, false], [false, true, false]]
+    Board nboard = update(board)
     assume board == [[false, true, false], [false, true, false], [false, true, false]]
     assume nboard == [[false, false, false], [false, true, false], [false, false, false]]

@@ -25,7 +25,6 @@ import java.util.Collections;
 import java.util.List;
 
 import wyboogie.io.BoogieFilePrinter;
-import wyboogie.util.Formula;
 import wyfs.lang.Content;
 import wyfs.lang.Path;
 
