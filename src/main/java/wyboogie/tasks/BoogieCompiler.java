@@ -266,6 +266,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @return
      */
     public List<Decl> constructFunctionPrototypes(WyilFile.Decl.Function d, List<Expr.Logical> precondition, List<Expr.Logical> postcondition) {
+        // Following changes to the precondition from propagating outside this function.
+        precondition = new ArrayList<>(precondition);
+        postcondition = new ArrayList<>(postcondition);
+        //
         Tuple<WyilFile.Template.Variable> template = d.getTemplate();
         WyilFile.Type.Callable instantiation = d.getType();
         ArrayList<Decl> decls = new ArrayList<>();
@@ -1746,7 +1750,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             clauses.add(LTEQ(ith.first(), VAR(name)));
             clauses.add(LT(VAR(name), ith.second()));
         }
-        clauses.add((Expr.Logical) body);
         return FORALL(ps, IMPLIES(AND(clauses), (Expr.Logical) body));
     }
 
