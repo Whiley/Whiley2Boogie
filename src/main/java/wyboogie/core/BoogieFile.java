@@ -25,6 +25,7 @@ import java.util.Collections;
 import java.util.List;
 
 import wyboogie.io.BoogieFilePrinter;
+import wyboogie.util.Formula;
 import wyfs.lang.Content;
 import wyfs.lang.Path;
 
@@ -247,19 +248,19 @@ public class BoogieFile {
 			private final String name;
 			private final List<Parameter> parameters;
 			private final List<Parameter> returns;
-			private final List<Expr> requires;
-			private final List<Expr> ensures;
+			private final List<Expr.Logical> requires;
+			private final List<Expr.Logical> ensures;
 			private final List<String> modifies;
 			private final List<Decl.Variable> locals;
 			private final Stmt body;
 
-			public Procedure(String name, List<Parameter> parameters, List<Parameter> returns, List<Expr> requires,
-					List<Expr> ensures, List<String> modifies) {
+			public Procedure(String name, List<Parameter> parameters, List<Parameter> returns, List<Expr.Logical> requires,
+					List<Expr.Logical> ensures, List<String> modifies) {
 				this(name, parameters, returns, requires, ensures, Collections.EMPTY_LIST, modifies, null);
 			}
 
-			public Procedure(String name, List<Parameter> parameters, List<Parameter> returns, List<Expr> requires,
-					List<Expr> ensures, List<Decl.Variable> locals, List<String> modifies, Stmt body) {
+			public Procedure(String name, List<Parameter> parameters, List<Parameter> returns, List<Expr.Logical> requires,
+					List<Expr.Logical> ensures, List<Decl.Variable> locals, List<String> modifies, Stmt body) {
 				if (body == null && locals.size() > 0) {
 					throw new IllegalArgumentException("Cannot specify local variables for procedure prototype");
 				}
@@ -285,11 +286,11 @@ public class BoogieFile {
 				return returns;
 			}
 
-			public List<Expr> getRequires() {
+			public List<Expr.Logical> getRequires() {
 				return requires;
 			}
 
-			public List<Expr> getEnsures() {
+			public List<Expr.Logical> getEnsures() {
 				return ensures;
 			}
 
@@ -443,25 +444,25 @@ public class BoogieFile {
 	public interface Stmt {
 
 		public static class Assert implements Stmt {
-			private final Expr condition;
+			private final Expr.Logical condition;
 
-			public Assert(Expr condition) {
+			public Assert(Expr.Logical condition) {
 				this.condition = condition;
 			}
 
-			public Expr getCondition() {
+			public Expr.Logical getCondition() {
 				return condition;
 			}
 		}
 
 		public static class Assume implements Stmt {
-			private final Expr condition;
+			private final Expr.Logical condition;
 
-			public Assume(Expr condition) {
+			public Assume(Expr.Logical condition) {
 				this.condition = condition;
 			}
 
-			public Expr getCondition() {
+			public Expr.Logical getCondition() {
 				return condition;
 			}
 		}
@@ -566,10 +567,10 @@ public class BoogieFile {
 
 		public static class While implements Stmt {
 			private final Expr condition;
-			private final List<Expr> invariant;
+			private final List<Expr.Logical> invariant;
 			private final Stmt body;
 
-			public While(Expr condition, List<Expr> invariant, Stmt body) {
+			public While(Expr condition, List<Expr.Logical> invariant, Stmt body) {
 				this.condition = condition;
 				this.invariant = new ArrayList<>(invariant);
 				this.body = body;
@@ -579,7 +580,7 @@ public class BoogieFile {
 				return condition;
 			}
 
-			public List<Expr> getInvariant() {
+			public List<Expr.Logical> getInvariant() {
 				return invariant;
 			}
 
@@ -624,23 +625,36 @@ public class BoogieFile {
 
 	public interface Expr {
 
-		public static class BinaryOperator implements Expr {
-			public enum Kind {
-				EQ, NEQ, LT, LTEQ, GT, GTEQ, IFF, IF, ADD, SUB, MUL, IDIV, DIV, REM
-			}
+		public interface Logical extends Expr {
 
-			private Kind kind;
-			private Expr lhs;
-			private Expr rhs;
+		}
 
-			public BinaryOperator(Kind kind, Expr lhs, Expr rhs) {
-				this.kind = kind;
+		public interface Quantifier extends Logical {
+			public List<Decl.Parameter> getParameters();
+
+			public Expr.Logical getBody();
+		}
+
+		public interface UnaryOperator {
+			Expr getOperand();
+		}
+
+		public interface BinaryOperator {
+			Expr getLeftHandSide();
+			Expr getRightHandSide();
+		}
+
+		public interface NaryOperator {
+			List<? extends Expr> getOperands();
+		}
+
+		public static class Equals implements Logical, BinaryOperator {
+			private final Expr lhs;
+			private final Expr rhs;
+
+			private Equals(Expr lhs, Expr rhs) {
 				this.lhs = lhs;
 				this.rhs = rhs;
-			}
-
-			public Kind getKind() {
-				return kind;
 			}
 
 			public Expr getLeftHandSide() {
@@ -652,33 +666,275 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Constant implements Expr {
-			public final static Constant TRUE = new Constant(true);
-			public final static Constant FALSE = new Constant(false);
+		public static class NotEquals implements Logical, BinaryOperator {
+			private final Expr lhs;
+			private final Expr rhs;
 
-			private Object value;
+			private NotEquals(Expr lhs, Expr rhs) {
+				this.lhs = lhs;
+				this.rhs = rhs;
+			}
 
-			public Constant(boolean v) {
+			public Expr getLeftHandSide() {
+				return lhs;
+			}
+
+			public Expr getRightHandSide() {
+				return rhs;
+			}
+		}
+
+		public static class LessThan implements Logical, BinaryOperator {
+			private final Expr lhs;
+			private final Expr rhs;
+
+			private LessThan(Expr lhs, Expr rhs) {
+				this.lhs = lhs;
+				this.rhs = rhs;
+			}
+
+			public Expr getLeftHandSide() {
+				return lhs;
+			}
+
+			public Expr getRightHandSide() {
+				return rhs;
+			}
+		}
+
+		public static class LessThanOrEqual implements Logical, BinaryOperator {
+			private final Expr lhs;
+			private final Expr rhs;
+
+			private LessThanOrEqual(Expr lhs, Expr rhs) {
+				this.lhs = lhs;
+				this.rhs = rhs;
+			}
+
+			public Expr getLeftHandSide() {
+				return lhs;
+			}
+
+			public Expr getRightHandSide() {
+				return rhs;
+			}
+		}
+
+		public static class GreaterThan implements Logical, BinaryOperator {
+			private final Expr lhs;
+			private final Expr rhs;
+
+			private GreaterThan(Expr lhs, Expr rhs) {
+				this.lhs = lhs;
+				this.rhs = rhs;
+			}
+
+			public Expr getLeftHandSide() {
+				return lhs;
+			}
+
+			public Expr getRightHandSide() {
+				return rhs;
+			}
+		}
+
+		public static class GreaterThanOrEqual implements Logical, BinaryOperator {
+			private final Expr lhs;
+			private final Expr rhs;
+
+			private GreaterThanOrEqual(Expr lhs, Expr rhs) {
+				this.lhs = lhs;
+				this.rhs = rhs;
+			}
+
+			public Expr getLeftHandSide() {
+				return lhs;
+			}
+
+			public Expr getRightHandSide() {
+				return rhs;
+			}
+		}
+
+		public static class Iff implements Logical, BinaryOperator {
+			private final Logical lhs;
+			private final Logical rhs;
+
+			private Iff(Logical lhs, Logical rhs) {
+				this.lhs = lhs;
+				this.rhs = rhs;
+			}
+
+			public Logical getLeftHandSide() {
+				return lhs;
+			}
+
+			public Logical getRightHandSide() {
+				return rhs;
+			}
+		}
+
+		public static class Implies implements Logical, BinaryOperator {
+			private final Logical lhs;
+			private final Logical rhs;
+
+			private Implies(Logical lhs, Logical rhs) {
+				this.lhs = lhs;
+				this.rhs = rhs;
+			}
+
+			public Logical getLeftHandSide() {
+				return lhs;
+			}
+
+			public Logical getRightHandSide() {
+				return rhs;
+			}
+		}
+
+		public static class Addition implements Expr, BinaryOperator {
+			private final Expr lhs;
+			private final Expr rhs;
+
+			private Addition(Expr lhs, Expr rhs) {
+				this.lhs = lhs;
+				this.rhs = rhs;
+			}
+
+			public Expr getLeftHandSide() {
+				return lhs;
+			}
+
+			public Expr getRightHandSide() {
+				return rhs;
+			}
+		}
+
+		public static class Subtraction implements Expr, BinaryOperator {
+			private final Expr lhs;
+			private final Expr rhs;
+
+			private  Subtraction(Expr lhs, Expr rhs) {
+				this.lhs = lhs;
+				this.rhs = rhs;
+			}
+
+			public Expr getLeftHandSide() {
+				return lhs;
+			}
+
+			public Expr getRightHandSide() {
+				return rhs;
+			}
+		}
+
+		public static class Multiplication implements Expr, BinaryOperator {
+			private final Expr lhs;
+			private final Expr rhs;
+
+			private Multiplication(Expr lhs, Expr rhs) {
+				this.lhs = lhs;
+				this.rhs = rhs;
+			}
+
+			public Expr getLeftHandSide() {
+				return lhs;
+			}
+
+			public Expr getRightHandSide() {
+				return rhs;
+			}
+		}
+
+		public static class Division implements Expr, BinaryOperator {
+			private final Expr lhs;
+			private final Expr rhs;
+
+			public Division(Expr lhs, Expr rhs) {
+				this.lhs = lhs;
+				this.rhs = rhs;
+			}
+
+			public Expr getLeftHandSide() {
+				return lhs;
+			}
+
+			public Expr getRightHandSide() {
+				return rhs;
+			}
+		}
+
+		public static class IntegerDivision implements Expr, BinaryOperator {
+			private Expr lhs;
+			private Expr rhs;
+
+			public IntegerDivision(Expr lhs, Expr rhs) {
+				this.lhs = lhs;
+				this.rhs = rhs;
+			}
+
+			public Expr getLeftHandSide() {
+				return lhs;
+			}
+
+			public Expr getRightHandSide() {
+				return rhs;
+			}
+		}
+
+		public static class Remainder implements Expr, BinaryOperator {
+			private Expr lhs;
+			private Expr rhs;
+
+			private Remainder(Expr lhs, Expr rhs) {
+				this.lhs = lhs;
+				this.rhs = rhs;
+			}
+
+			public Expr getLeftHandSide() {
+				return lhs;
+			}
+
+			public Expr getRightHandSide() {
+				return rhs;
+			}
+		}
+
+		public static class Boolean implements Logical {
+			public final static Boolean TRUE = new Boolean(true);
+			public final static Boolean FALSE = new Boolean(false);
+
+			private final boolean value;
+
+			private Boolean(boolean v) {
 				this.value = v;
 			}
 
-			public Constant(byte[] vs) {
-				this.value = vs;
+			public boolean getValue() {
+				return value;
 			}
+		}
 
-			public Constant(long v) {
+		public static class Integer implements Expr {
+			private final BigInteger value;
+
+			private Integer(BigInteger v) {
 				this.value = v;
 			}
 
-			public Constant(BigInteger v) {
+			public BigInteger getValue() {
+				return value;
+			}
+		}
+
+		public static class Bytes implements Expr {
+			private final byte[] value;
+
+			private Bytes(byte[] v) {
 				this.value = v;
 			}
 
-			public Constant(String v) {
-				this.value = v;
-			}
-
-			public Object getValue() {
+			public byte[] getValue() {
 				return value;
 			}
 		}
@@ -687,7 +943,7 @@ public class BoogieFile {
 			private final Expr source;
 			private final Expr index;
 
-			public DictionaryAccess(Expr source, Expr index) {
+			private DictionaryAccess(Expr source, Expr index) {
 				this.source = source;
 				this.index = index;
 			}
@@ -706,7 +962,7 @@ public class BoogieFile {
 			private final Expr index;
 			private final Expr value;
 
-			public DictionaryUpdate(Expr source, Expr index, Expr value) {
+			private DictionaryUpdate(Expr source, Expr index, Expr value) {
 				this.source = source;
 				this.index = index;
 				this.value = value;
@@ -725,11 +981,11 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Invoke implements Expr {
+		public static class Invoke implements Logical {
 			private final String name;
 			private final List<Expr> arguments;
 
-			public Invoke(String name, Collection<Expr> arguments) {
+			private Invoke(String name, Collection<Expr> arguments) {
 				this.name = name;
 				this.arguments = new ArrayList<>(arguments);
 			}
@@ -743,21 +999,11 @@ public class BoogieFile {
 			}
 		}
 
-		public static class UnaryOperator implements Expr {
-			public enum Kind {
-				NEG, NOT, OLD
-			}
-
-			private final Kind kind;
+		public static class Negation implements Expr, UnaryOperator {
 			private final Expr operand;
 
-			public UnaryOperator(Kind kind, Expr operand) {
-				this.kind = kind;
+			private Negation(Expr operand) {
 				this.operand = operand;
-			}
-
-			public Kind getKind() {
-				return kind;
 			}
 
 			public Expr getOperand() {
@@ -765,67 +1011,94 @@ public class BoogieFile {
 			}
 		}
 
-		public static class NaryOperator implements Expr {
-			public enum Kind {
-				AND, OR
+		public static class Old implements Expr, UnaryOperator {
+			private final Expr operand;
+
+			private Old(Expr operand) {
+				this.operand = operand;
 			}
 
-			private final Kind kind;
-			private final List<Expr> operands;
+			public Expr getOperand() {
+				return operand;
+			}
+		}
 
-			public NaryOperator(Kind kind, List<Expr> operands) {
-				this.kind = kind;
+		public static class LogicalNot implements Logical, UnaryOperator {
+			private final Logical operand;
+
+			private LogicalNot(Logical operand) {
+				this.operand = operand;
+			}
+
+			public Logical getOperand() {
+				return operand;
+			}
+		}
+
+		public static class LogicalAnd implements Logical, NaryOperator {
+			private final List<Logical> operands;
+
+			private LogicalAnd(List<Logical> operands) {
 				this.operands = new ArrayList<>(operands);
 			}
 
-			public NaryOperator(Kind kind, Expr... operands) {
-				this.kind = kind;
-				this.operands = Arrays.asList(operands);
-			}
-
-			public Kind getKind() {
-				return kind;
-			}
-
-			public List<Expr> getOperands() {
+			public List<Logical> getOperands() {
 				return operands;
 			}
 		}
 
-		public static class Quantifier implements Expr {
-			private final boolean universal;
-			private final List<Decl.Parameter> parameters;
-			private final Expr body;
+		public static class LogicalOr implements Logical, NaryOperator {
+			private final List<Logical> operands;
 
-			public Quantifier(boolean universal, Expr body, Collection<Decl.Parameter> parameters) {
-				this.universal = universal;
+			private LogicalOr(List<Logical> operands) {
+				this.operands = new ArrayList<>(operands);
+			}
+
+			public List<Logical> getOperands() {
+				return operands;
+			}
+		}
+
+		public static class UniversalQuantifier implements Quantifier {
+			private final List<Decl.Parameter> parameters;
+			private final Logical body;
+
+			private UniversalQuantifier(Collection<Decl.Parameter> parameters, Expr.Logical body) {
 				this.parameters = new ArrayList<>(parameters);
 				this.body = body;
-			}
-
-			public Quantifier(boolean universal, Expr body, Decl.Parameter... parameters) {
-				this.universal = universal;
-				this.parameters = Arrays.asList(parameters);
-				this.body = body;
-			}
-
-			public boolean isUniversal() {
-				return universal;
 			}
 
 			public List<Decl.Parameter> getParameters() {
 				return parameters;
 			}
 
-			public Expr getBody() {
+			public Logical getBody() {
 				return body;
 			}
 		}
 
-		public static class VariableAccess implements LVal {
+		public static class ExistentialQuantifier implements Quantifier {
+			private final List<Decl.Parameter> parameters;
+			private final Logical body;
+
+			private ExistentialQuantifier(Collection<Decl.Parameter> parameters, Expr.Logical body) {
+				this.parameters = new ArrayList<>(parameters);
+				this.body = body;
+			}
+
+			public List<Decl.Parameter> getParameters() {
+				return parameters;
+			}
+
+			public Logical getBody() {
+				return body;
+			}
+		}
+
+		public static class VariableAccess implements LVal, Logical {
 			private final String variable;
 
-			public VariableAccess(String var) {
+			private VariableAccess(String var) {
 				if(var == null) {
 					throw new IllegalArgumentException();
 				}
@@ -967,143 +1240,162 @@ public class BoogieFile {
 
 	// Logical Operators
 
-	public static Expr AND(List<Expr> operands) {
-		if (operands.size() == 0) {
-			return new Expr.Constant(true);
+	public static Expr.Logical AND(List<Expr.Logical> operands) {
+		if (operands.contains(Expr.Boolean.FALSE)) {
+			return Expr.Boolean.FALSE;
 		} else {
-			return new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, operands);
+			operands = removeAll(Expr.Boolean.TRUE, operands);
+			switch (operands.size()) {
+				case 0:
+					return Expr.Boolean.TRUE;
+				case 1:
+					return operands.get(0);
+				default:
+					return new Expr.LogicalAnd(operands);
+			}
 		}
 	}
 
-	public static Expr AND(Expr... operands) {
-		if (operands.length == 0) {
-			return new Expr.Constant(true);
+	public static Expr.Logical AND(Expr.Logical... operands) {
+		return AND(Arrays.asList(operands));
+	}
+
+	public static Expr.UniversalQuantifier FORALL(String name, BoogieFile.Type type, Expr.Logical body) {
+		return new Expr.UniversalQuantifier(Arrays.asList(new Decl.Parameter(name, type)),body);
+	}
+
+	public static Expr.UniversalQuantifier FORALL(String name1, BoogieFile.Type type1, String name2, BoogieFile.Type type2,
+												  Expr.Logical body) {
+		return new Expr.UniversalQuantifier(Arrays.asList(new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2)), body);
+	}
+
+	public static Expr.UniversalQuantifier FORALL(String name1, BoogieFile.Type type1, String name2, BoogieFile.Type type2,String name3, BoogieFile.Type type3,
+												  Expr.Logical body) {
+		return new Expr.UniversalQuantifier(Arrays.asList(new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2), new Decl.Parameter(name3, type3)), body);
+	}
+
+	public static Expr.UniversalQuantifier FORALL(List<Decl.Parameter> parameters, Expr.Logical body) {
+		return new Expr.UniversalQuantifier(parameters, body);
+	}
+
+
+	public static Expr.ExistentialQuantifier EXISTS(String name, BoogieFile.Type type, Expr.Logical body) {
+		return new Expr.ExistentialQuantifier(Arrays.asList(new Decl.Parameter(name, type)),body);
+	}
+
+	public static Expr.ExistentialQuantifier EXISTS(String name1, BoogieFile.Type type1, String name2, BoogieFile.Type type2,
+												  Expr.Logical body) {
+		return new Expr.ExistentialQuantifier(Arrays.asList(new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2)), body);
+	}
+
+	public static Expr.ExistentialQuantifier EXISTS(String name1, BoogieFile.Type type1, String name2, BoogieFile.Type type2,String name3, BoogieFile.Type type3,
+												  Expr.Logical body) {
+		return new Expr.ExistentialQuantifier(Arrays.asList(new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2), new Decl.Parameter(name3, type3)), body);
+	}
+
+	public static Expr.ExistentialQuantifier EXISTS(List<Decl.Parameter> parameters, Expr.Logical body) {
+		return new Expr.ExistentialQuantifier(parameters, body);
+	}
+
+
+	public static Expr.Logical IFF(Expr.Logical lhs, Expr.Logical rhs) {
+		if(lhs instanceof Expr.Boolean && rhs instanceof Expr.Boolean) {
+			return (lhs == rhs) ? Expr.Boolean.TRUE : Expr.Boolean.FALSE;
 		} else {
-			return new Expr.NaryOperator(Expr.NaryOperator.Kind.AND, operands);
+			return new Expr.Iff(lhs, rhs);
 		}
 	}
 
-	public static Expr.Quantifier FORALL(String name, BoogieFile.Type type, Expr body) {
-		return new Expr.Quantifier(true, body, new Decl.Parameter(name, type));
+	public static Expr.Logical IMPLIES(Expr.Logical lhs, Expr.Logical rhs) {
+		if(lhs == Expr.Boolean.FALSE || rhs == Expr.Boolean.TRUE) {
+			return Expr.Boolean.TRUE;
+		} else if(lhs == Expr.Boolean.TRUE) {
+			return rhs;
+		} else if(rhs == Expr.Boolean.FALSE) {
+			return lhs;
+		} else {
+			return new Expr.Implies(lhs, rhs);
+		}
 	}
 
-	public static Expr.Quantifier FORALL(String name1, BoogieFile.Type type1, String name2, BoogieFile.Type type2,
-			Expr body) {
-		return new Expr.Quantifier(true, body, new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2));
-	}
-
-	public static Expr.Quantifier FORALL(String name1, BoogieFile.Type type1, String name2, BoogieFile.Type type2,
-			String name3, BoogieFile.Type type3, Expr body) {
-		return new Expr.Quantifier(true, body, new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2),
-				new Decl.Parameter(name3, type3));
-	}
-
-	public static Expr.Quantifier FORALL(List<Decl.Parameter> parameters, Expr body) {
-		return new Expr.Quantifier(true, body, parameters);
-	}
-
-	public static Expr.Quantifier EXISTS(String name, BoogieFile.Type type, Expr body) {
-		return new Expr.Quantifier(false, body, new Decl.Parameter(name, type));
-	}
-
-	public static Expr.Quantifier EXISTS(String name1, BoogieFile.Type type1, String name2, BoogieFile.Type type2,
-			Expr body) {
-		return new Expr.Quantifier(false, body, new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2));
-	}
-
-	public static Expr.Quantifier EXISTS(String name1, BoogieFile.Type type1, String name2, BoogieFile.Type type2,
-			String name3, BoogieFile.Type type3, Expr body) {
-		return new Expr.Quantifier(false, body, new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2),
-				new Decl.Parameter(name3, type3));
-	}
-
-	public static Expr.Quantifier EXISTS(List<Decl.Parameter> parameters, Expr body) {
-		return new Expr.Quantifier(false, body, parameters);
-	}
-
-
-	public static Expr.BinaryOperator IFF(Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.IFF, lhs, rhs);
-	}
-
-	public static Expr.BinaryOperator IMPLIES(Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.IF, lhs, rhs);
-	}
-
-	public static Expr.UnaryOperator NOT(Expr lhs) {
+	public static Expr.LogicalNot NOT(Expr.Logical lhs) {
 		// FIXME: could apply some simplification here.
-		return new Expr.UnaryOperator(Expr.UnaryOperator.Kind.NOT, lhs);
+		return new Expr.LogicalNot(lhs);
 	}
 
-	public static Expr OR(List<Expr> operands) {
-		if (operands.size() == 0) {
-			return new Expr.Constant(false);
+	public static Expr.Logical OR(List<Expr.Logical> operands) {
+		if (operands.contains(Expr.Boolean.TRUE)) {
+			return Expr.Boolean.TRUE;
 		} else {
-			return new Expr.NaryOperator(Expr.NaryOperator.Kind.OR, operands);
+			operands = removeAll(Expr.Boolean.FALSE, operands);
+			switch (operands.size()) {
+				case 0:
+					return Expr.Boolean.FALSE;
+				case 1:
+					return operands.get(0);
+				default:
+					return new Expr.LogicalOr(operands);
+			}
 		}
 	}
 
-	public static Expr OR(Expr... operands) {
-		if (operands.length == 0) {
-			return new Expr.Constant(false);
-		} else {
-			return new Expr.NaryOperator(Expr.NaryOperator.Kind.OR, operands);
-		}
+	public static Expr.Logical OR(Expr.Logical... operands) {
+		return OR(Arrays.asList(operands));
 	}
 
 	// Relational Operators
 
-	public static Expr.BinaryOperator EQ(Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.EQ, lhs, rhs);
+	public static Expr.Equals EQ(Expr lhs, Expr rhs) {
+		return new Expr.Equals(lhs, rhs);
 	}
 
-	public static Expr.BinaryOperator NEQ(Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.NEQ, lhs, rhs);
+	public static Expr.NotEquals NEQ(Expr lhs, Expr rhs) {
+		return new Expr.NotEquals(lhs, rhs);
 	}
 
-	public static Expr.BinaryOperator GTEQ(Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.GTEQ, lhs, rhs);
+	public static Expr.GreaterThanOrEqual GTEQ(Expr lhs, Expr rhs) {
+		return new Expr.GreaterThanOrEqual(lhs, rhs);
 	}
 
-	public static Expr.BinaryOperator GT(Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.GT, lhs, rhs);
+	public static Expr.GreaterThan GT(Expr lhs, Expr rhs) {
+		return new Expr.GreaterThan(lhs, rhs);
 	}
 
-	public static Expr.BinaryOperator LTEQ(Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LTEQ, lhs, rhs);
+	public static Expr.LessThanOrEqual LTEQ(Expr lhs, Expr rhs) {
+		return new Expr.LessThanOrEqual(lhs, rhs);
 	}
 
-	public static Expr.BinaryOperator LT(Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.LT, lhs, rhs);
+	public static Expr.LessThan LT(Expr lhs, Expr rhs) {
+		return new Expr.LessThan(lhs, rhs);
 	}
 
 	// Arithmetic Operators
-	public static Expr.BinaryOperator ADD(Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.ADD, lhs, rhs);
+	public static Expr.Addition ADD(Expr lhs, Expr rhs) {
+		return new Expr.Addition(lhs, rhs);
 	}
 
-	public static Expr.UnaryOperator NEG(Expr lhs) {
-		return new Expr.UnaryOperator(Expr.UnaryOperator.Kind.NEG, lhs);
+	public static Expr.Negation NEG(Expr lhs) {
+		return new Expr.Negation(lhs);
 	}
 
-	public static Expr.BinaryOperator SUB(Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.SUB, lhs, rhs);
+	public static Expr.Subtraction SUB(Expr lhs, Expr rhs) {
+		return new Expr.Subtraction(lhs, rhs);
 	}
 
-	public static Expr.BinaryOperator MUL(Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.MUL, lhs, rhs);
+	public static Expr.Multiplication MUL(Expr lhs, Expr rhs) {
+		return new Expr.Multiplication(lhs, rhs);
 	}
 
-	public static Expr.BinaryOperator DIV(Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.DIV, lhs, rhs);
+	public static Expr.Division DIV(Expr lhs, Expr rhs) {
+		return new Expr.Division(lhs, rhs);
 	}
 
-	public static Expr.BinaryOperator IDIV(Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.IDIV, lhs, rhs);
+	public static Expr.IntegerDivision IDIV(Expr lhs, Expr rhs) {
+		return new Expr.IntegerDivision(lhs, rhs);
 	}
 
-	public static Expr.BinaryOperator REM(Expr lhs, Expr rhs) {
-		return new Expr.BinaryOperator(Expr.BinaryOperator.Kind.REM, lhs, rhs);
+	public static Expr.Remainder REM(Expr lhs, Expr rhs) {
+		return new Expr.Remainder(lhs, rhs);
 	}
 	// Dictionaries
 
@@ -1116,19 +1408,24 @@ public class BoogieFile {
 	}
 
 	// Misc
-	public static Expr.Constant CONST(boolean b) {
-		return new Expr.Constant(b);
+	public static Expr.Logical CONST(boolean b) {
+		return new Expr.Boolean(b);
 	}
 
-	public static Expr.Constant CONST(int i) {
-		return new Expr.Constant(i);
+	public static Expr.Integer CONST(int i) {
+		return new Expr.Integer(BigInteger.valueOf(i));
 	}
 
-	public static Expr.Constant CONST(BigInteger i) {
-		return new Expr.Constant(i);
+	public static Expr.Integer CONST(BigInteger i) {
+		return new Expr.Integer(i);
 	}
-	public static Expr.UnaryOperator OLD(Expr lhs) {
-		return new Expr.UnaryOperator(Expr.UnaryOperator.Kind.OLD, lhs);
+
+	public static Expr.Bytes CONST(byte[] bytes) {
+		return new Expr.Bytes(bytes);
+	}
+
+	public static Expr.Old OLD(Expr lhs) {
+		return new Expr.Old(lhs);
 	}
 	public static Stmt.Call CALL(String name, Expr... parameters) {
 		return new Stmt.Call(name, Collections.EMPTY_LIST, Arrays.asList(parameters));
@@ -1158,5 +1455,22 @@ public class BoogieFile {
 
 	public static Expr.VariableAccess VAR(String name) {
 		return new Expr.VariableAccess(name);
+	}
+
+	private static <T extends Expr> List<T> removeAll(T item, List<T> items) {
+		for(int i=0;i!=items.size();++i) {
+			if(items.get(i).equals(item)) {
+				ArrayList<T> nitems = new ArrayList<>();
+				for(int j=0;j!=items.size();++j) {
+					T jth = items.get(j);
+					if(!jth.equals(item)) {
+						nitems.add(jth);
+					}
+				}
+				return nitems;
+			}
+		}
+		// Nothing removed
+		return items;
 	}
 }
