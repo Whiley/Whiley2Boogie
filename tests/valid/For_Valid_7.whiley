@@ -13,9 +13,10 @@ ensures |rs| <= |items|:
     int[] nitems = [0;n]
     int j = 0
     // Copy them over
-    for i in 0..|items| where |nitems| <= |items|:
+    for i in 0..|items| where |nitems| <= |items| && j >= 0:
         int ith = items[i]
         if fn(ith):
+            assume j < |nitems|
             nitems[j] = ith
             j = j + 1
     // Done
