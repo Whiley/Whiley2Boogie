@@ -3047,6 +3047,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     private Expr.Logical constructReferenceTypeTest(WyilFile.Type.Reference to, WyilFile.Type from, Expr argument, String heap) {
+        heap = (heap == null) ? "Ref#Empty" : heap;
         // Cast argument to (unboxed) reference type
         argument = cast(to, from, argument);
         // Dereference argument
