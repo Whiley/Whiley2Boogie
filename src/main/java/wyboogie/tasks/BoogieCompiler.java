@@ -3465,38 +3465,40 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      */
     private Set<String> determineFieldNames(WyilFile wf) {
         Set<String> names = new HashSet<>();
-        //
+        AbstractVisitor visitor = new AbstractVisitor(meter) {
+            @Override
+            public void visitTypeRecord(WyilFile.Type.Record t) {
+                // Continue visiting children
+                super.visitTypeRecord(t);
+                // Add all field names
+                for (WyilFile.Type.Field f : t.getFields()) {
+                    names.add(f.getName().get());
+                }
+            }
+
+            @Override
+            public void visitRecordInitialiser(WyilFile.Expr.RecordInitialiser expr) {
+                for (WyilFile.Identifier f : expr.getFields()) {
+                    names.add(f.get());
+                }
+            }
+
+            @Override
+            public void visitRecordAccess(WyilFile.Expr.RecordAccess expr) {
+                names.add(expr.getField().get());
+            }
+
+            @Override
+            public void visitFieldDereference(WyilFile.Expr.FieldDereference expr) {
+                names.add(expr.getField().get());
+            }
+        };
+
         for (WyilFile.Decl.Unit unit : wf.getModule().getUnits()) {
-            //
-            new AbstractVisitor(meter) {
-                @Override
-                public void visitTypeRecord(WyilFile.Type.Record t) {
-                    // Continue visiting children
-                    super.visitTypeRecord(t);
-                    // Add all field names
-                    for (WyilFile.Type.Field f : t.getFields()) {
-                        names.add(f.getName().get());
-                    }
-                }
-
-                @Override
-                public void visitRecordInitialiser(WyilFile.Expr.RecordInitialiser expr) {
-                    for (WyilFile.Identifier f : expr.getFields()) {
-                        names.add(f.get());
-                    }
-                }
-
-                @Override
-                public void visitRecordAccess(WyilFile.Expr.RecordAccess expr) {
-                    names.add(expr.getField().get());
-                }
-
-                @Override
-                public void visitFieldDereference(WyilFile.Expr.FieldDereference expr) {
-                    names.add(expr.getField().get());
-                }
-            }.visitUnit(unit);
-
+            visitor.visitUnit(unit);
+        }
+        for (WyilFile.Decl.Unit unit : wf.getModule().getExterns()) {
+            visitor.visitUnit(unit);
         }
         return names;
     }
