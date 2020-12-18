@@ -1188,12 +1188,20 @@ public class BoogieFile {
 		return new Decl.Function(Collections.EMPTY_LIST, name, parameters, returns, body);
 	}
 
-
 	public static Decl.Function FUNCTION(String name, BoogieFile.Type param1, BoogieFile.Type param2,
 			BoogieFile.Type returns, String... attributes) {
 		ArrayList<Decl.Parameter> parameters = new ArrayList<>();
 		parameters.add(new Decl.Parameter(null, param1));
 		parameters.add(new Decl.Parameter(null, param2));
+		return new Decl.Function(Arrays.asList(attributes), name, parameters, returns, null);
+	}
+
+	public static Decl.Function FUNCTION(String name, BoogieFile.Type param1, BoogieFile.Type param2, BoogieFile.Type param3,
+										 BoogieFile.Type returns, String... attributes) {
+		ArrayList<Decl.Parameter> parameters = new ArrayList<>();
+		parameters.add(new Decl.Parameter(null, param1));
+		parameters.add(new Decl.Parameter(null, param2));
+		parameters.add(new Decl.Parameter(null, param3));
 		return new Decl.Function(Arrays.asList(attributes), name, parameters, returns, null);
 	}
 
@@ -1209,6 +1217,10 @@ public class BoogieFile {
 
 	public static Decl.Procedure PROCEDURE(String name, List<Decl.Parameter> parameters, List<Decl.Parameter> returns) {
 		return new Decl.Procedure(name, parameters, returns, Collections.EMPTY_LIST, Collections.EMPTY_LIST, Collections.EMPTY_LIST);
+	}
+
+	public static Decl.Procedure PROCEDURE(String name, List<Decl.Parameter> parameters, List<Decl.Parameter> returns, List<Expr.Logical> requires, List<Expr.Logical> ensures) {
+		return new Decl.Procedure(name, parameters, returns, requires, ensures, Collections.EMPTY_LIST);
 	}
 
 	public static Stmt ASSIGN(LVal lhs, Expr rhs) {
