@@ -1585,8 +1585,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     @Override
-    public Expr constructTupleInitialiserLVal(WyilFile.Expr.TupleInitialiser expr, List<Expr> source) {
-        return new FauxTuple(source);
+    public Expr constructTupleInitialiserLVal(WyilFile.Expr.TupleInitialiser expr, List<Expr> operands) {
+        // Done
+        return new FauxTuple(operands);
     }
 
     @Override
@@ -1674,36 +1675,50 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Expr constructConstant(WyilFile.Expr.Constant expr) {
+        WyilFile.Type type = expr.getType();
+        WyilFile.Type source;
+        Expr result;
         WyilFile.Value v = expr.getValue();
         switch (v.getOpcode()) {
             case WyilFile.ITEM_null: {
-                return VAR("Null");
+                source = WyilFile.Type.Null;
+                result = VAR("Null");
+                break;
             }
             case WyilFile.ITEM_bool: {
                 boolean b = ((WyilFile.Value.Bool) v).get();
-                return CONST(b);
+                source = WyilFile.Type.Bool;
+                result = CONST(b);
+                break;
             }
             case WyilFile.ITEM_byte: {
                 byte b = ((WyilFile.Value.Byte) v).get();
-                return CONST(new byte[]{b});
+                source = WyilFile.Type.Byte;
+                result = CONST(new byte[]{b});
+                break;
             }
             case WyilFile.ITEM_int: {
                 BigInteger i = ((WyilFile.Value.Int) v).get();
-                return CONST(i);
+                source = WyilFile.Type.Int;
+                result = CONST(i);
+                break;
             }
             case WyilFile.ITEM_utf8: {
                 byte[] bytes = ((WyilFile.Value.UTF8) v).get();
-                Expr arr = INVOKE("Array#Empty", CONST(bytes.length));
+                result = INVOKE("Array#Empty", CONST(bytes.length));
                 //
                 for (int i = 0; i != bytes.length; ++i) {
                     Expr ith = box(WyilFile.Type.Int, CONST(bytes[i]));
-                    arr = PUT(arr, CONST(i), ith);
+                    result = PUT(result, CONST(i), ith);
                 }
-                return arr;
+                source = WyilFile.Type.IntArray;
+                break;
             }
             default:
                 throw new IllegalArgumentException("unknown constant encountered (" + expr.getClass().getName() + ")");
         }
+        // Apply a final cast
+        return cast(type,source,result);
     }
 
     @Override
@@ -2024,6 +2039,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Expr constructTupleInitialiser(WyilFile.Expr.TupleInitialiser expr, List<Expr> operands) {
+        // Cast operands
+        operands = cast(expr.getType(),expr.getOperands(),operands);
         // NOTE: at this stage, we won't attempt to support general first-class tuples.
         return new FauxTuple(operands);
     }
