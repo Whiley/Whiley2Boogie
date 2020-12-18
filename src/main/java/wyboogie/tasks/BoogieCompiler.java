@@ -29,6 +29,7 @@ import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.Stmt;
 import wyboogie.core.BoogieFile.LVal;
 import wyboogie.util.AbstractExpressionProducer;
+import wyboogie.util.Boogie;
 import wybs.lang.Build.Meter;
 import wybs.util.AbstractCompilationUnit.Tuple;
 import wyfs.util.Pair;
@@ -105,6 +106,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @return
      */
     private List<Decl> constructConcreteType(WyilFile.Decl.Type decl, WyilFile.Type instantiation, List<Expr.Logical> invariant) {
+        // Determine whether type is "pure" or not.  Essentially, whether or not it contains a heap reference somewhere.
+        // If that is the case, then we need an additional heap parameter.
+        boolean pure = WyilUtils.isPure(instantiation);
         ArrayList<Decl> decls = new ArrayList<>();
         // Extract template
         Tuple<WyilFile.Template.Variable> template = decl.getTemplate();
@@ -128,13 +132,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             arguments.add(VAR(T.getName().get()));
         }
         parameters.add(new Decl.Parameter(varName, type));
-        parameters.add(new Decl.Parameter(HEAP_VARNAME, REFMAP));
+        arguments.add(unbox(var.getType(), VAR(varName)));
+        if(!pure) {
+            parameters.add(new Decl.Parameter(HEAP_VARNAME, REFMAP));
+            arguments.add(VAR(HEAP_VARNAME));
+        }
         Expr inv = AND(invariant);
         decls.add(FUNCTION(name + "#inv", parameters, Type.Bool, inv));
         // Generate test for the type itself
-        Expr.Logical test = constructTypeTest(instantiation, WyilFile.Type.Any, VAR(varName), HEAP_VARNAME);
-        arguments.add(unbox(var.getType(), VAR(varName)));
-        arguments.add(VAR(HEAP_VARNAME));
+        Expr.Logical test = constructTypeTest(instantiation, WyilFile.Type.Any, VAR(varName), pure ? null : HEAP_VARNAME);
         test = AND(test, INVOKE(name + "#inv", arguments));
         parameters.set(template.size(), new Decl.Parameter(varName, ANY));
         decls.add(FUNCTION(name + "#is", parameters, Type.Bool, test));
@@ -154,6 +160,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         if (initialiser != null) {
             Expr rhs = cast(d.getType(), d.getInitialiser().getType(), initialiser);
             decls.add(new Decl.Axiom(EQ(VAR(name), rhs)));
+            // Add any lambda's used within the function
+            decls.addAll(constructLambdas(d));
         }
         return new Decl.Sequence(decls);
     }
@@ -164,13 +172,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         decls.addAll(constructCommentHeading("PROPERTY: " + d.getQualifiedName()));
         // Apply name mangling
         String name = toMangledName(d);
-        // Construct container for type constraints
-        ArrayList<Expr.Logical> constraints = new ArrayList<>();
-        //
-        List<Decl.Parameter> parameters = constructTemplateParameters(d.getTemplate());
-        parameters.addAll(constructParameters(d.getParameters(), constraints, "Ref#Empty"));
+        // Construct parameters
+        Pair<List<Decl.Parameter>, List<Expr.Logical>> parameters = constructParameters(d.getTemplate(), d.getParameters(), null);
         // FIXME: what to do with the type constraints?
-        decls.add(FUNCTION(name, parameters, Type.Bool, AND(clauses)));
+        decls.add(FUNCTION(name, parameters.first(), Type.Bool, AND(clauses)));
         return new Decl.Sequence(decls);
     }
 
@@ -178,76 +183,17 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     public Decl constructFunction(WyilFile.Decl.Function d, List precondition, List postcondition,
                                   Stmt body) {
         ArrayList<Decl> decls = new ArrayList<>();
+        // Add useful comment
         decls.addAll(constructCommentHeading("FUNCTION: " + d.getQualifiedName() + " : " + d.getType()));
         // Construct prototype which can be called from expressions.
-        decls.addAll(constructFunctionPrototypes(d, precondition, postcondition));
+        decls.addAll(constructFunctionPrototype(d, precondition, postcondition));
         // Add any lambda's used within the function
         decls.addAll(constructLambdas(d));
         // Add implementation (if one exists)
         if(d.getBody().size() > 0) {
-            // Apply name mangling
-            String name = toMangledName(d);
-            List<Decl.Parameter> parameters = constructParameters(d.getParameters(), precondition, "Ref#Empty");
-            List<Decl.Parameter> returns = constructParameters(d.getReturns(), postcondition, "Ref#Empty");
-            // Construct shadow parameters (if applicable, and before heap variable)
-            List<Decl.Parameter> shadows = constructShadowParameters(d.getParameters(), parameters);
-            // Determine local variables
-            List<Decl.Variable> locals = constructLocals(d.getBody());
-            // Add shadown assignments to the body
-            body = addShadowAssignments(locals, body, parameters, shadows);
-            // Add template parameters
-            shadows.addAll(0,constructTemplateParameters(d.getTemplate()));
-            parameters.addAll(0,constructTemplateParameters(d.getTemplate()));
-            // Construct procedure implementation
-            decls.addAll(constructCommentSubheading("Implementation"));
-            decls.add(new Decl.Procedure(name + "#impl", parameters, returns, precondition, postcondition, Collections.EMPTY_LIST));
-            // Construct implementation which can be checked against its specification.
-            decls.add(new Decl.Implementation(name + "#impl", shadows, returns, locals, body));
+            // Yes, this is not an external symbol
+            decls.addAll(constructFunctionImplementation(d, precondition, postcondition, body));
         }
-        // Done
-        return new Decl.Sequence(decls);
-    }
-
-    @Override
-    public Decl constructMethod(WyilFile.Decl.Method d, List precondition, List postcondition, Stmt body) {
-        // FIXME: this needs to be completely updated
-        ArrayList<Decl> decls = new ArrayList<>();
-        decls.addAll(constructCommentHeading("METHOD: " + d.getQualifiedName() + " : " + d.getType()));
-        // Apply name mangling
-        String name = toMangledName(d);
-        List<Decl.Parameter> parameters = constructParameters(d.getParameters(), precondition, HEAP_VARNAME);
-        List<Decl.Parameter> returns = constructParameters(d.getReturns(), postcondition, "#" + HEAP_VARNAME);
-        // Construct parameters and arguments for specification helpers
-        ArrayList<Decl.Parameter> specParametersAndReturns = new ArrayList<>();
-        // Add the obligatory heap parameter
-        parameters.add(0, new Decl.Variable(HEAP_VARNAME, REFMAP));
-        returns.add(0, new Decl.Variable("#" + HEAP_VARNAME, REFMAP));
-        specParametersAndReturns.addAll(parameters);
-        // Construct function representation precondition
-        decls.add(FUNCTION(name + "#pre", specParametersAndReturns, Type.Bool, AND(precondition)));
-        // Construct shadow parameters (if applicable, and before heap variable)
-        List<Decl.Parameter> shadows = constructShadowParameters(d.getParameters(), parameters);
-        shadows.add(0, new Decl.Variable(HEAP_VARNAME + "#", REFMAP));
-        // Determine local variables
-        List<Decl.Variable> locals = constructLocals(d.getBody());
-        // Add shadown assignments to the body
-        body = addShadowAssignments(locals, body, parameters, shadows);
-        // Check whether last statement is a return or not.
-        if (!hasFinalReturn(d)) {
-            // Return the updated program heap (only for methods).
-            body = SEQUENCE(body, new Stmt.Assignment(VAR("#" + HEAP_VARNAME), VAR(HEAP_VARNAME)));
-        }
-        // Construct procedure prototype
-        decls.add(new Decl.Procedure(name, parameters, returns, precondition, postcondition, Collections.EMPTY_LIST));
-        // Add implementation (if one exists)
-        if(d.getBody().size() > 0) {
-            // Construct implementation which can be checked against its specification.
-            decls.add(new Decl.Implementation(name, shadows, returns, locals, body));
-            // Add the "lambda" value
-            decls.add(new Decl.Constant(true, name + "#lambda", LAMBDA));
-        }
-        // Add any lambda's used within the method
-        decls.addAll(constructLambdas(d));
         // Done
         return new Decl.Sequence(decls);
     }
@@ -263,49 +209,163 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @param returns
      * @return
      */
-    public List<Decl> constructFunctionPrototypes(WyilFile.Decl.Function d, List<Expr.Logical> precondition, List<Expr.Logical> postcondition) {
-        // Following changes to the precondition from propagating outside this function.
-        precondition = new ArrayList<>(precondition);
-        postcondition = new ArrayList<>(postcondition);
-        //
-        Tuple<WyilFile.Template.Variable> template = d.getTemplate();
+    public List<Decl> constructFunctionPrototype(WyilFile.Decl.Function d, List<Expr.Logical> precondition, List<Expr.Logical> postcondition) {
         WyilFile.Type.Callable instantiation = d.getType();
         ArrayList<Decl> decls = new ArrayList<>();
         // Determine concrete instantiations of this function / method
-        List<Decl.Parameter> parameters = constructTemplateParameters(template);
-        parameters.addAll(constructParameters(d.getParameters(), instantiation.getParameter(), precondition, "Ref#Empty"));
-        List<Decl.Parameter> returns = constructParameters(d.getReturns(), instantiation.getReturn(), postcondition, "Ref#Empty");
+        Pair<List<Decl.Parameter>, List<Expr.Logical>> parameters = constructParameters(d.getTemplate(), d.getParameters(), null);
+        Pair<List<Decl.Parameter>, List<Expr.Logical>> returns = constructParameters(null, d.getReturns(), null);
+        // Merge preconditions / postconditions
+        List<Expr.Logical> requires = append(parameters.second(),precondition);
+        List<Expr.Logical> ensures = append(returns.second(),postcondition);
         // Construct parameters and arguments for specification helpers
-        ArrayList<Decl.Parameter> parametersAndReturns = new ArrayList<>(parameters);
         String name = toMangledName(d, instantiation);
         // Construct function representation precondition
         decls.addAll(constructCommentSubheading("Precondition Check"));
-        decls.add(FUNCTION(name + "#pre", parametersAndReturns, Type.Bool, AND(precondition)));
-        parametersAndReturns.addAll(returns);
+        decls.add(FUNCTION(name + "#pre", parameters.first(), Type.Bool, AND(requires)));
         // Construct function representation postcondition
         decls.addAll(constructCommentSubheading("Postcondition Check"));
-        decls.add(FUNCTION(name + "#post", parametersAndReturns, Type.Bool, AND(postcondition)));
+        decls.add(FUNCTION(name + "#post", append(parameters.first(),returns.first()), Type.Bool, AND(ensures)));
         decls.addAll(constructCommentSubheading("Postcondition Axiom"));
         // Construct axiom linking post-condition with prototype.
-        decls.add(constructPostconditionAxiom(d, name, parameters, returns));
+        decls.add(constructPostconditionAxiom(d, name, parameters.first(), returns.first()));
         decls.addAll(constructCommentSubheading("Prototype"));
-        // Construct prototype which can be called from expressions.
-        if (returns.isEmpty()) {
-            decls.add(FUNCTION(name, parameters, ANY));
-        } else if (returns.size() == 1) {
-            Type returnType = returns.get(0).getType();
-            decls.add(FUNCTION(name, parameters, returnType));
-        } else {
-            // Multiple returns require special handling
-            for (int i = 0; i != returns.size(); ++i) {
-                Type returnType = returns.get(i).getType();
-                decls.add(FUNCTION(name + "#" + i, parameters, returnType));
+        // Construct prototype which can be called from an expression.
+        switch(d.getReturns().size()) {
+            case 0:
+                decls.add(FUNCTION(name, parameters.first(), ANY));
+                break;
+            case 1: {
+                Type returnType = returns.first().get(0).getType();
+                decls.add(FUNCTION(name, parameters.first(), returnType));
+                break;
+            }
+            default: {
+                List<Decl.Parameter> rs = returns.first();
+                // Multiple returns require special handling
+                for (int i = 0; i != rs.size(); ++i) {
+                    Type returnType = rs.get(i).getType();
+                    decls.add(FUNCTION(name + "#" + i, parameters.first(), returnType));
+                }
             }
         }
         // Add "lambda" value axioms
         decls.addAll(constructCommentSubheading("Lambda Reference & Axiom"));
         decls.addAll(constructLambdaAxioms(d, instantiation));
         // Done
+        return decls;
+    }
+
+    private List<Decl> constructFunctionImplementation(WyilFile.Decl.Function d, List<Expr.Logical> precondition, List<Expr.Logical> postcondition,
+                                                       Stmt body) {
+        Tuple<WyilFile.Decl.Variable> d_parameters = d.getParameters();
+        ArrayList<Decl> decls = new ArrayList<>();
+        ArrayList<Stmt> stmts = new ArrayList<>();
+        // Apply name mangling
+        String name = toMangledName(d);
+        // Construct parameters and returns
+        Pair<List<Decl.Parameter>, List<Expr.Logical>> parameters = constructParameters(d.getTemplate(),d.getParameters(), null);
+        Pair<List<Decl.Parameter>, List<Expr.Logical>> returns = constructParameters(null, d.getReturns(), null);
+        // Construct shadow parameters (if applicable, and before heap variable)
+        List<Decl.Parameter> shadowParameters = constructShadowParameters(d.getTemplate(), d.getParameters(), null);
+        // Merge preconditions / postconditions
+        List<Expr.Logical> requires = append(parameters.second(),precondition);
+        List<Expr.Logical> ensures = append(returns.second(),postcondition);
+        // Determine local variables
+        List<Decl.Variable> locals = constructLocals(d.getBody());
+        // Add shadown assignments to the body
+        // Add shadow declarations and assignments to the body
+        for (int i = 0; i != d_parameters.size(); ++i) {
+            WyilFile.Decl.Variable ith = d_parameters.get(i);
+            String p = toVariableName(ith);
+            // Add local variable declaration for parameter
+            locals.add(new Decl.Variable(p, constructType(ith.getType())));
+            // Add assignment from shadow to parameter
+            stmts.add(new Stmt.Assignment(VAR(p),VAR(p + "#")));
+        }
+        //
+        stmts.add(body);
+        // Construct procedure implementation
+        decls.addAll(constructCommentSubheading("Implementation"));
+        decls.add(new Decl.Procedure(name + "#impl", parameters.first(), returns.first(), requires, ensures, Collections.EMPTY_LIST));
+        // Construct implementation which can be checked against its specification.
+        decls.add(new Decl.Implementation(name + "#impl", shadowParameters, returns.first(), locals, SEQUENCE(stmts)));
+        // Done
+        return decls;
+    }
+    @Override
+    public Decl constructMethod(WyilFile.Decl.Method d, List precondition, List postcondition, Stmt body) {
+        ArrayList<Decl> decls = new ArrayList<>();
+        // Add useful comment
+        decls.addAll(constructCommentHeading("METHOD: " + d.getQualifiedName() + " : " + d.getType()));
+        // Add method prototype
+        decls.addAll(constructMethodPrototype(d,precondition,postcondition));
+        // Add any lambda's used within the method
+        decls.addAll(constructLambdas(d));
+        // Add implementation (if one exists)
+        if(d.getBody().size() > 0) {
+            // Yes, this is not an external symbol
+            decls.addAll(constructMethodImplementation(d,body));
+        }
+        // Done
+        return new Decl.Sequence(decls);
+    }
+
+    public List<Decl> constructMethodPrototype(WyilFile.Decl.Method d, List<Expr.Logical> precondition, List<Expr.Logical> postcondition) {
+        ArrayList<Decl> decls = new ArrayList<>();
+        // Add useful heading
+        decls.addAll(constructCommentSubheading("Prototype"));
+        // Apply name mangling
+        String name = toMangledName(d);
+        // Construct parameters and returns
+        Pair<List<Decl.Parameter>, List<Expr.Logical>> parameters = constructParameters(d.getTemplate(), d.getParameters(), HEAP_VARNAME);
+        Pair<List<Decl.Parameter>, List<Expr.Logical>> returns = constructParameters(null, d.getReturns(), NHEAP_VARNAME);
+        // Merge preconditions / postconditions
+        List<Expr.Logical> requires = append(parameters.second(),precondition);
+        List<Expr.Logical> ensures = append(returns.second(),postcondition);
+        // Construct procedure prototype
+        decls.add(new Decl.Procedure(name, parameters.first(), returns.first(), requires, ensures, Collections.EMPTY_LIST));
+        //
+        return decls;
+    }
+
+    public List<Decl> constructMethodImplementation(WyilFile.Decl.Method d, Stmt body) {
+        Tuple<WyilFile.Decl.Variable> d_parameters = d.getParameters();
+        ArrayList<Decl> decls = new ArrayList<>();
+        ArrayList<Stmt> stmts = new ArrayList<>();
+        // Add useful heading
+        decls.addAll(constructCommentSubheading("Implementation"));
+        // Apply name mangling
+        String name = toMangledName(d);
+        // Construct (shadow) parameters and returns
+        List<Decl.Parameter> shadowParameters = constructShadowParameters(d.getTemplate(), d.getParameters(), HEAP_VARNAME);
+        Pair<List<Decl.Parameter>, List<Expr.Logical>> returns = constructParameters(null, d.getReturns(), NHEAP_VARNAME, false);
+        // Determine local variables
+        List<Decl.Variable> locals = constructLocals(d.getBody());
+        // Add shadow declarations and assignments for heap
+        locals.add(new Decl.Variable(HEAP_VARNAME,REFMAP));
+        stmts.add(new Stmt.Assignment(VAR(HEAP_VARNAME),VAR(HEAP_VARNAME+"#")));
+        // Add shadow declarations and assignments for parameters
+        for (int i = 0; i != d_parameters.size(); ++i) {
+            WyilFile.Decl.Variable ith = d_parameters.get(i);
+            String p = toVariableName(ith);
+            // Add local variable declaration for parameter
+            locals.add(new Decl.Variable(p, constructType(ith.getType())));
+            // Add assignment from shadow to parameter
+            stmts.add(new Stmt.Assignment(VAR(p),VAR(p + "#")));
+        }
+        // Add actual body
+        stmts.add(body);
+        // Check whether last statement is a return or not.
+        if (!hasFinalReturn(d)) {
+            // Return the updated program heap (only for methods).
+            stmts.add(new Stmt.Assignment(VAR(NHEAP_VARNAME), VAR(HEAP_VARNAME)));
+        }
+        // Construct implementation which can be checked against its specification.
+        decls.add(new Decl.Implementation(name, shadowParameters, returns.first(), locals, SEQUENCE(stmts)));
+        // Add the "lambda" value
+        decls.add(new Decl.Constant(true, name + "#lambda", LAMBDA));
+        //
         return decls;
     }
 
@@ -317,6 +377,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     private List<Decl> constructLambdaAxioms(String name, WyilFile.Type param, WyilFile.Type ret, Tuple<WyilFile.Template.Variable> template) {
+        // Construct template parameters
+        ArrayList<Decl.Parameter> params = new ArrayList<>();
+        for(int i=0;i!=template.size();++i) {
+            params.add(new Decl.Parameter(template.get(i).getName().get(),TYPE));
+        }
         String heap = "Ref#Empty"; // not sure what makes sense for methods?
         final int n = param.shape();
         ArrayList<Decl> decls = new ArrayList<>();
@@ -324,31 +389,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         decls.add(new Decl.Constant(true, name, LAMBDA));
         // Add axiom(s) for the return values
         Expr[] axioms = new Expr[ret.shape()];
-        Expr[] args = new Expr[param.shape() + 2];
-        ArrayList<Decl.Parameter> vars = new ArrayList<>();
-        args[1] = VAR(name);
-        for (int i = 0; i != template.size(); ++i) {
-            WyilFile.Template.Variable ith = template.get(i);
-            vars.add(new Decl.Parameter(ith.getName().get(), TYPE));
-        }
-        for (int i = 0; i != n; ++i) {
-            args[i+2] = VAR("x" + i);
-            vars.add(new Decl.Parameter("x" + i, ANY));
-        }
         for (int i = 0; i != axioms.length; ++i) {
-            args[0] = CONST(i);
-            Expr.Logical ivk = constructTypeTest(ret.dimension(i), WyilFile.Type.Any, INVOKE("f_apply$" + n, args), heap);
-            Expr axiom = (n == 0) ? ivk : FORALL(vars, ivk);
+            Expr.Logical axiom = constructTypeTest(ret.dimension(i), WyilFile.Type.Any, INVOKE("Lambda#return", VAR(name), CONST(i)), heap);
+            if(params.size() > 0) {
+                axiom = FORALL(params,axiom);
+            }
             decls.add(new Decl.Axiom(axiom));
-        }
-        return decls;
-    }
-
-    public List<Decl.Parameter> constructTemplateParameters(WyilFile.Tuple<WyilFile.Template.Variable> template) {
-        ArrayList<Decl.Parameter> decls = new ArrayList<>();
-        for (int i = 0; i != template.size(); ++i) {
-            WyilFile.Template.Variable ith = template.get(i);
-            decls.add(new Decl.Parameter(ith.getName().get(),TYPE));
         }
         return decls;
     }
@@ -357,28 +403,62 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * Convert a sequence of Wyil parameter declarations into a sequence of Boogie parameter declarations. This requires
      * converting the Wyil type to its corresponding Boogie type.
      *
+     * @param template     Whiley template parameters to include (if applicable)
      * @param parameters.  Whiley parameter / return declarations for conversion.
      * @param constraints. Any constraints generated from parameter types will be added to this list of constraints.
      * @param heap.        Identifies the correct name to use when referring to the heap. This matters as in some
      *                     contexts one must refer to the new heap, and in others to the "old" heap.
+     * @param shadow.      Indicates whether or not to generate "shadow" parameter names.
      * @return
      */
-    public List<Decl.Parameter> constructParameters(WyilFile.Tuple<WyilFile.Decl.Variable> parameters, List<Expr.Logical> constraints, String heap) {
-        ArrayList<Decl.Parameter> ps = new ArrayList<>();
+    public Pair<List<Decl.Parameter>, List<Expr.Logical>> constructParameters(WyilFile.Tuple<WyilFile.Template.Variable> template, WyilFile.Tuple<WyilFile.Decl.Variable> parameters, String heap, boolean shadow) {
+        ArrayList<Decl.Parameter> params = new ArrayList<>();
+        ArrayList<Expr.Logical> constraints = new ArrayList<>();
+        // add heap and template (if applicable)
+        if (heap != null) {
+            // Add a heap parameter (if applicable)
+            params.add(new Decl.Variable(shadow ? heap + "#" : heap, REFMAP));
+        }
+        if(template != null) {
+            // Add template parameters (if applicable)
+            for (int i = 0; i != template.size(); ++i) {
+                WyilFile.Template.Variable ith = template.get(i);
+                params.add(new Decl.Parameter(ith.getName().get(), TYPE));
+            }
+        }
+        // Add actual parameters
         for (int i = 0; i != parameters.size(); ++i) {
             WyilFile.Decl.Variable ith = parameters.get(i);
-            ps.add(constructParameter(toVariableName(ith), ith.getType(), constraints, heap));
+            String name = toVariableName(ith);
+            name = shadow ? name + "#" : name;
+            params.add(constructParameter(name, ith.getType(), constraints, heap));
         }
-        return ps;
+        return new Pair<>(params, constraints);
     }
 
-    public List<Decl.Parameter> constructParameters(WyilFile.Tuple<WyilFile.Decl.Variable> parameters, WyilFile.Type type, List<Expr.Logical> constraints, String heap) {
-        ArrayList<Decl.Parameter> ps = new ArrayList<>();
-        for (int i = 0; i != parameters.size(); ++i) {
-            WyilFile.Decl.Variable ith = parameters.get(i);
-            ps.add(constructParameter(toVariableName(ith), type.dimension(i), constraints, heap));
-        }
-        return ps;
+    /**
+     * Construct regular parameters to use in prototypes.  These
+     * @param template
+     * @param parameters
+     * @param heap
+     * @return
+     */
+    public Pair<List<Decl.Parameter>, List<Expr.Logical>> constructParameters(WyilFile.Tuple<WyilFile.Template.Variable> template, WyilFile.Tuple<WyilFile.Decl.Variable> parameters, String heap) {
+        return constructParameters(template, parameters, heap, false);
+    }
+
+   /**
+     * Construct the list of parameters to use in the implementation. This differs from that used in the protype /
+     * procedure declaration because it must account for <i>shadows</i>. These arise because Whiley allows parameters to
+     * be mutated, where as Boogie does not. To work around this, we have shadow parameters (i.e. with different names)
+     * which are then assigned to local variables (which can be modified).
+     *
+     * @param params
+     * @param parameters
+     * @return
+     */
+    public List<Decl.Parameter> constructShadowParameters(WyilFile.Tuple<WyilFile.Template.Variable> template, WyilFile.Tuple<WyilFile.Decl.Variable> parameters, String heap) {
+        return constructParameters(template, parameters, heap, true).first();
     }
 
     /**
@@ -392,38 +472,19 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      *                    contexts one must refer to the new heap, and in others to the "old" heap.
      * @return
      */
-    public List<Decl.Parameter> constructAnonymousParameters(String prefix, WyilFile.Type type, List<Expr.Logical> constraints,
-                                                             String heap) {
-        ArrayList<Decl.Parameter> ps = new ArrayList<>();
+    public Pair<List<Decl.Parameter>, List<Expr.Logical>> constructAnonymousParameters(String prefix, WyilFile.Type type,
+                                                                                       String heap) {
+        ArrayList<Decl.Parameter> parameters = new ArrayList<>();
+        ArrayList<Expr.Logical> constraints = new ArrayList<>();
+        // Add a heap parameter (if applicable)
+        if (heap != null) {
+            parameters.add(0, new Decl.Variable(heap, REFMAP));
+        }
+        //
         for (int i = 0; i != type.shape(); ++i) {
-            ps.add(constructParameter(prefix + "#" + i, type.dimension(i), constraints, heap));
+            parameters.add(constructParameter(prefix + "#" + i, type.dimension(i), constraints, heap));
         }
-        return ps;
-    }
-
-    /**
-     * Construct the list of parameters to use in the implementation. This differs from that used in the protype /
-     * procedure declaration because it must account for <i>shadows</i>. These arise because Whiley allows parameters to
-     * be mutated, where as Boogie does not. To work around this, we have shadow parameters (i.e. with different names)
-     * which are then assigned to local variables (which can be modified).
-     *
-     * @param params
-     * @param parameters
-     * @return
-     */
-    public List<Decl.Parameter> constructShadowParameters(WyilFile.Tuple<WyilFile.Decl.Variable> params,
-                                                          List<Decl.Parameter> parameters) {
-        ArrayList<Decl.Parameter> ps = new ArrayList<>();
-        for (int i = 0; i != params.size(); ++i) {
-            WyilFile.Decl.Variable ith = params.get(i);
-            if (isFinal(ith)) {
-                ps.add(parameters.get(i));
-            } else {
-                Type type = constructType(ith.getType());
-                ps.add(new Decl.Parameter(ith.getName().get() + "#", type));
-            }
-        }
-        return ps;
+        return new Pair<>(parameters, constraints);
     }
 
     /**
@@ -543,7 +604,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 super.visitInvoke(expr);
                 WyilFile.Decl.Callable ft = expr.getLink().getTarget();
                 if (ft instanceof WyilFile.Decl.Method) {
-                    WyilFile.Type type = expr.getType();
+                    WyilFile.Type type = ft.getType().getReturn();
                     if (type.shape() == 1) {
                         // Construct temporary variable
                         decls.add(new Decl.Variable("m#" + expr.getIndex(), constructType(type)));
@@ -682,25 +743,26 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         //
         String name = "lambda#" + l.getIndex();
         ArrayList<Decl> decls = new ArrayList<>();
-        ArrayList<Expr.Logical> precondition = new ArrayList<>();
-        ArrayList<Expr.Logical> postcondition = new ArrayList<>();
         ArrayList<Stmt> stmts = new ArrayList<>();
         // Extract any necessary local variable declarations
         List<Decl.Variable> locals = constructLocals(l.getBody());
         // Convert explicit parameters
-        String heap = method ? HEAP_VARNAME : "Ref#Empty";
-        String nheap = method ? "#" + HEAP_VARNAME : "Ref#Empty";
-        List<Decl.Parameter> parameters = constructParameters(l.getParameters(), precondition, heap);
-        // Convert implicit parameters
-        parameters.addAll(constructParameters(new Tuple<>(captured), precondition, heap));
-        List<Decl.Parameter> protoParameters = new ArrayList<>(parameters);
+        String heap = method ? HEAP_VARNAME : null;
+        String nheap = method ? "#" + HEAP_VARNAME : null;
+        Pair<List<Decl.Parameter>,List<Expr.Logical>> declaredParameters = constructParameters(l.getTemplate(),l.getParameters(), heap);
+        Pair<List<Decl.Parameter>,List<Expr.Logical>> capturedParameters = constructParameters(null,new Tuple<>(l.getCapturedVariables(meter)),heap);
+        List<Decl.Parameter> parameters = append(declaredParameters.first(),capturedParameters.first());
+        if(heap != null) {
+            // Remove second declaration of HEAP.
+            parameters.remove(declaredParameters.first().size());
+        }
+        List<Expr.Logical> requires = append(declaredParameters.second(),capturedParameters.second());
+        List<Decl.Parameter> shadowParameters = new ArrayList<>(parameters);
         // Will contain convert return parameters
-        List<Decl.Parameter> returns = constructAnonymousParameters("r", returnType, postcondition, nheap);
+        Pair<List<Decl.Parameter>,List<Expr.Logical>> returns = constructAnonymousParameters("r", returnType, nheap);
         // Add Heap variable if necessary
         if (method) {
-            parameters.add(0, new Decl.Parameter(HEAP_VARNAME + "#", REFMAP));
-            protoParameters.add(0, new Decl.Parameter(HEAP_VARNAME, REFMAP));
-            returns.add(0, new Decl.Parameter("#" + HEAP_VARNAME, REFMAP));
+            shadowParameters.set(0, new Decl.Parameter(HEAP_VARNAME + "#",REFMAP));
             locals.add(new Decl.Variable(HEAP_VARNAME, REFMAP));
             stmts.add(new Stmt.Assignment(VAR(HEAP_VARNAME), VAR(HEAP_VARNAME + "#")));
         }
@@ -710,21 +772,24 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         stmts.addAll(constructAssertions(l.getBody()));
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(l.getBody()));
-        //
-        for (int i = 0; i != returns.size(); ++i) {
-            Decl.Parameter ith = returns.get(i);
-            if (method && i == 0) {
-                // Heap variable always first return for methods.
-                stmts.add(new Stmt.Assignment(VAR("#" + HEAP_VARNAME), VAR(HEAP_VARNAME)));
-            } else {
-                // FIXME: broken for multiple returns
-                stmts.add(new Stmt.Assignment(VAR(ith.getName()), body));
+        // Add return variable assignments
+        List<Decl.Parameter> rs = returns.first();
+        if(method) {
+            stmts.add(new Stmt.Assignment(VAR("#" + HEAP_VARNAME), VAR(HEAP_VARNAME)));
+        }
+        if(returnType.shape() == 1) {
+            stmts.add(new Stmt.Assignment(VAR("r#0"), body));
+        } else {
+            // Handle multiple returns
+            List<Expr> tuple = ((FauxTuple) body).getItems();
+            for(int i=0;i!=returnType.shape();++i) {
+                stmts.add(new Stmt.Assignment(VAR("r#" + i), tuple.get(i)));
             }
         }
         // Add lambda implementation
-        decls.add(new Decl.Procedure(name, protoParameters, returns, precondition, postcondition,
+        decls.add(new Decl.Procedure(name, parameters, returns.first(), requires, returns.second(),
                 Collections.EMPTY_LIST));
-        decls.add(new Decl.Implementation(name, parameters, returns, locals, SEQUENCE(stmts)));
+        decls.add(new Decl.Implementation(name, shadowParameters, returns.first(), locals, SEQUENCE(stmts)));
         // Add the "lambda" value
         decls.addAll(constructLambdaAxioms(name, type.getParameter(), returnType, new Tuple<>()));
         // Done
@@ -1141,10 +1206,19 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     @Override
-    public Stmt constructInvokeStmt(WyilFile.Expr.Invoke expr, List<Expr> arguments) {
+    public Stmt constructInvokeStmt(WyilFile.Expr.Invoke expr, List<Expr> args) {
+        ArrayList<Stmt> stmts = new ArrayList<>();
         WyilFile.Type.Callable ft = expr.getLink().getTarget().getType();
+        // Add all preconditions arising. If there are any, they will likely fail!
+        stmts.addAll(constructAssertions(expr));
+        // Apply any heap allocations arising.
+        stmts.addAll(constructSideEffects(expr.getOperands()));
+        //
         if (ft instanceof WyilFile.Type.Method) {
             WyilFile.Type.Method mt = (WyilFile.Type.Method) ft;
+            // Extract template arguments
+            Tuple<WyilFile.Type> binding = expr.getBinding().getArguments();
+            // Extract declared return type
             WyilFile.Type type = mt.getReturn();
             // Apply name mangling
             String name = toMangledName(expr.getLink().getTarget());
@@ -1159,26 +1233,60 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     lvals.add(VAR("m#" + expr.getIndex() + "#" + i));
                 }
             }
-            // Recursively (re)construct argument expressions
-            // FIXME: add argument preconditions and side-effects?
-            List<Expr> args = BoogieCompiler.this.visitExpressions(expr.getOperands());
             // Apply conversions to arguments as necessary
             args = cast(mt.getParameter(), expr.getOperands(), args);
-            // Chaing through heap variable
+            // Add template arguments
+            for(int i=0;i!=binding.size();++i) {
+                args.add(i,constructMetaType(binding.get(i), HEAP_VARNAME));
+            }
+            // Chain through heap variable
             args.add(0, VAR(HEAP_VARNAME));
             // Done
-            return CALL(name, lvals, args);
+            stmts.add(CALL(name, lvals, args));
         } else {
             // NOTE: this case arises when for a function invocation which discards the
             // return value. That doesn't really make sense, and for now we just treat as a
             // "skip".
-            return new Stmt.Assert(Expr.Boolean.TRUE);
+            stmts.add(new Stmt.Assert(Expr.Boolean.TRUE));
         }
+        return SEQUENCE(stmts);
     }
 
     @Override
-    public Stmt constructIndirectInvokeStmt(WyilFile.Expr.IndirectInvoke expr, Expr source, List<Expr> arguments) {
-        throw new UnsupportedOperationException("implement me");
+    public Stmt constructIndirectInvokeStmt(WyilFile.Expr.IndirectInvoke expr, Expr source, List<Expr> args) {
+        ArrayList<Stmt> stmts = new ArrayList<>();
+        WyilFile.Type.Callable ft = expr.getSource().getType().as(WyilFile.Type.Callable.class);
+        if (ft instanceof WyilFile.Type.Method) {
+            // Extract declared return type
+            WyilFile.Type type = ft.getReturn();
+            // Determine lvals. Observe that we have to assign any return values from the
+            // procedure called, even if they are never used.
+            List<LVal> lvals = new ArrayList<>();
+            lvals.add(VAR(HEAP_VARNAME));
+            if (type.shape() == 1) {
+                lvals.add(VAR("m#" + expr.getIndex()));
+            } else {
+                for (int i = 0; i != type.shape(); ++i) {
+                    lvals.add(VAR("m#" + expr.getIndex() + "#" + i));
+                }
+            }
+            // Apply conversions to arguments as necessary
+            args = box(ft.getParameter(), args);
+            // Chain through heap variable
+            args.add(0, VAR(HEAP_VARNAME));
+            // Add method pointer
+            args.add(1, source);
+            // Determine the methods name
+            String name = "m_apply$" + (args.size() - 2) + "#" + (lvals.size() - 1);
+            // Done
+            stmts.add(CALL(name, lvals, args));
+        } else {
+            // NOTE: this case arises when for a function invocation which discards the
+            // return value. That doesn't really make sense, and for now we just treat as a
+            // "skip".
+            stmts.add(new Stmt.Assert(Expr.Boolean.TRUE));
+        }
+        return SEQUENCE(stmts);
     }
 
     @Override
@@ -1367,7 +1475,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             @Override
             public void visitInvoke(WyilFile.Expr.Invoke expr) {
                 super.visitInvoke(expr);
+                // Extract template arguments
+                Tuple<WyilFile.Type> binding = expr.getBinding().getArguments();
+                // Extract target declaration
                 WyilFile.Decl.Callable ft = expr.getLink().getTarget();
+                // Translate method invocations into Boogie procedure calls.
                 if (ft instanceof WyilFile.Decl.Method) {
                     WyilFile.Decl.Method mt = (WyilFile.Decl.Method) ft;
                     WyilFile.Type type = expr.getType();
@@ -1387,6 +1499,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     List<Expr> args = BoogieCompiler.this.visitExpressions(expr.getOperands());
                     // Apply conversions to arguments as necessary
                     args = cast(mt.getType().getParameter(), expr.getOperands(), args);
+                    // Add template arguments
+                    for(int i=0;i!=binding.size();++i) {
+                        args.add(i,constructMetaType(binding.get(i), HEAP_VARNAME));
+                    }
                     // Chaing through heap variable
                     args.add(0, VAR(HEAP_VARNAME));
                     // Done
@@ -1469,8 +1585,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     @Override
-    public Expr constructTupleInitialiserLVal(WyilFile.Expr.TupleInitialiser expr, List<Expr> source) {
-        return new FauxTuple(source);
+    public Expr constructTupleInitialiserLVal(WyilFile.Expr.TupleInitialiser expr, List<Expr> operands) {
+        // Done
+        return new FauxTuple(operands);
     }
 
     @Override
@@ -1553,42 +1670,55 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Expr constructCast(WyilFile.Expr.Cast expr, Expr operand) {
-        // FIXME: unsure whether this is sufficient.
         return cast(expr.getType(), expr.getOperand().getType(), operand);
     }
 
     @Override
     public Expr constructConstant(WyilFile.Expr.Constant expr) {
+        WyilFile.Type type = expr.getType();
+        WyilFile.Type source;
+        Expr result;
         WyilFile.Value v = expr.getValue();
         switch (v.getOpcode()) {
             case WyilFile.ITEM_null: {
-                return VAR("Null");
+                source = WyilFile.Type.Null;
+                result = VAR("Null");
+                break;
             }
             case WyilFile.ITEM_bool: {
                 boolean b = ((WyilFile.Value.Bool) v).get();
-                return CONST(b);
+                source = WyilFile.Type.Bool;
+                result = CONST(b);
+                break;
             }
             case WyilFile.ITEM_byte: {
                 byte b = ((WyilFile.Value.Byte) v).get();
-                return CONST(new byte[]{b});
+                source = WyilFile.Type.Byte;
+                result = CONST(new byte[]{b});
+                break;
             }
             case WyilFile.ITEM_int: {
                 BigInteger i = ((WyilFile.Value.Int) v).get();
-                return CONST(i);
+                source = WyilFile.Type.Int;
+                result = CONST(i);
+                break;
             }
             case WyilFile.ITEM_utf8: {
                 byte[] bytes = ((WyilFile.Value.UTF8) v).get();
-                Expr arr = INVOKE("Array#Empty", CONST(bytes.length));
+                result = INVOKE("Array#Empty", CONST(bytes.length));
                 //
                 for (int i = 0; i != bytes.length; ++i) {
                     Expr ith = box(WyilFile.Type.Int, CONST(bytes[i]));
-                    arr = PUT(arr, CONST(i), ith);
+                    result = PUT(result, CONST(i), ith);
                 }
-                return arr;
+                source = WyilFile.Type.IntArray;
+                break;
             }
             default:
                 throw new IllegalArgumentException("unknown constant encountered (" + expr.getClass().getName() + ")");
         }
+        // Apply a final cast
+        return cast(type,source,result);
     }
 
     @Override
@@ -1687,8 +1817,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Expr constructIs(WyilFile.Expr.Is expr, Expr operand) {
+        boolean pure = WyilUtils.isPure(expr.getTestType());
         // Determine enclosing heap name
-        String heap = determineHeapName(expr);
+        String heap = pure ? null : determineHeapName(expr);
         //
         return constructTypeTest(expr.getTestType(), expr.getOperand().getType(), operand, heap);
     }
@@ -1757,34 +1888,34 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         Tuple<WyilFile.Type> binding = expr.getBinding().getArguments();
         // Extract (concrete) type signature
         WyilFile.Type.Callable ft = expr.getLink().getTarget().getType();
+        WyilFile.Type ftrt = ft.getReturn();
         // Extract (concrete) return type
         WyilFile.Type rt = expr.getBinding().getConcreteType().getReturn();
         // Add template arguments
-        for(int i=0;i!=binding.size();++i) {
-            WyilFile.Type ith = substituteUniversalTypes(binding.get(i));
-            templateArguments.add(VAR("Type#" + mangler.getMangle(ith)));
+        for (int i = 0; i != binding.size(); ++i) {
+            templateArguments.add(i,constructMetaType(binding.get(i), HEAP_VARNAME));
         }
         //
         if (ft instanceof WyilFile.Type.Method) {
             // This is a side-effecting method invocation which would have been translated
-            // previously.
+            // previously.  We still need to cast to the desired type though, since we cannot cast the result of the
+            // procedure call at the call site.
             if (rt.shape() == 1) {
-                return VAR("m#" + expr.getIndex());
+                return cast(rt, ftrt, VAR("m#" + expr.getIndex()));
             } else {
                 List<Expr> items = new ArrayList<>();
                 for (int i = 0; i != rt.shape(); ++i) {
-                    items.add(VAR("m#" + expr.getIndex() + "#" + i));
+                    items.add(cast(rt.dimension(i), ftrt.dimension(i), VAR("m#" + expr.getIndex() + "#" + i)));
                 }
                 return new FauxTuple(items);
             }
         } else {
-            WyilFile.Type ftrt = ft.getReturn();
             // Apply name mangling
             String name = toMangledName(expr.getLink().getTarget());
             // Apply conversions to arguments as necessary
             arguments = cast(ft.getParameter(), expr.getOperands(), arguments);
             // Add template arguments
-            arguments.addAll(0,templateArguments);
+            arguments.addAll(0, templateArguments);
             //
             if (rt.shape() == 1) {
                 return cast(rt, ftrt, INVOKE(name, arguments));
@@ -1908,6 +2039,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Expr constructTupleInitialiser(WyilFile.Expr.TupleInitialiser expr, List<Expr> operands) {
+        // Cast operands
+        operands = cast(expr.getType(),expr.getOperands(),operands);
         // NOTE: at this stage, we won't attempt to support general first-class tuples.
         return new FauxTuple(operands);
     }
@@ -1978,6 +2111,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             @Override
             protected Expr.Logical join(List<Expr.Logical> operands) {
                 return AND(operands);
+            }
+
+            @Override
+            public Expr.Logical constructLambda(WyilFile.Decl.Lambda lambda, Expr.Logical body) {
+                // NOTE: do not propagate preconditions from within the lambda outside.  Such preconditions will be
+                // checked within the dummy procedure created for the lambda.
+                return Expr.Boolean.TRUE;
             }
 
             @Override
@@ -2052,29 +2192,51 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 return AND(lhs,rhs,NEQ(r, CONST(0)));
             }
 
+            public Expr.Logical constructCast(WyilFile.Expr.Cast expr, Expr.Logical operand) {
+                boolean pure = WyilUtils.isPure(expr.getType());
+                Expr src = BoogieCompiler.this.visitExpression(expr.getOperand());
+                Expr.Logical test = constructTypeTest(expr.getType(), expr.getOperand().getType(), src, pure ? null : HEAP_VARNAME);
+                return AND(operand, test);
+            }
+
             @Override
             public Expr.Logical constructInvoke(WyilFile.Expr.Invoke expr, List<Expr.Logical> preconditions) {
                 Expr.Logical result = AND(preconditions);
                 WyilFile.Decl.Callable c = expr.getLink().getTarget();
-                Tuple<WyilFile.Type> binding = expr.getBinding().getArguments();
-                // Translate arguments
-                List<Expr> args = BoogieCompiler.this.visitExpressions(expr.getOperands());
-                // Mangle target name
-                String name = toMangledName(c);
-                // Coerce argument types (as necessary)
-                args = cast(c.getType().getParameter(), expr.getOperands(), args);
-                // Add template arguments (as necessary)
-                for (int i = 0; i != binding.size(); ++i) {
-                    WyilFile.Type ith = substituteUniversalTypes(binding.get(i));
-                    args.add(i, VAR("Type#" + mangler.getMangle(ith)));
+                if(c instanceof WyilFile.Decl.Function) {
+                    // NOTE: we only generate preconditions for function invocations since these are not implemented as
+                    // procedure calls.  Method invocations are implemented as procedure calls and, hence, benefit from
+                    // Boogie's own checking.
+                    Tuple<WyilFile.Type> binding = expr.getBinding().getArguments();
+                    // Translate arguments
+                    List<Expr> args = BoogieCompiler.this.visitExpressions(expr.getOperands());
+                    // Mangle target name
+                    String name = toMangledName(c);
+                    // Coerce argument types (as necessary)
+                    args = cast(c.getType().getParameter(), expr.getOperands(), args);
+                    // Add template arguments (as necessary)
+                    for (int i = 0; i != binding.size(); ++i) {
+                        args.add(i,constructMetaType(binding.get(i), HEAP_VARNAME));
+                    }
+                    // Append the invocation
+                    result = AND(result, INVOKE(name + "#pre", args));
                 }
-                //
-                if (c instanceof WyilFile.Decl.Function) {
-                    result = AND(result, INVOKE(name + "#pre", args));
-                } else if (c instanceof WyilFile.Decl.Method) {
-                    // FIXME: this is surely broken no?
-                    args.add(0, VAR(HEAP_VARNAME));
-                    result = AND(result, INVOKE(name + "#pre", args));
+                return result;
+            }
+
+            @Override
+            public Expr.Logical constructIndirectInvoke(WyilFile.Expr.IndirectInvoke expr, Expr.Logical source, List<Expr.Logical> preconditions) {
+                Tuple<WyilFile.Expr> args = expr.getArguments();
+                WyilFile.Type.Callable type = expr.getSource().getType().as(WyilFile.Type.Callable.class);
+                WyilFile.Type param = type.getParameter();
+                Expr.Logical result = AND(preconditions);
+                for(int i=0;i!=args.size();++i) {
+                    WyilFile.Expr ith = args.get(i);
+                    WyilFile.Type target = param.dimension(i);
+                    String heap = WyilUtils.isPure(target) ? null : HEAP_VARNAME;
+                    Expr arg = BoogieCompiler.this.visitExpression(ith);
+                    Expr.Logical test = constructTypeTest(target,ith.getType(),arg,heap);
+                    result = AND(result,test);
                 }
                 return result;
             }
@@ -2460,6 +2622,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         decls.add(new Decl.TypeSynonym("Lambda", null));
         decls.add(FUNCTION("Lambda#box", LAMBDA, ANY));
         decls.add(FUNCTION("Lambda#unbox", ANY, LAMBDA));
+        decls.add(FUNCTION("Lambda#return", LAMBDA, Type.Int, ANY));
         decls.add(FUNCTION("Lambda#is", new Decl.Parameter("v", ANY), Type.Bool,
                 EXISTS("l", LAMBDA, EQ(INVOKE("Lambda#box", VAR("l")), VAR("v")))));
         // Establish connection between box and unbox
@@ -2470,12 +2633,17 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Add f_apply functions
         for (int p = 0; p != 5; ++p) {
             List<Decl.Parameter> params = new ArrayList<>();
-            params.add(new Decl.Parameter(null, Type.Int));
-            params.add(new Decl.Parameter(null, LAMBDA));
+            List<Expr> args = new ArrayList<>();
+            params.add(new Decl.Parameter("i", Type.Int));
+            params.add(new Decl.Parameter("l", LAMBDA));
+            args.add(VAR("i"));
+            args.add(VAR("l"));
             for (int i = 0; i < p; ++i) {
-                params.add(new Decl.Parameter(null, ANY));
+                params.add(new Decl.Parameter("x" + i, ANY));
+                args.add(VAR("x" + i));
             }
             decls.add(FUNCTION("f_apply$" + p, params, ANY));
+            decls.add(new Decl.Axiom(FORALL(params,EQ(INVOKE("f_apply$" + p,args),INVOKE("Lambda#return",VAR("l"),VAR("i"))))));
         }
         // Add m_apply functions
         for (int p = 0; p != 5; ++p) {
@@ -2487,12 +2655,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     params.add(new Decl.Parameter("p" + i, ANY));
                 }
                 List<Decl.Parameter> returns = new ArrayList<>();
+                List<Expr.Logical> ensures = new ArrayList<>();
                 returns.add(new Decl.Parameter("#heap", REFMAP));
                 for (int i = 0; i < r; ++i) {
                     returns.add(new Decl.Parameter("r" + i, ANY));
+                    // Add postcondition
+                    ensures.add(EQ(VAR("r" + i),INVOKE("Lambda#return",VAR("l"),CONST(i))));
                 }
                 // Add heap for method invocations
-                decls.add(PROCEDURE("m_apply$" + p + "#" + r, params, returns));
+                decls.add(PROCEDURE("m_apply$" + p + "#" + r, params, returns, Collections.EMPTY_LIST, ensures));
             }
         }
         // done
@@ -2523,26 +2694,73 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Add useful comment
         decls.addAll(constructCommentSubheading("Meta Types"));
         decls.add(FUNCTION("Type#is",TYPE,ANY,Type.Bool));
-        // Extract all types used in a meta-type position
+        decls.add(FUNCTION("Type#his",REFMAP,TYPE,ANY,Type.Bool));
+        // Add axiom relating is and h(eap)is.
+        decls.add(new Decl.Axiom(FORALL("T", TYPE, "v", ANY, IFF(INVOKE("Type#is", VAR("T"), VAR("v")), INVOKE("Type#his", VAR("Ref#Empty"), VAR("T"), VAR("v"))))));
+         // Extract all types used in a meta-type position
         Set<WyilFile.Type> types = extractMetaTypes(f);
         //
         for (WyilFile.Type type : types) {
-            decls.add(null);
-            // Remove any unversal types
-            type = substituteUniversalTypes(type);
-            // Construct meta constant
-            String name = "Type#" + mangler.getMangle(type);
-            decls.add(new Decl.Constant(true, name, TYPE));
-            // Construct a suitable type test
-            Expr.Logical test = constructTypeTest(type, WyilFile.Type.Any, VAR("v"), "Ref#Empty");
-            // Assert relationship between constant and type test
-            decls.add(new Decl.Axiom(FORALL("v", ANY, IFF(INVOKE("Type#is", VAR(name), VAR("v")), test))));
+            String heap = WyilUtils.isPure(type) ? null : HEAP_VARNAME;
+            // Extract all holes
+            Set<WyilFile.Type.Universal> holes = extractMetaHoles(type);
+            // Act accordingly
+            if(type instanceof WyilFile.Type.Universal) {
+                // Always substituted directly
+            } else if(holes.size() == 0) {
+                // Construct meta constant
+                String name = "Type#" + mangler.getMangle(type);
+                decls.add(new Decl.Constant(true, name, TYPE));
+                // Construct a suitable type test
+                Expr.Logical test = constructTypeTest(type, WyilFile.Type.Any, VAR("v"), heap);
+                ArrayList<Decl.Parameter> params = new ArrayList<>();
+                params.add(new Decl.Parameter("v",ANY));
+                if(heap != null) {
+                    params.add(0,new Decl.Parameter(heap,REFMAP));
+                    // Assert relationship between constant and type test
+                    decls.add(new Decl.Axiom(FORALL(params, IFF(INVOKE("Type#his", VAR(heap), VAR(name), VAR("v")), test))));
+                } else {
+                    // Assert relationship between constant and type test
+                    decls.add(new Decl.Axiom(FORALL(params, IFF(INVOKE("Type#is", VAR(name), VAR("v")), test))));
+                }
+            } else {
+                String name = "Type#" + mangler.getMangle(type);
+                ArrayList<Decl.Parameter> params = new ArrayList<>();
+                ArrayList<Expr> args = new ArrayList<>();
+                for(WyilFile.Type.Universal t : holes) {
+                    String n = t.getOperand().get();
+                    params.add(new Decl.Parameter(n,TYPE));
+                    args.add(VAR(n));
+                }
+                decls.add(FUNCTION(name,params,TYPE));
+                Expr ivk = INVOKE(name,args);
+                // Construct a suitable type test
+                Expr.Logical test = constructTypeTest(type, WyilFile.Type.Any, VAR("v"), heap);
+                params.add(new Decl.Variable("v",ANY));
+                // Assert relationship between constant and type test
+                if(heap != null) {
+                    params.add(0,new Decl.Parameter(heap,REFMAP));
+                    decls.add(new Decl.Axiom(FORALL(params, IFF(INVOKE("Type#his", VAR(heap), ivk, VAR("v")), test))));
+                } else {
+                    decls.add(new Decl.Axiom(FORALL(params, IFF(INVOKE("Type#is", ivk, VAR("v")), test))));
+                }
+            }
         }
+
         return decls;
     }
 
-    private WyilFile.Type substituteUniversalTypes(WyilFile.Type type) {
-        return type.substitute(o -> { return WyilFile.Type.Any; }) ;
+    private Set<WyilFile.Type.Universal> extractMetaHoles(WyilFile.Type t) {
+        HashSet<WyilFile.Type.Universal> holes = new HashSet<>();
+        // Traverse the type looking for universals
+        new AbstractVisitor(meter) {
+            @Override
+            public void visitTypeVariable(WyilFile.Type.Universal t) {
+                holes.add(t);
+            }
+        }.visitType(t);
+        // Done
+        return holes;
     }
 
     private Set<WyilFile.Type> extractMetaTypes(WyilFile f) {
@@ -2644,7 +2862,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         return constraints;
     }
 
-
     // ==============================================================================
     // Runtime Type Tests
     // ==============================================================================
@@ -2679,16 +2896,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 return INVOKE("Byte#is", box(from, argument));
             case WyilFile.TYPE_int:
                 return INVOKE("Int#is", box(from, argument));
-            case WyilFile.TYPE_universal: {
-                WyilFile.Type.Universal t = (WyilFile.Type.Universal) to;
-                return INVOKE("Type#is", VAR(t.getOperand().get()), argument);
-            }
+            case WyilFile.TYPE_universal:
+                return constructUniversalTypeTest((WyilFile.Type.Universal) to, from, argument, heap);
             case WyilFile.TYPE_property:
                 return INVOKE("Lambda#is", box(from, argument));
             case WyilFile.TYPE_function:
-                return constructFunctionTypeTest((WyilFile.Type.Function) to, from, argument, heap);
             case WyilFile.TYPE_method:
-                return constructMethodTypeTest((WyilFile.Type.Method) to, from, argument, heap);
+                return constructLambdaTypeTest((WyilFile.Type.Callable) to, from, argument, heap);
             case WyilFile.TYPE_nominal:
                 return constructNominalTypeTest((WyilFile.Type.Nominal) to, from, argument, heap);
             case WyilFile.TYPE_array:
@@ -2731,6 +2945,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @return
      */
     private Expr.Logical constructNominalTypeTest(WyilFile.Type.Nominal to, WyilFile.Type from, Expr argument, String heap) {
+        // Determine whether this type is pure or not
+        boolean pure = WyilUtils.isPure(to.getLink().getTarget().getType());
         ArrayList<Expr> arguments = new ArrayList<>();
         // Extract template binding
         Tuple<WyilFile.Type> binding = to.getParameters();
@@ -2738,14 +2954,26 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         String name = toMangledName(to.getLink().getTarget());
         // Add template parameters (if applicable)
         for (int i = 0; i != binding.size(); ++i) {
-            WyilFile.Type t = substituteUniversalTypes(binding.get(i));
-            arguments.add(VAR("Type#" + mangler.getMangle(t)));
+            arguments.add(i,constructMetaType(binding.get(i), heap));
         }
         // Add remaining parameters
         arguments.add(box(from, argument));
-        arguments.add(VAR(heap));
+        // Add heap argument for impure type
+        if (!pure) {
+            // In a few situations we can get here with a null heap.  For example, when a reference type is used in a
+            // function.  For now, this is my solution (since this is not really an important case).
+            arguments.add(VAR((heap == null) ? "Ref#Empty" : heap));
+        }
         // Ensure argument is boxed!
         return INVOKE(name + "#is", arguments);
+    }
+
+    public Expr.Logical constructUniversalTypeTest(WyilFile.Type.Universal to, WyilFile.Type from, Expr argument, String heap) {
+        if (heap != null) {
+            return INVOKE("Type#his", VAR(heap), VAR(to.getOperand().get()), argument);
+        } else {
+            return INVOKE("Type#is", VAR(to.getOperand().get()), argument);
+        }
     }
 
     /**
@@ -2826,6 +3054,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     private Expr.Logical constructReferenceTypeTest(WyilFile.Type.Reference to, WyilFile.Type from, Expr argument, String heap) {
+        heap = (heap == null) ? "Ref#Empty" : heap;
         // Cast argument to (unboxed) reference type
         argument = cast(to, from, argument);
         // Dereference argument
@@ -2864,33 +3093,18 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         return OR(clauses);
     }
 
-    private Expr.Logical constructMethodTypeTest(WyilFile.Type.Method to, WyilFile.Type from, Expr argument, String heap) {
-        throw new IllegalArgumentException();
-    }
-
-    private Expr.Logical constructFunctionTypeTest(WyilFile.Type.Function to, WyilFile.Type from, Expr argument, String heap) {
+    private Expr.Logical constructLambdaTypeTest(WyilFile.Type.Callable to, WyilFile.Type from, Expr argument, String heap) {
         // Determine number of requirement argtuments
         int n = to.getParameter().shape();
         // Extract Return Type
         WyilFile.Type ret = to.getReturn();
-        // Setup arguments for invocation
-        Expr[] vs = new Expr[n + 2];
-        vs[1] = cast(to, from, argument);
-        for (int i = 0; i != n; ++i) {
-            vs[i + 2] = VAR("x" + i);
-        }
-        // setup parameters for quantifier (if required)
-        ArrayList<Decl.Parameter> params = new ArrayList<>();
-        for (int i = 0; i != n; ++i) {
-            params.add(new Decl.Parameter("x" + i, ANY));
-        }
+        // Ensure lambda argument unboxed
+        Expr larg = cast(to,from,argument);
         // Construct one clause for each return value
         Expr.Logical[] clauses = new Expr.Logical[ret.shape()];
         for (int i = 0; i != clauses.length; ++i) {
             WyilFile.Type ith = ret.dimension(i);
-            vs[0] = CONST(i);
-            Expr.Logical clause = constructTypeTest(ith, WyilFile.Type.Any, INVOKE("f_apply$" + n, vs), heap);
-            clauses[i] = (n == 0) ? clause : FORALL(params, clause);
+            clauses[i] = constructTypeTest(ith, WyilFile.Type.Any, INVOKE("Lambda#return", larg, CONST(i)), heap);
         }
         // Done
         return AND(INVOKE("Lambda#is", box(from, argument)), AND(clauses));
@@ -3088,36 +3302,25 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     // Misc
     // ==============================================================================
 
-    private Expr constructMetaType(WyilFile.Type type) {
-        switch (type.getOpcode()) {
-            case WyilFile.TYPE_null:
-                return VAR("Null#type");
-            case WyilFile.TYPE_bool:
-                return VAR("Bool#type");
-            case WyilFile.TYPE_byte:
-                return VAR("Byte#type");
-            case WyilFile.TYPE_int:
-                return VAR("Int#type");
-            case WyilFile.TYPE_universal:
-                return VAR("Any#type");
-            case WyilFile.TYPE_nominal: {
-                WyilFile.Type.Nominal n = (WyilFile.Type.Nominal) type;
-                String name = toMangledName(n.getLink().getTarget());
-                // Sanity check for now
-                if (n.getParameters().size() > 0) {
-                    throw new IllegalArgumentException("PROBLEM");
-                }
-                // Done
-                return VAR(name + "#type");
+    private Expr constructMetaType(WyilFile.Type type, String heap) {
+        String name = "Type#" + mangler.getMangle(type);
+        Set<WyilFile.Type.Universal> holes = extractMetaHoles(type);
+        if(type instanceof WyilFile.Type.Universal) {
+            WyilFile.Type.Universal ut = (WyilFile.Type.Universal) type;
+            return VAR(ut.getOperand().get());
+        } else if(holes.size() == 0) {
+            return VAR(name);
+        } else {
+            boolean pure = WyilUtils.isPure(type);
+            ArrayList<Expr> args = new ArrayList<>();
+            if(!pure) {
+                args.add(VAR(heap));
             }
-            case WyilFile.TYPE_record:
-            case WyilFile.TYPE_array:
-            case WyilFile.TYPE_reference:
-            case WyilFile.TYPE_property:
-            case WyilFile.TYPE_function:
-            case WyilFile.TYPE_method:
+            for(WyilFile.Type.Universal hole : holes) {
+                args.add(VAR(hole.getOperand().get()));
+            }
+            return INVOKE(name,args);
         }
-        throw new IllegalArgumentException("unknown type encountered : " + type);
     }
 
     private static String toVariableName(WyilFile.Decl.Variable v) {
@@ -3400,6 +3603,20 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     /**
+     * Function list append.
+     * @param left
+     * @param right
+     * @param <T>
+     * @return
+     */
+    private static <T> List<T> append(List<T> left, List<T> right) {
+        ArrayList<T> result = new ArrayList();
+        result.addAll(left);
+        result.addAll(right);
+        return result;
+    }
+
+    /**
      * Construct a temporary variable associated with a given statement using a given identifier to distinguish
      * different temporaries from the same statement.
      *
@@ -3417,5 +3634,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         return prefix + "#" + (TEMP_COUNTER++);
     }
 
+    /**
+     * The name used to represent the heap variable which is passed into a method.
+     */
     private static String HEAP_VARNAME = "HEAP";
+    /**
+     * The name used to represent the heap variable which is passed out of a method.
+     */
+    private static String NHEAP_VARNAME = "#HEAP";
 }
