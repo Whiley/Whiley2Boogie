@@ -2114,6 +2114,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             }
 
             @Override
+            public Expr.Logical constructLambda(WyilFile.Decl.Lambda lambda, Expr.Logical body) {
+                // NOTE: do not propagate preconditions from within the lambda outside.  Such preconditions will be
+                // checked within the dummy procedure created for the lambda.
+                return Expr.Boolean.TRUE;
+            }
+
+            @Override
             public Expr.Logical constructLogicalAnd(WyilFile.Expr.LogicalAnd expr, List<Expr.Logical> operands) {
                 // Translate Whiley expressions to form the window.
                 List window = BoogieCompiler.this.visitExpressions(expr.getOperands());
