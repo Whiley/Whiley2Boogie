@@ -816,7 +816,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     @Override
-    public Stmt constructAssign(WyilFile.Stmt.Assign stmt, List<Expr> _, List<Expr> rhs) {
+    public Stmt constructAssign(WyilFile.Stmt.Assign stmt, List<Expr> _unused, List<Expr> rhs) {
         WyilFile.Decl.Method m = stmt.getAncestor(WyilFile.Decl.Method.class);
         // NOTE: in a functional setting, there is no heap variable in play. Therefore,
         // we provide an empty heap in its place.
