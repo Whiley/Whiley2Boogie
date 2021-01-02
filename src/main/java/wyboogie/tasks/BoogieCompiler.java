@@ -3049,9 +3049,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @return
      */
     private Expr.Logical constructArrayTypeTest(WyilFile.Type.Array to, WyilFile.Type from, Expr argument, String heap) {
-        // NOTE: this method for describing a type test should be deprecated in the
-        // future in favour of something based around type tags.
-        //
         // Generate temporary index variable (which avoids name clashes). Observe that we cannot use the index in this
         // case, because types are not guaranteed to be part of the heap.  For example, when they are constructed for
         // generic nominal types.
@@ -3059,12 +3056,16 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Cast argument to (unboxed) array type
         argument = cast(to, from, argument);
         // Construct bounds check for index variable
-        Expr.Logical lhs = AND(LTEQ(CONST(0), i), LT(i, INVOKE("Array#Length", argument)));
+        Expr.Logical inbounds = AND(LTEQ(CONST(0), i), LT(i, INVOKE("Array#Length", argument)));
+        // Construct (out of) bounds check for index variable
+        Expr.Logical outbounds = OR(LT(i, CONST(0)), LTEQ(INVOKE("Array#Length", argument), i));
         // Recursively construct type test for element
-        Expr.Logical rhs = constructTypeTest(to.getElement(), WyilFile.Type.Any, GET(argument, i), heap);
+        Expr.Logical valid = constructTypeTest(to.getElement(), WyilFile.Type.Any, GET(argument, i), heap);
+        // Elements outside range equal void
+        Expr.Logical invalid = EQ(GET(argument,i),VAR("Void"));
         // FIXME: Should this restrict permitted fields and ensure Array#is?
         // Done
-        return FORALL(i.getVariable(), Type.Int, IMPLIES(lhs, rhs));
+        return FORALL(i.getVariable(), Type.Int, AND(IMPLIES(inbounds, valid),IMPLIES(outbounds,invalid)));
     }
 
     private Expr.Logical constructReferenceTypeTest(WyilFile.Type.Reference to, WyilFile.Type from, Expr argument, String heap) {
