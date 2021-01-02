@@ -2184,6 +2184,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 return AND(source,index,precondition);
             }
 
+            public Expr.Logical constructArrayGenerator(WyilFile.Expr.ArrayGenerator expr, Expr.Logical value, Expr.Logical length) {
+                // Translate right-hand side so can compare against 0
+                Expr r = BoogieCompiler.this.visitExpression(expr.getSecondOperand());
+                return AND(value, length, GTEQ(r, CONST(0)));
+            }
+
             @Override
             public Expr.Logical constructIntegerDivision(WyilFile.Expr.IntegerDivision expr, Expr.Logical lhs, Expr.Logical rhs) {
                 // Translate right-hand side so can compare against 0
