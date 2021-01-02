@@ -2198,6 +2198,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 return AND(lhs,rhs,NEQ(r, CONST(0)));
             }
 
+            @Override
+            public Expr.Logical constructIntegerRemainder(WyilFile.Expr.IntegerRemainder expr, Expr.Logical lhs, Expr.Logical rhs) {
+                // Translate right-hand side so can compare against 0
+                Expr r = BoogieCompiler.this.visitExpression(expr.getSecondOperand());
+                // Construct final constraint
+                return AND(lhs,rhs,NEQ(r, CONST(0)));
+            }
+
             public Expr.Logical constructCast(WyilFile.Expr.Cast expr, Expr.Logical operand) {
                 boolean pure = WyilUtils.isPure(expr.getType());
                 Expr src = BoogieCompiler.this.visitExpression(expr.getOperand());
