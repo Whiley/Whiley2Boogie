@@ -3028,8 +3028,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             outclauses[i] = NEQ(VAR(field),v);
         }
         // FIXME: Should this restrict permitted fields and ensure Record#is?
-        // Done
-        return AND(AND(inclauses), FORALL(v.getVariable(), FIELD, IMPLIES(AND(outclauses), EQ(GET(argument, v), VAR("Void")))));
+        Expr.Logical inbound = AND(inclauses);
+        Expr.Logical outbound = FORALL(v.getVariable(), FIELD, IMPLIES(AND(outclauses), EQ(GET(argument, v), VAR("Void"))));
+        // Finally, apply outbounds to closed records only since these are the ones whose fields we actually know about.
+        return to.isOpen() ?  inbound : AND(inbound, outbound);
     }
 
     /**
