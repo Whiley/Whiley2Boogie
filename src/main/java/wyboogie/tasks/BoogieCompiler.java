@@ -3013,19 +3013,23 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     private Expr.Logical constructRecordTypeTest(WyilFile.Type.Record to, WyilFile.Type from, Expr argument, String heap) {
         // NOTE: this method for describing a type test should be deprecated in the
         // future in favour of something based around type tags.
+        Expr.VariableAccess v = VAR(TEMP("f"));
+        //
         Tuple<WyilFile.Type.Field> fields = to.getFields();
-        Expr.Logical[] clauses = new Expr.Logical[fields.size()];
+        Expr.Logical[] inclauses = new Expr.Logical[fields.size()];
+        Expr.Logical[] outclauses = new Expr.Logical[fields.size()];
         // Cast argument to correct (unboxed) type
         argument = cast(to, from, argument);
         // Iterate fields constructing tests for each.
-        for (int i = 0; i != clauses.length; ++i) {
+        for (int i = 0; i != inclauses.length; ++i) {
             WyilFile.Type.Field f = fields.get(i);
             String field = "$" + f.getName().get();
-            clauses[i] = constructTypeTest(f.getType(), WyilFile.Type.Any, GET(argument, VAR(field)), heap);
+            inclauses[i] = constructTypeTest(f.getType(), WyilFile.Type.Any, GET(argument, VAR(field)), heap);
+            outclauses[i] = NEQ(VAR(field),v);
         }
         // FIXME: Should this restrict permitted fields and ensure Record#is?
         // Done
-        return AND(clauses);
+        return AND(AND(inclauses), FORALL(v.getVariable(), FIELD, IMPLIES(AND(outclauses), EQ(GET(argument, v), VAR("Void")))));
     }
 
     /**
