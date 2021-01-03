@@ -141,10 +141,6 @@ public class ValidTests {
 		IGNORED.put("Reference_Valid_11","#49");
 		IGNORED.put("Template_Valid_5","#49");
 		IGNORED.put("UnknownReference_Valid_3","#49");
-		// Problem with Equality Operand Types
-		IGNORED.put("Reference_Valid_8","#50");
-		IGNORED.put("Reference_Valid_15","#50");
-		IGNORED.put("Reference_Valid_16","#50");
 		// Problem with Lambda Type Invariants
 		IGNORED.put("Lambda_Valid_11","#51");
 		IGNORED.put("MessageRef_Valid_2","#51");

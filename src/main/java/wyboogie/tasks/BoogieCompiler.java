@@ -2891,7 +2891,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      *      return x
      * </pre>
      * <p>
-     * The expression <code>x is null</code> will be translated by this function.
+     * The expression <code>x is null</code> will be translated by this function.  This function assumes the argument has the `from` type.
      *
      * @param to       The type being tested against.
      * @param from     The argument type
@@ -2901,9 +2901,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     private Expr.Logical constructTypeTest(WyilFile.Type to, WyilFile.Type from, Expr argument, String heap) {
         switch (to.getOpcode()) {
             case WyilFile.TYPE_any:
-                return NEQ(argument, VAR("Void"));
+                return NEQ(box(from, argument), VAR("Void"));
             case WyilFile.TYPE_null:
-                return EQ(argument, VAR("Null"));
+                return EQ(box(from, argument), VAR("Null"));
             case WyilFile.TYPE_bool:
                 return INVOKE("Bool#is", box(from, argument));
             case WyilFile.TYPE_byte:
