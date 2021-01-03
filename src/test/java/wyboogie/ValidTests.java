@@ -81,13 +81,85 @@ public class ValidTests {
 		// absolutely no point trying to see whether these work or not, since we
 		// already know they will not.
 		IGNORED.putAll(TestUtils.VALID_IGNORED);
+
 		// ===================================================
-		// Other problems
+		// Boogie problems
 		// ===================================================
 
-		// Not verified yet!
-		IGNORED.put("While_Valid_2","#???");
-		IGNORED.put("While_Valid_71","#???");
+		// Timeouts.  These timeout after 10s.
+		IGNORED.put("Complex_Valid_10","#???");
+		IGNORED.put("Complex_Valid_11","#???");
+		IGNORED.put("ConstrainedList_Valid_23","#???");
+		IGNORED.put("ConstrainedRecord_Valid_9","#???");
+		IGNORED.put("RecursiveType_Valid_19","#???");
+		IGNORED.put("RecursiveType_Valid_20","#???");
+		IGNORED.put("RecursiveType_Valid_7","#???");
+		IGNORED.put("Template_Valid_29","#???");
+		// Not verifiable yet!  These are incomplete in some way which means they could not be verified.
+		IGNORED.put("For_Valid_7","");
+		IGNORED.put("Lambda_Valid_3","");
+		IGNORED.put("Lambda_Valid_4","");
+		IGNORED.put("Template_Valid_60","");
+		IGNORED.put("Process_Valid_9","");
+		IGNORED.put("Process_Valid_10","");
+		IGNORED.put("RecursiveType_Valid_22","");
+		IGNORED.put("While_Valid_2","");
+		IGNORED.put("While_Valid_71","");
+		// Known issues.  These are known problems with issues raised on github.
+		// Loop Conditions with Preconditions and SideEffects
+		IGNORED.put("DoWhile_Valid_6","#3");
+		// Problem with Recursive Property?
+		IGNORED.put("Property_Valid_11","#5");
+		IGNORED.put("Property_Valid_12","#5");
+		IGNORED.put("Property_Valid_14","#5");
+		IGNORED.put("Property_Valid_15","#5");
+		IGNORED.put("Property_Valid_16","#5");
+		// Problem with Existential?
+		IGNORED.put("ConstrainedList_Valid_14","#26");
+		IGNORED.put("ConstrainedList_Valid_18","#26");
+		IGNORED.put("Property_Valid_4","#26");
+		// Adding Implicit Information from Postconditions
+		IGNORED.put("Assert_Valid_1","#28");
+		// Template Arguments with Lambdas
+		IGNORED.put("Lambda_Valid_19","#35");
+		IGNORED.put("Template_Valid_56","#35");
+		IGNORED.put("Template_Valid_57","#35");
+		// Problem with Method Side Effects
+		IGNORED.put("FunctionRef_Valid_7","#48");
+		IGNORED.put("FunctionRef_Valid_9","#48");
+		IGNORED.put("MessageSend_Valid_5","#48");
+		IGNORED.put("MethodCall_Valid_4","#48");
+		IGNORED.put("Process_Valid_7","#48");
+		IGNORED.put("Process_Valid_8","#48");
+		IGNORED.put("Reference_Valid_6","#48");
+		IGNORED.put("Reference_Valid_9","#48");
+		IGNORED.put("Template_Valid_18","#48");
+		IGNORED.put("Template_Valid_27","#48");
+		// Problem with Reference Type Invariants
+		IGNORED.put("MessageRef_Valid_1","#49");
+		IGNORED.put("Process_Valid_6","#49");
+		IGNORED.put("Reference_Valid_11","#49");
+		IGNORED.put("Template_Valid_5","#49");
+		IGNORED.put("UnknownReference_Valid_3","#49");
+		// Problem with Equality Operand Types
+		IGNORED.put("Reference_Valid_8","#50");
+		IGNORED.put("Reference_Valid_15","#50");
+		IGNORED.put("Reference_Valid_16","#50");
+		// Problem with Lambda Type Invariants
+		IGNORED.put("Lambda_Valid_11","#51");
+		IGNORED.put("MessageRef_Valid_2","#51");
+		IGNORED.put("MethodRef_Valid_1","#51");
+		IGNORED.put("MethodRef_Valid_2","#51");
+		// Disconnect between Lambdas and their Applications
+		IGNORED.put("Lambda_Valid_13","#52");
+		// Limitation of Runtime Type Tests?
+		IGNORED.put("RecursiveType_Valid_28","#53");
+		IGNORED.put("RecursiveType_Valid_29","#53");
+		IGNORED.put("Template_Valid_53","#53");
+		// Another Problem with Existentials?
+		IGNORED.put("Subtype_Valid_5","#54");
+		// Problem with Recursive Property?
+		IGNORED.put("PropertyValid_17","#55");
 	}
 
 	// ======================================================================
