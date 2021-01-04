@@ -3019,17 +3019,18 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         Expr.Logical[] inclauses = new Expr.Logical[fields.size()];
         Expr.Logical[] outclauses = new Expr.Logical[fields.size()];
         // Cast argument to correct (unboxed) type
-        argument = cast(to, from, argument);
+        Expr nArgument = cast(to, from, argument);
+        // Construct type test (when necessary)
+        Expr.Logical test = argument != nArgument ? INVOKE("Record#is", argument) : Expr.Boolean.TRUE;
         // Iterate fields constructing tests for each.
         for (int i = 0; i != inclauses.length; ++i) {
             WyilFile.Type.Field f = fields.get(i);
             String field = "$" + f.getName().get();
-            inclauses[i] = constructTypeTest(f.getType(), WyilFile.Type.Any, GET(argument, VAR(field)), heap);
+            inclauses[i] = constructTypeTest(f.getType(), WyilFile.Type.Any, GET(nArgument, VAR(field)), heap);
             outclauses[i] = NEQ(VAR(field),v);
         }
-        // FIXME: Should this restrict permitted fields and ensure Record#is?
-        Expr.Logical inbound = AND(inclauses);
-        Expr.Logical outbound = FORALL(v.getVariable(), FIELD, IMPLIES(AND(outclauses), EQ(GET(argument, v), VAR("Void"))));
+        Expr.Logical inbound = AND(test,AND(inclauses));
+        Expr.Logical outbound = FORALL(v.getVariable(), FIELD, IMPLIES(AND(outclauses), EQ(GET(nArgument, v), VAR("Void"))));
         // Finally, apply outbounds to closed records only since these are the ones whose fields we actually know about.
         return to.isOpen() ?  inbound : AND(inbound, outbound);
     }
@@ -3051,7 +3052,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      *
      * @param to       The type being tested against.
      * @param from     The argument type
-     * @param argument The argument being tested.
+     * @param nArgument The argument being tested.
      * @return
      */
     private Expr.Logical constructArrayTypeTest(WyilFile.Type.Array to, WyilFile.Type from, Expr argument, String heap) {
@@ -3060,29 +3061,31 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // generic nominal types.
         Expr.VariableAccess i = VAR(TEMP("i"));
         // Cast argument to (unboxed) array type
-        argument = cast(to, from, argument);
+        Expr nArgument = cast(to, from, argument);
+        // Construct type test (when necessary)
+        Expr.Logical test = argument != nArgument ? INVOKE("Array#is", argument) : Expr.Boolean.TRUE;
         // Construct bounds check for index variable
-        Expr.Logical inbounds = AND(LTEQ(CONST(0), i), LT(i, INVOKE("Array#Length", argument)));
+        Expr.Logical inbounds = AND(LTEQ(CONST(0), i), LT(i, INVOKE("Array#Length", nArgument)));
         // Construct (out of) bounds check for index variable
-        Expr.Logical outbounds = OR(LT(i, CONST(0)), LTEQ(INVOKE("Array#Length", argument), i));
+        Expr.Logical outbounds = OR(LT(i, CONST(0)), LTEQ(INVOKE("Array#Length", nArgument), i));
         // Recursively construct type test for element
-        Expr.Logical valid = constructTypeTest(to.getElement(), WyilFile.Type.Any, GET(argument, i), heap);
+        Expr.Logical valid = constructTypeTest(to.getElement(), WyilFile.Type.Any, GET(nArgument, i), heap);
         // Elements outside range equal void
-        Expr.Logical invalid = EQ(GET(argument,i),VAR("Void"));
-        // FIXME: Should this restrict permitted fields and ensure Array#is?
+        Expr.Logical invalid = EQ(GET(nArgument,i),VAR("Void"));
         // Done
-        return FORALL(i.getVariable(), Type.Int, AND(IMPLIES(inbounds, valid),IMPLIES(outbounds,invalid)));
+        return AND(test, FORALL(i.getVariable(), Type.Int, AND(IMPLIES(inbounds, valid), IMPLIES(outbounds, invalid))));
     }
 
     private Expr.Logical constructReferenceTypeTest(WyilFile.Type.Reference to, WyilFile.Type from, Expr argument, String heap) {
         heap = (heap == null) ? "Ref#Empty" : heap;
         // Cast argument to (unboxed) reference type
-        argument = cast(to, from, argument);
+        Expr nArgument = cast(to, from, argument);
+        // Construct type test (when necessary)
+        Expr.Logical test = argument != nArgument ? INVOKE("Ref#is", argument) : Expr.Boolean.TRUE;
         // Dereference argument
-        Expr deref = GET(VAR(heap), argument);
-        // FIXME: Should this restrict permitted fields and ensure Ref#is?
+        Expr deref = GET(VAR(heap), nArgument);
         // Done
-        return constructTypeTest(to.getElement(), WyilFile.Type.Any, deref, heap);
+        return AND(test,constructTypeTest(to.getElement(), WyilFile.Type.Any, deref, heap));
     }
 
     /**
@@ -3120,15 +3123,17 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Extract Return Type
         WyilFile.Type ret = to.getReturn();
         // Ensure lambda argument unboxed
-        Expr larg = cast(to,from,argument);
+        Expr nArgument = cast(to,from,argument);
+        // Construct type test (when necessary)
+        Expr.Logical test = argument != nArgument ? INVOKE("Lambda#is", argument) : Expr.Boolean.TRUE;
         // Construct one clause for each return value
         Expr.Logical[] clauses = new Expr.Logical[ret.shape()];
         for (int i = 0; i != clauses.length; ++i) {
             WyilFile.Type ith = ret.dimension(i);
-            clauses[i] = constructTypeTest(ith, WyilFile.Type.Any, INVOKE("Lambda#return", larg, CONST(i)), heap);
+            clauses[i] = constructTypeTest(ith, WyilFile.Type.Any, INVOKE("Lambda#return", nArgument, CONST(i)), heap);
         }
         // Done
-        return AND(INVOKE("Lambda#is", box(from, argument)), AND(clauses));
+        return AND(test, AND(clauses));
     }
 
     // ==============================================================================

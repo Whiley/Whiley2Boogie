@@ -99,7 +99,6 @@ public class ValidTests {
 		IGNORED.put("For_Valid_7","");
 		IGNORED.put("Lambda_Valid_3","");
 		IGNORED.put("Lambda_Valid_4","");
-		IGNORED.put("Template_Valid_60","");
 		IGNORED.put("RecursiveType_Valid_22","");
 		IGNORED.put("While_Valid_2","");
 		IGNORED.put("While_Valid_71","");
@@ -147,16 +146,14 @@ public class ValidTests {
 		IGNORED.put("MethodRef_Valid_2","#51");
 		// Disconnect between Lambdas and their Applications
 		IGNORED.put("Lambda_Valid_13","#52");
-		// Limitation of Runtime Type Tests?
-		IGNORED.put("RecursiveType_Valid_28","#53");
-		IGNORED.put("RecursiveType_Valid_29","#53");
-		IGNORED.put("Template_Valid_53","#53");
 		// Another Problem with Existentials?
 		IGNORED.put("Subtype_Valid_5","#54");
 		// Problem with Recursive Property?
 		IGNORED.put("Property_Valid_17","#55");
 		// Problem with Dereference in Postcondition
 		IGNORED.put("Process_Valid_9","#56");
+		// Problem with Record Generator and Type Test
+		IGNORED.put("Template_Valid_60","#57");
 	}
 
 	// ======================================================================
