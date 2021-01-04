@@ -1,10 +1,13 @@
 type Queue is {int[] items, int length}
+where length >= 0 && length <= |items|
 
-method get(&Queue _this) -> int:
+method get(&Queue _this) -> int
+requires _this->length > 0:
     _this->length = _this->length - 1
     return _this->items[_this->length]
 
-method put(&Queue _this, int item) :
+method put(&Queue _this, int item)
+requires _this->length < |_this->items|:
     _this->items[_this->length] = item
     _this->length = _this->length + 1
 

@@ -100,8 +100,6 @@ public class ValidTests {
 		IGNORED.put("Lambda_Valid_3","");
 		IGNORED.put("Lambda_Valid_4","");
 		IGNORED.put("Template_Valid_60","");
-		IGNORED.put("Process_Valid_9","");
-		IGNORED.put("Process_Valid_10","");
 		IGNORED.put("RecursiveType_Valid_22","");
 		IGNORED.put("While_Valid_2","");
 		IGNORED.put("While_Valid_71","");
@@ -135,6 +133,7 @@ public class ValidTests {
 		IGNORED.put("Reference_Valid_9","#48");
 		IGNORED.put("Template_Valid_18","#48");
 		IGNORED.put("Template_Valid_27","#48");
+		IGNORED.put("Process_Valid_10","#48");
 		// Problem with Reference Type Invariants
 		IGNORED.put("MessageRef_Valid_1","#49");
 		IGNORED.put("Process_Valid_6","#49");
@@ -155,7 +154,9 @@ public class ValidTests {
 		// Another Problem with Existentials?
 		IGNORED.put("Subtype_Valid_5","#54");
 		// Problem with Recursive Property?
-		IGNORED.put("PropertyValid_17","#55");
+		IGNORED.put("Property_Valid_17","#55");
+		// Problem with Dereference in Postcondition
+		IGNORED.put("Process_Valid_9","#56");
 	}
 
 	// ======================================================================
