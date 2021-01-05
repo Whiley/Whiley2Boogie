@@ -99,18 +99,15 @@ public class ValidTests {
 		IGNORED.put("For_Valid_7","");
 		IGNORED.put("Lambda_Valid_3","");
 		IGNORED.put("Lambda_Valid_4","");
+		IGNORED.put("Property_Valid_14","");
+		IGNORED.put("Property_Valid_16","");
 		IGNORED.put("RecursiveType_Valid_22","");
+		IGNORED.put("RecursiveType_Valid_28","#???");
 		IGNORED.put("While_Valid_2","");
 		IGNORED.put("While_Valid_71","");
 		// Known issues.  These are known problems with issues raised on github.
 		// Loop Conditions with Preconditions and SideEffects
 		IGNORED.put("DoWhile_Valid_6","#3");
-		// Problem with Recursive Property?
-		IGNORED.put("Property_Valid_11","#5");
-		IGNORED.put("Property_Valid_12","#5");
-		IGNORED.put("Property_Valid_14","#5");
-		IGNORED.put("Property_Valid_15","#5");
-		IGNORED.put("Property_Valid_16","#5");
 		// Problem with Existential?
 		IGNORED.put("ConstrainedList_Valid_14","#26");
 		IGNORED.put("ConstrainedList_Valid_18","#26");
