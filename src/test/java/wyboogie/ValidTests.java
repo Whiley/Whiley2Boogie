@@ -101,7 +101,6 @@ public class ValidTests {
 		IGNORED.put("Lambda_Valid_4","");
 		IGNORED.put("Property_Valid_14","");
 		IGNORED.put("Property_Valid_16","");
-		IGNORED.put("RecursiveType_Valid_22","");
 		IGNORED.put("RecursiveType_Valid_28","#???");
 		IGNORED.put("While_Valid_2","");
 		IGNORED.put("While_Valid_71","");
