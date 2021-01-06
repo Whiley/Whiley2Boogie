@@ -25,8 +25,10 @@ import java.util.Collections;
 import java.util.List;
 
 import wyboogie.io.BoogieFilePrinter;
+import wybs.lang.SyntacticItem;
 import wyfs.lang.Content;
 import wyfs.lang.Path;
+import wyil.lang.WyilFile;
 
 public class BoogieFile {
 	// =========================================================================
@@ -78,12 +80,6 @@ public class BoogieFile {
 
 	public List<Decl> getDeclarations() {
 		return declarations;
-	}
-
-	public byte[] getBytes() {
-		ByteArrayOutputStream output = new ByteArrayOutputStream();
-		new BoogieFilePrinter(output).write(this);
-		return output.toByteArray();
 	}
 
 	// =========================================================================
@@ -452,13 +448,25 @@ public class BoogieFile {
 
 		public static class Assert implements Stmt {
 			private final Expr.Logical condition;
+			private final SyntacticItem item;
+			private final int errcode;
 
-			public Assert(Expr.Logical condition) {
+			public Assert(Expr.Logical condition, SyntacticItem item, int errcode) {
 				this.condition = condition;
+				this.item = item;
+				this.errcode = errcode;
 			}
 
 			public Expr.Logical getCondition() {
 				return condition;
+			}
+
+			public SyntacticItem getSyntacticItem() {
+				return item;
+			}
+
+			public int getErrorCode() {
+				return errcode;
 			}
 		}
 

@@ -20,6 +20,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
 
 import static wyboogie.core.BoogieFile.*;
 
@@ -809,8 +810,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         stmts.addAll(constructAssertions(stmt.getCondition()));
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getCondition()));
-        //
-        stmts.add(new Stmt.Assert((Expr.Logical) condition));
+        // Add assertion itself
+        stmts.add(new Stmt.Assert((Expr.Logical) condition, stmt.getCondition(), WyilFile.STATIC_ASSERTION_FAILURE));
         // DONE
         return SEQUENCE(stmts);
     }
@@ -827,31 +828,32 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         stmts.addAll(constructAssertions(stmt.getRightHandSide()));
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getRightHandSide()));
-        // First, flatten left-hand side
+        // First, flatten left-hand and right-hand sides
         List<WyilFile.LVal> lvals = flatternAssignmentLeftHandSide(stmt.getLeftHandSide());
+        List<WyilFile.Expr> rvals = flatternAssignmentRightHandSide(stmt.getRightHandSide());
         // Second, flatten right-hand side
-        List<Expr> rvals = flatternAssignmentRightHandSide(rhs);
+        List<Expr> vals = flatternAssignmentRightHandSide(rhs);
         // Third, coerce right-hand side elements
-        rvals = coerceAssignmentRightHandSide(lvals, stmt.getRightHandSide(), rvals);
+        vals = coerceAssignmentRightHandSide(lvals, stmt.getRightHandSide(), vals);
         // Fourth, determine whether simple assign sufficient (or not)
         if (!WyilUtils.isSimple(stmt) && WyilUtils.hasInterference(stmt, meter)) {
             // Simple assignment is insufficient. Therefore, we need to assign every element
             // on the right-hand side into a temporary variable before (subsequently)
             // assigning it into the corresponding item on the left-hand side.
-            for (int i = 0; i != rvals.size(); ++i) {
+            for (int i = 0; i != vals.size(); ++i) {
                 // Assign item on rhs into temporary
-                stmts.add(ASSIGN(VAR(TEMP(stmt, i)), rvals.get(i)));
+                stmts.add(ASSIGN(VAR(TEMP(stmt, i)), vals.get(i)));
                 // Setup assignment from temporary to the lhs
-                rvals.set(i, VAR(TEMP(stmt, i)));
+                vals.set(i, VAR(TEMP(stmt, i)));
             }
         }
         // Finally, action assignments and type tests
         for (int i = 0; i != lvals.size(); ++i) {
             WyilFile.LVal ith = lvals.get(i);
-            stmts.add(constructAssign(ith, rvals.get(i)));
+            stmts.add(constructAssign(ith, vals.get(i)));
             Expr.Logical c = constructTypeConstraint(ith.getType(), visitExpression(ith), heap);
             if (c != null) {
-                stmts.add(new Stmt.Assert(c));
+                stmts.add(new Stmt.Assert(c,rvals.get(i),WyilFile.STATIC_TYPEINVARIANT_FAILURE));
             }
         }
         // Done
@@ -921,6 +923,29 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             Expr ith = rhs.get(i);
             if (ith instanceof FauxTuple) {
                 rvals.addAll(((FauxTuple) ith).getItems());
+            } else {
+                rvals.add(ith);
+            }
+        }
+        return rvals;
+    }
+
+    private List<WyilFile.Expr> flatternAssignmentRightHandSide(Tuple<WyilFile.Expr> rhs) {
+        ArrayList<WyilFile.Expr> rvals = new ArrayList<>();
+        // First, flattern all rvals
+        for (int i = 0; i != rhs.size(); ++i) {
+            WyilFile.Expr ith = rhs.get(i);
+            int n = ith.getType().shape();
+            if(n > 1) {
+                if (ith instanceof WyilFile.Expr.TupleInitialiser) {
+                    WyilFile.Expr.TupleInitialiser ti = (WyilFile.Expr.TupleInitialiser) ith;
+                    rvals.addAll(flatternAssignmentRightHandSide(ti.getOperands()));
+                } else {
+                    // This may seem a bit weird, but it's the best we can do in the circumstance
+                    for(int j=0;j<n;++j) {
+                        rvals.add(ith);
+                    }
+                }
             } else {
                 rvals.add(ith);
             }
@@ -1074,7 +1099,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getOperand()));
         //
-        stmts.add(new Stmt.Assert(CONST(true)));
+        stmts.add(new Stmt.Assert(CONST(true),null,0));
         return SEQUENCE(stmts);
     }
 
@@ -1112,7 +1137,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Stmt constructFail(WyilFile.Stmt.Fail stmt) {
-        return new Stmt.Assert(CONST(false));
+        return new Stmt.Assert(CONST(false), stmt, WyilFile.STATIC_FAULT);
     }
 
     @Override
@@ -1197,7 +1222,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 // Add assertion for type constraints (if applicable)
                 Expr.Logical c = constructTypeConstraint(ith.getType(), VAR(name), heap);
                 if (c != null) {
-                    stmts.add(new Stmt.Assert(c));
+                    stmts.add(new Stmt.Assert(c, stmt.getInitialiser(), WyilFile.STATIC_TYPEINVARIANT_FAILURE));
                 }
             }
             // FIXME: need post condition!
@@ -1247,7 +1272,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             // NOTE: this case arises when for a function invocation which discards the
             // return value. That doesn't really make sense, and for now we just treat as a
             // "skip".
-            stmts.add(new Stmt.Assert(Expr.Boolean.TRUE));
+            stmts.add(new Stmt.Assert(Expr.Boolean.TRUE, null, 0));
         }
         return SEQUENCE(stmts);
     }
@@ -1284,7 +1309,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             // NOTE: this case arises when for a function invocation which discards the
             // return value. That doesn't really make sense, and for now we just treat as a
             // "skip".
-            stmts.add(new Stmt.Assert(Expr.Boolean.TRUE));
+            stmts.add(new Stmt.Assert(Expr.Boolean.TRUE, null, 0));
         }
         return SEQUENCE(stmts);
     }
@@ -1334,7 +1359,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Stmt constructSkip(WyilFile.Stmt.Skip stmt) {
-        return new Stmt.Assert(Expr.Boolean.TRUE);
+        return new Stmt.Assert(Expr.Boolean.TRUE, null, 0);
     }
 
     @Override
@@ -1411,8 +1436,21 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         }
         // FIXME: handle preconditions and side-effects arising from subsequent
         // iterations.
+
         // Add type constraints arising from modified variables
-        invariant.addAll(0, constructTypeConstraints(modified, heap));
+        for(int i=0;i!=modified.size();++i) {
+            WyilFile.Decl.Variable ith = modified.get(i);
+            // Construct corresponding type constraint
+            Expr.Logical constraint = constructTypeConstraint(ith.getType(),VAR(toVariableName(ith)), heap);
+            //
+            if(constraint != null) {
+                invariant.add(constraint);
+            }
+        }
+        // Add invariants
+        for(int i=0;i!=invariant.size();++i) {
+            invariant.add((Expr.Logical) invariant.get(i));
+        }
         //
         stmts.add(new Stmt.While(condition, invariant, body));
         // Add break label (if necessary)
@@ -2095,71 +2133,82 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @param condition
      * @return
      */
-    public List<Stmt> constructAssertions(WyilFile.Expr condition) {
+    public List<Stmt.Assert> constructAssertions(WyilFile.Expr condition) {
 
-        Expr.Logical precondition = new AbstractExpressionProducer<Expr.Logical>() {
+        List<Stmt.Assert> assertions = new AbstractExpressionProducer<List<Stmt.Assert>>() {
             @Override
-            protected Expr.Logical BOTTOM() {
-                return Expr.Boolean.TRUE;
+            protected List<Stmt.Assert> BOTTOM() {
+                return Collections.EMPTY_LIST;
             }
 
             @Override
-            protected Expr.Logical join(Expr.Logical lhs, Expr.Logical rhs) {
-                return AND(lhs,rhs);
+            protected List<Stmt.Assert> join(List<Stmt.Assert> lhs, List<Stmt.Assert> rhs) {
+                return append(lhs,rhs);
             }
 
             @Override
-            protected Expr.Logical join(List<Expr.Logical> operands) {
-                return AND(operands);
+            protected List<Stmt.Assert> join(List<List<Stmt.Assert>> operands) {
+                ArrayList<Stmt.Assert> stmts = new ArrayList<>();
+                for (int i = 0; i != operands.size(); ++i) {
+                    stmts.addAll(operands.get(i));
+                }
+                return stmts;
             }
 
             @Override
-            public Expr.Logical constructLambda(WyilFile.Decl.Lambda lambda, Expr.Logical body) {
+            public List<Stmt.Assert> constructLambda(WyilFile.Decl.Lambda lambda, List<Stmt.Assert> body) {
                 // NOTE: do not propagate preconditions from within the lambda outside.  Such preconditions will be
                 // checked within the dummy procedure created for the lambda.
-                return Expr.Boolean.TRUE;
+                return Collections.EMPTY_LIST;
             }
 
             @Override
-            public Expr.Logical constructLogicalAnd(WyilFile.Expr.LogicalAnd expr, List<Expr.Logical> operands) {
+            public List<Stmt.Assert> constructLogicalAnd(WyilFile.Expr.LogicalAnd expr, List<List<Stmt.Assert>> operands) {
                 // Translate Whiley expressions to form the window.
                 List window = BoogieCompiler.this.visitExpressions(expr.getOperands());
-                Expr.Logical r = operands.get(0);
-                for(int i=1;i<operands.size();++i) {
-                    Expr.Logical ith = operands.get(i);
-                    r = AND(r, IMPLIES(AND(window.subList(0,i)),ith));
+                List<Stmt.Assert> rs = new ArrayList<>();
+                for(int i=0;i<operands.size();++i) {
+                    List<Stmt.Assert> ith = operands.get(i);
+                    // Construct inference window
+                    Expr.Logical w = AND(window.subList(0,i));
+                    rs.addAll(map(ith,s -> new Stmt.Assert(IMPLIES(w,s.getCondition()),s.getSyntacticItem(),s.getErrorCode())));
                 }
-                return r;
+                return rs;
             }
 
+
             @Override
-            public Expr.Logical constructLogicalOr(WyilFile.Expr.LogicalOr expr, List<Expr.Logical> operands) {
+            public List<Stmt.Assert> constructLogicalOr(WyilFile.Expr.LogicalOr expr, List<List<Stmt.Assert>> operands) {
                 // Translate Whiley expressions to form the window.
                 List window = BoogieCompiler.this.visitExpressions(expr.getOperands());
-                Expr.Logical r = operands.get(0);
-                for(int i=1;i<operands.size();++i) {
-                    Expr.Logical ith = operands.get(i);
-                    r = AND(r, OR(OR(window.subList(0,i)),ith));
+                List<Stmt.Assert> rs = new ArrayList<>();
+                for(int i=0;i<operands.size();++i) {
+                    List<Stmt.Assert> ith = operands.get(i);
+                    // Construct inference window
+                    Expr.Logical w = OR(window.subList(0,i));
+                    // Map over existing operands
+                    rs.addAll(map(ith,s -> new Stmt.Assert(OR(w,s.getCondition()),s.getSyntacticItem(),s.getErrorCode())));
                 }
-                return r;
+                return rs;
             }
 
             @Override
-            public Expr.Logical constructLogicalImplication(WyilFile.Expr.LogicalImplication expr, Expr.Logical left, Expr.Logical right) {
-                Expr.Logical window = (Expr.Logical) BoogieCompiler.this.visitExpression(expr.getFirstOperand());
-                return AND(left,IMPLIES(window,right));
+            public List<Stmt.Assert> constructLogicalImplication(WyilFile.Expr.LogicalImplication expr, List<Stmt.Assert> left, List<Stmt.Assert> right) {
+                Expr.Logical w = (Expr.Logical) BoogieCompiler.this.visitExpression(expr.getFirstOperand());
+                List<Stmt.Assert> nright = map(right, s -> new Stmt.Assert(IMPLIES(w, s.getCondition()), s.getSyntacticItem(), s.getErrorCode()));
+                return append(left, nright);
             }
 
             @Override
-            public Expr.Logical constructUniversalQuantifier(WyilFile.Expr.UniversalQuantifier expr, List<Expr.Logical> operands, Expr.Logical body) {
+            public List<Stmt.Assert> constructUniversalQuantifier(WyilFile.Expr.UniversalQuantifier expr, List<List<Stmt.Assert>> operands, List<Stmt.Assert> body) {
                 return constructQuantifier(expr,operands,body);
             }
             @Override
-            public Expr.Logical constructExistentialQuantifier(WyilFile.Expr.ExistentialQuantifier expr, List<Expr.Logical> operands, Expr.Logical body) {
+            public List<Stmt.Assert> constructExistentialQuantifier(WyilFile.Expr.ExistentialQuantifier expr, List<List<Stmt.Assert>> operands, List<Stmt.Assert> body) {
                 return constructQuantifier(expr,operands,body);
             }
 
-            private Expr.Logical constructQuantifier(WyilFile.Expr.Quantifier expr, List<Expr.Logical> operands, Expr.Logical body) {
+            private List<Stmt.Assert> constructQuantifier(WyilFile.Expr.Quantifier expr, List<List<Stmt.Assert>> operands, List<Stmt.Assert> body) {
                 WyilFile.Tuple<WyilFile.Decl.StaticVariable> params = expr.getParameters();
                 List<Decl.Parameter> ps = new ArrayList<>();
                 List<Expr.Logical> clauses = new ArrayList<>();
@@ -2173,49 +2222,75 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     clauses.add(LTEQ(start, VAR(name)));
                     clauses.add(LT(VAR(name), end));
                 }
-                return AND(AND(operands), FORALL(ps, IMPLIES(AND(clauses), AND(body))));
+                List<Stmt.Assert> lhs = flattern(operands, l -> l);
+                List<Stmt.Assert> rhs = map(body, s -> new Stmt.Assert(FORALL(ps, IMPLIES(AND(clauses), s.getCondition())), s.getSyntacticItem(), s.getErrorCode()));
+                return append(lhs, rhs);
             }
 
             @Override
-            public Expr.Logical constructArrayAccess(WyilFile.Expr.ArrayAccess expr, Expr.Logical source, Expr.Logical index) {
+            public List<Stmt.Assert> constructArrayAccess(WyilFile.Expr.ArrayAccess expr, List<Stmt.Assert> source, List<Stmt.Assert> index) {
+                List<Stmt.Assert> result = append(source,index);
                 Expr src = BoogieCompiler.this.visitExpression(expr.getFirstOperand());
                 Expr i = BoogieCompiler.this.visitExpression(expr.getSecondOperand());
-                Expr.Logical precondition = AND(LTEQ(CONST(0), i), LT(i, INVOKE("Array#Length", src)));
-                return AND(source,index,precondition);
-            }
-
-            public Expr.Logical constructArrayGenerator(WyilFile.Expr.ArrayGenerator expr, Expr.Logical value, Expr.Logical length) {
-                // Translate right-hand side so can compare against 0
-                Expr r = BoogieCompiler.this.visitExpression(expr.getSecondOperand());
-                return AND(value, length, GTEQ(r, CONST(0)));
-            }
-
-            @Override
-            public Expr.Logical constructIntegerDivision(WyilFile.Expr.IntegerDivision expr, Expr.Logical lhs, Expr.Logical rhs) {
-                // Translate right-hand side so can compare against 0
-                Expr r = BoogieCompiler.this.visitExpression(expr.getSecondOperand());
-                // Construct final constraint
-                return AND(lhs,rhs,NEQ(r, CONST(0)));
+                // Add check that index is not negative
+                result.add(new Stmt.Assert(LTEQ(CONST(0), i),expr.getSecondOperand(),WyilFile.STATIC_BELOWBOUNDS_INDEX_FAILURE));
+                // Add check that index below length
+                result.add(new Stmt.Assert(LT(i, INVOKE("Array#Length", src)),expr.getSecondOperand(),WyilFile.STATIC_ABOVEBOUNDS_INDEX_FAILURE));
+                // Done
+                return result;
             }
 
             @Override
-            public Expr.Logical constructIntegerRemainder(WyilFile.Expr.IntegerRemainder expr, Expr.Logical lhs, Expr.Logical rhs) {
+            public List<Stmt.Assert> constructArrayGenerator(WyilFile.Expr.ArrayGenerator expr, List<Stmt.Assert> value, List<Stmt.Assert> length) {
+                List<Stmt.Assert> result = append(value,length);
                 // Translate right-hand side so can compare against 0
                 Expr r = BoogieCompiler.this.visitExpression(expr.getSecondOperand());
-                // Construct final constraint
-                return AND(lhs,rhs,NEQ(r, CONST(0)));
+                // Add length check
+                result.add(new Stmt.Assert(LTEQ(CONST(0), r),expr.getSecondOperand(),WyilFile.STATIC_NEGATIVE_LENGTH_FAILURE));
+                // Done
+                return result;
             }
 
-            public Expr.Logical constructCast(WyilFile.Expr.Cast expr, Expr.Logical operand) {
+            @Override
+            public List<Stmt.Assert> constructIntegerDivision(WyilFile.Expr.IntegerDivision expr, List<Stmt.Assert> lhs, List<Stmt.Assert> rhs) {
+                List<Stmt.Assert> result = append(lhs,rhs);
+                // Translate right-hand side so can compare against 0
+                Expr r = BoogieCompiler.this.visitExpression(expr.getSecondOperand());
+                // Add check that rhs is non-zero
+                result.add(new Stmt.Assert(NEQ(r, CONST(0)),expr.getSecondOperand(),WyilFile.STATIC_DIVIDEBYZERO_FAILURE));
+                // Done
+                return result;
+            }
+
+            @Override
+            public List<Stmt.Assert> constructIntegerRemainder(WyilFile.Expr.IntegerRemainder expr, List<Stmt.Assert> lhs, List<Stmt.Assert> rhs) {
+                List<Stmt.Assert> result = append(lhs,rhs);
+                // Translate right-hand side so can compare against 0
+                Expr r = BoogieCompiler.this.visitExpression(expr.getSecondOperand());
+                // Add check that rhs is non-zero
+                result.add(new Stmt.Assert(NEQ(r, CONST(0)),expr.getSecondOperand(),WyilFile.STATIC_DIVIDEBYZERO_FAILURE));
+                // Done
+                return result;
+            }
+
+            @Override
+            public List<Stmt.Assert> constructCast(WyilFile.Expr.Cast expr, List<Stmt.Assert> operand) {
+                List<Stmt.Assert> result = new ArrayList<>(operand);
+                // Determine whether type is pure or not
                 boolean pure = WyilUtils.isPure(expr.getType());
+                // Translate source expression
                 Expr src = BoogieCompiler.this.visitExpression(expr.getOperand());
+                // Construct type invariant test
                 Expr.Logical test = constructTypeTest(expr.getType(), expr.getOperand().getType(), src, pure ? null : HEAP_VARNAME);
-                return AND(operand, test);
+                // Add check that source matches type invariant
+                result.add(new Stmt.Assert(test,expr.getOperand(),WyilFile.STATIC_TYPEINVARIANT_FAILURE));
+                // Done
+                return result;
             }
 
             @Override
-            public Expr.Logical constructInvoke(WyilFile.Expr.Invoke expr, List<Expr.Logical> preconditions) {
-                Expr.Logical result = AND(preconditions);
+            public List<Stmt.Assert> constructInvoke(WyilFile.Expr.Invoke expr, List<List<Stmt.Assert>> preconditions) {
+                List<Stmt.Assert> result = flattern(preconditions, l -> l);
                 WyilFile.Decl.Callable c = expr.getLink().getTarget();
                 if(c instanceof WyilFile.Decl.Function) {
                     // NOTE: we only generate preconditions for function invocations since these are not implemented as
@@ -2233,32 +2308,28 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                         args.add(i,constructMetaType(binding.get(i), HEAP_VARNAME));
                     }
                     // Append the invocation
-                    result = AND(result, INVOKE(name + "#pre", args));
+                    result.add(new Stmt.Assert(INVOKE(name + "#pre", args),expr,WyilFile.STATIC_PRECONDITION_FAILURE));
                 }
                 return result;
             }
 
             @Override
-            public Expr.Logical constructIndirectInvoke(WyilFile.Expr.IndirectInvoke expr, Expr.Logical source, List<Expr.Logical> preconditions) {
+            public List<Stmt.Assert> constructIndirectInvoke(WyilFile.Expr.IndirectInvoke expr, List<Stmt.Assert> source, List<List<Stmt.Assert>> preconditions) {
+                List<Stmt.Assert> result = flattern(preconditions, l -> l);
                 Tuple<WyilFile.Expr> args = expr.getArguments();
                 WyilFile.Type.Callable type = expr.getSource().getType().as(WyilFile.Type.Callable.class);
                 WyilFile.Type param = type.getParameter();
-                Expr.Logical result = AND(preconditions);
                 for(int i=0;i!=args.size();++i) {
                     WyilFile.Expr ith = args.get(i);
                     WyilFile.Type target = param.dimension(i);
                     String heap = WyilUtils.isPure(target) ? null : HEAP_VARNAME;
                     Expr arg = BoogieCompiler.this.visitExpression(ith);
                     Expr.Logical test = constructTypeTest(target,ith.getType(),arg,heap);
-                    result = AND(result,test);
+                    result.add(new Stmt.Assert(test,ith,WyilFile.STATIC_TYPEINVARIANT_FAILURE));
                 }
                 return result;
             }
         }.visitExpression(condition);
-        //
-        List<Stmt> assertions = new ArrayList<>();
-        // FIXME: would be good to tidy this all up by e.g. converting it to CNF.
-        assertions.add(new Stmt.Assert(precondition));
         //
         return assertions;
     }
@@ -3631,6 +3702,38 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     /**
+     * Flattern a given list of elements where some or all elements are "compound" containing subelements to be extracted.
+     * @param items
+     * @param fn
+     * @param <S>
+     * @param <T>
+     * @return
+     */
+    private <S,T> List<T> flattern(List<S> items, Function<S, List<T>> fn) {
+        ArrayList<T> result = new ArrayList<>();
+        for (int i = 0; i != items.size(); ++i) {
+            result.addAll(fn.apply(items.get(i)));
+        }
+        return result;
+    }
+
+    /**
+     * Map a given list of elements from one kind to another.
+     *
+     * @param stmts
+     * @param fn
+     * @param <T>
+     * @return
+     */
+    private <S,T> List<T> map(List<S> stmts, Function<S,T> fn) {
+        ArrayList<T> rs = new ArrayList<>();
+        for(int i=0;i!=stmts.size();++i) {
+            rs.add(fn.apply(stmts.get(i)));
+        }
+        return rs;
+    }
+
+    /**
      * Function list append.
      * @param left
      * @param right
@@ -3641,6 +3744,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         ArrayList<T> result = new ArrayList();
         result.addAll(left);
         result.addAll(right);
+        return result;
+    }
+
+    private static <T> List<T> append(List<T>... lists) {
+        ArrayList<T> result = new ArrayList<>();
+        for(int i=0;i!=lists.length;++i) {
+            result.addAll(lists[i]);
+        }
         return result;
     }
 

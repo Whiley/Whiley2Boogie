@@ -38,6 +38,10 @@ public class BoogieFilePrinter {
 		out.flush();
 	}
 
+	public MappablePrintWriter.Mapping<BoogieFile.Item> getMapping() {
+		return out.getMapping();
+	}
+
 	public void write(BoogieFile file) {
 		for(Decl d : file.getDeclarations()) {
 			writeDecl(0, d);
@@ -165,17 +169,13 @@ public class BoogieFilePrinter {
 		} else {
 			out.println();
 		}
-		List<Expr.Logical> requires = d.getRequires();
-		List<Expr.Logical> ensures = d.getEnsures();
+		List<Stmt.Invariant> requires = d.getRequires();
+		List<Stmt.Invariant> ensures = d.getEnsures();
 		for(int i=0;i!=requires.size();++i) {
-			out.print("requires ",d);
-			writeExpression(requires.get(i));
-			out.println(";",d);
+			writeInvariant(indent,"requires", requires.get(i));
 		}
 		for(int i=0;i!=ensures.size();++i) {
-			out.print("ensures ",d);
-			writeExpression(ensures.get(i));
-			out.println(";",d);
+			writeInvariant(indent,"ensures", requires.get(i));
 		}
 		List<String> modifies = d.getModifies();
 		if(modifies.size() > 0) {
@@ -361,16 +361,19 @@ public class BoogieFilePrinter {
 		out.print("while(",s);
 		writeExpression(s.getCondition());
 		out.println(")",s);
-		List<Expr.Logical> invariant = s.getInvariant();
+		List<Stmt.Invariant> invariant = s.getInvariant();
 		for(int i=0;i!=invariant.size();++i) {
-			out.tab(indent);
-			out.print("invariant ",s);
-			writeExpression(invariant.get(i));
-			out.println(";",s);
+			writeInvariant(indent, "invariant", invariant.get(i));
 		}
 		out.tab(indent);out.println("{",s);
 		writeStmt(indent + 1, s.getBody());
 		out.tab(indent);out.println("}",s);
+	}
+	private void writeInvariant(int indent, String txt, Stmt.Invariant s) {
+		out.tab(indent);
+		out.print(txt,s);
+		writeExpression(s.getCondition());
+		out.println(";",s);
 	}
 	private void writeExpressionWithBraces(Expr e) {
 		if (e instanceof Expr.UnaryOperator || e instanceof Expr.BinaryOperator || e instanceof Expr.NaryOperator) {

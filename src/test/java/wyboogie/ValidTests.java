@@ -19,11 +19,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ForkJoinPool;
 
 import org.junit.Assume;
@@ -188,6 +184,7 @@ public class ValidTests {
 	public static Pair<Boolean,String> compileWhiley2Boogie(String whileydir, String arg) throws IOException {
 		ByteArrayOutputStream syserr = new ByteArrayOutputStream();
 		ByteArrayOutputStream sysout = new ByteArrayOutputStream();
+		PrintStream psyserr = new PrintStream(syserr);
 		//
 		boolean result = true;
 		//
@@ -233,9 +230,9 @@ public class ValidTests {
 			// Flush any created resources (e.g. wyil files)
 			root.flush();
 			// Check whether any syntax error produced
-			//result = !TestUtils.findSyntaxErrors(wyilTarget.read().getRootItem(), new BitSet());
+			result = !TestUtils.findSyntaxErrors(wyilTarget.read().getRootItem(), new BitSet());
 			// Print out any error messages
-			//wycli.commands.Build.printSyntacticMarkers(psyserr, (List) sources, (Path.Entry) wyilTarget);
+			wycli.commands.Build.printSyntacticMarkers(psyserr, (List) sources, (Path.Entry) wyilTarget);
 			// Flush any created resources (e.g. wyil files)
 			root.flush();
 		} catch (SyntacticException e) {

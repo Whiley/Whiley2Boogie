@@ -24,6 +24,7 @@ import wyboogie.util.Boogie;
 import wybs.lang.Build;
 import wybs.lang.Build.Meter;
 import wybs.util.AbstractBuildTask;
+import wyc.util.ErrorMessages;
 import wyfs.lang.Path;
 import wyil.lang.WyilFile;
 
@@ -36,7 +37,7 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 	/**
 	 * Specify whether to print verbose progress messages or not
 	 */
-	private boolean verbose = true;
+	private boolean verbose = false;
 	/**
 	 * Boogie process timeout (in milli-seconds)
 	 */
@@ -52,6 +53,14 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 
 	public void setVerification(boolean flag) {
 		this.verification = flag;
+	}
+
+	public void setVerbose(boolean flag) {
+		this.verbose = flag;
+	}
+
+	public void setTimeout(int timeout) {
+		this.timeout = timeout;
 	}
 
 	@Override
@@ -84,15 +93,49 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 		//
 		if (verification) {
 			String id = source.getEntry().id().toString();
-			Boogie.Error[] errors = verifier.check(timeout, id, target);
+			Boogie.Message[] errors = verifier.check(timeout, id, target);
 			//
 			if(verbose && errors != null && errors.length > 0) {
 				System.out.println("=================================================");
 				System.out.println("Errors: " + id);
 				System.out.println("=================================================");
-				// Debugging output
 				for(int i=0;i!=errors.length;++i) {
 					System.out.println(errors[i]);
+				}
+			}
+			// Apply errors
+			for(int i=0;i!=errors.length;++i) {
+				Boogie.Message ith = errors[i];
+				if(ith instanceof Boogie.Error) {
+					Boogie.Error err = (Boogie.Error) ith;
+					BoogieFile.Item item = err.getEnclosingItem();
+					switch(err.getCode()) {
+						case Boogie.ERROR_ASSERTION_FAILURE: {
+							BoogieFile.Stmt.Assert stmt = (BoogieFile.Stmt.Assert) item;
+							// NOTE: since a lot of Whiley failures are encoded as Boogie asserts, we must decode the exact kind of failure.
+							ErrorMessages.syntaxError(stmt.getSyntacticItem(),stmt.getErrorCode());
+						}
+						case Boogie.ERROR_PRECONDITION_FAILURE: {
+							BoogieFile.Stmt.Invariant stmt = (BoogieFile.Stmt.Invariant) item;
+							ErrorMessages.syntaxError(stmt.getSyntacticItem(), WyilFile.STATIC_PRECONDITION_FAILURE);
+							break;
+						}
+						case Boogie.ERROR_POSTCONDITION_FAILURE: {
+							BoogieFile.Stmt.Invariant stmt = (BoogieFile.Stmt.Invariant) item;
+							ErrorMessages.syntaxError(stmt.getSyntacticItem(), WyilFile.STATIC_POSTCONDITION_FAILURE);
+							break;
+						}
+						case Boogie.ERROR_ESTABLISH_LOOP_INVARIANT_FAILURE: {
+							BoogieFile.Stmt.Invariant stmt = (BoogieFile.Stmt.Invariant) item;
+							ErrorMessages.syntaxError(stmt.getSyntacticItem(), WyilFile.STATIC_ENTER_LOOPINVARIANT_FAILURE);
+							break;
+						}
+						case Boogie.ERROR_RESTORE_LOOP_INVARIANT_FAILURE: {
+							BoogieFile.Stmt.Invariant stmt = (BoogieFile.Stmt.Invariant) item;
+							ErrorMessages.syntaxError(stmt.getSyntacticItem(), WyilFile.STATIC_RESTORE_LOOPINVARIANT_FAILURE);
+							break;
+						}
+					}
 				}
 			}
 			return errors != null && errors.length == 0;

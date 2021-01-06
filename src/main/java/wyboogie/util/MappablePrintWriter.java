@@ -13,20 +13,30 @@
 // limitations under the License.
 package wyboogie.util;
 
+import wyboogie.core.BoogieFile;
+
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.util.*;
 
 public class MappablePrintWriter<T> {
 	private final PrintWriter out;
-	
+	private final Mapping<T> mapping;
+	private int index;
+
+	public MappablePrintWriter(OutputStream os) {
+		this(new PrintWriter(os));
+	}
+
 	public MappablePrintWriter(PrintWriter writer) {
 		this.out = writer;
+		this.mapping = new Mapping<T>();
 	}
-	
-	public MappablePrintWriter(OutputStream os) {
-		this.out = new PrintWriter(os);
+
+	public Mapping getMapping() {
+		return mapping;
 	}
-	
+
 	/**
 	 * Print a string associated with a given tag.
 	 * 
@@ -35,8 +45,19 @@ public class MappablePrintWriter<T> {
 	 */
 	public void print(String text, T tag) {
 		out.print(text);
+		mapping.put(tag,index,text.length());
+		index += text.length();
 	}
-	
+
+	/**
+	 * Print a newline.
+	 */
+	public void println() {
+		out.println();
+		mapping.newLine();
+		index = 0;
+	}
+
 	/**
 	 * Print a string associated with a given tag, followed by a newline.
 	 * 
@@ -44,16 +65,10 @@ public class MappablePrintWriter<T> {
 	 * @param tag
 	 */
 	public void println(String text, T tag) {
-		out.println(text);
+		print(text,tag);
+		println();
 	}
-	
-	/**
-	 * Print a newline.
-	 */
-	public void println() {
-		out.println();
-	}
-	
+
 	/**
 	 * Print a given level of indentation.
 	 * 
@@ -62,6 +77,7 @@ public class MappablePrintWriter<T> {
 	public void tab(int n) {
 		for(int i=0;i!=n;++i) {
 			out.print("   ");
+			index += 3;
 		}
 	}
 	
@@ -74,5 +90,61 @@ public class MappablePrintWriter<T> {
 	
 	public void close() {
 		out.close();
+	}
+
+	public static class Mapping<T> {
+		private ArrayList<ArrayList<Span>> lines = new ArrayList<>();
+
+		public Mapping() {
+			newLine();
+		}
+
+		public void put(T tag, int start, int length) {
+			int end = (start + length) - 1;
+			ArrayList<Span> line = lines.get(lines.size()-1);
+			line.add(new Span(tag,start,end));
+		}
+
+		public void newLine() {
+			lines.add(new ArrayList<>());
+		}
+
+		public T get(int line, int col) {
+			// Account for line numbers which start from 1
+			line = line - 1;
+			//
+			if(line >= lines.size()) {
+				return null;
+			} else {
+				List<Span> l = lines.get(line);
+				for(int i=0;i!=l.size();++i) {
+					Span<T> s = l.get(i);
+					if(s.contains(col)) {
+						return s.tag;
+					}
+				}
+				return null;
+			}
+		}
+	}
+
+
+	/**
+	 * Represents a given region of text.
+	 */
+	public static class Span<T> {
+		private final T tag;
+		private final int start;
+		private final int end;
+
+		public Span(T tag, int start, int end) {
+			this.tag = tag;
+			this.start = start;
+			this.end = end;
+		}
+
+		public boolean contains(int col) {
+			return start <= col && col <= end;
+		}
 	}
 }
