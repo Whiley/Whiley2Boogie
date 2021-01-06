@@ -87,10 +87,18 @@ public class BoogieFile {
 	}
 
 	// =========================================================================
+	// Top-Level Item
+	// =========================================================================
+
+	public interface Item {
+		
+	}
+	
+	// =========================================================================
 	// Declarations
 	// =========================================================================
 
-	public interface Decl {
+	public interface Decl extends Item {
 
 		/**
 		 * <p>
@@ -350,7 +358,7 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Parameter {
+		public static class Parameter implements Item {
 			private final String name;
 			private final Type type;
 
@@ -440,7 +448,7 @@ public class BoogieFile {
 	// Statements
 	// =========================================================================
 
-	public interface Stmt {
+	public interface Stmt extends Item {
 
 		public static class Assert implements Stmt {
 			private final Expr.Logical condition;
@@ -622,7 +630,7 @@ public class BoogieFile {
 	// Expressions
 	// =========================================================================
 
-	public interface Expr {
+	public interface Expr extends Item {
 
 		public interface Logical extends Expr {
 
@@ -1118,7 +1126,7 @@ public class BoogieFile {
 	// Types
 	// =========================================================================
 
-	public interface Type {
+	public interface Type extends Item {
 		public static final Type Bool = new Type() {
 		};
 		public static final Type Int = new Type() {
