@@ -32,6 +32,7 @@ import wyboogie.core.BoogieFile.LVal;
 import wyboogie.util.AbstractExpressionProducer;
 import wyboogie.util.Boogie;
 import wybs.lang.Build.Meter;
+import wybs.lang.SyntacticItem;
 import wybs.util.AbstractCompilationUnit.Tuple;
 import wyfs.util.Pair;
 import wyil.lang.WyilFile;
@@ -282,7 +283,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             // Add local variable declaration for parameter
             locals.add(new Decl.Variable(p, constructType(ith.getType())));
             // Add assignment from shadow to parameter
-            stmts.add(new Stmt.Assignment(VAR(p),VAR(p + "#")));
+            stmts.add(ASSIGN(VAR(p),VAR(p + "#")));
         }
         //
         stmts.add(body);
@@ -345,7 +346,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         List<Decl.Variable> locals = constructLocals(d.getBody());
         // Add shadow declarations and assignments for heap
         locals.add(new Decl.Variable(HEAP_VARNAME,REFMAP));
-        stmts.add(new Stmt.Assignment(VAR(HEAP_VARNAME),VAR(HEAP_VARNAME+"#")));
+        stmts.add(ASSIGN(VAR(HEAP_VARNAME),VAR(HEAP_VARNAME+"#")));
         // Add shadow declarations and assignments for parameters
         for (int i = 0; i != d_parameters.size(); ++i) {
             WyilFile.Decl.Variable ith = d_parameters.get(i);
@@ -353,14 +354,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             // Add local variable declaration for parameter
             locals.add(new Decl.Variable(p, constructType(ith.getType())));
             // Add assignment from shadow to parameter
-            stmts.add(new Stmt.Assignment(VAR(p),VAR(p + "#")));
+            stmts.add(ASSIGN(VAR(p),VAR(p + "#")));
         }
         // Add actual body
         stmts.add(body);
         // Check whether last statement is a return or not.
         if (!hasFinalReturn(d)) {
             // Return the updated program heap (only for methods).
-            stmts.add(new Stmt.Assignment(VAR(NHEAP_VARNAME), VAR(HEAP_VARNAME)));
+            stmts.add(ASSIGN(VAR(NHEAP_VARNAME), VAR(HEAP_VARNAME)));
         }
         // Construct implementation which can be checked against its specification.
         decls.add(new Decl.Implementation(name, shadowParameters, returns.first(), locals, SEQUENCE(stmts)));
@@ -527,7 +528,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             Decl.Parameter pth = parameters.get(i);
             if (ith != pth) {
                 locals.add(new Decl.Variable(pth.getName(), pth.getType()));
-                stmts.add(new Stmt.Assignment(VAR(pth.getName()),VAR(ith.getName())));
+                stmts.add(ASSIGN(VAR(pth.getName()),VAR(ith.getName())));
             }
         }
         stmts.add(body);
@@ -765,7 +766,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         if (method) {
             shadowParameters.set(0, new Decl.Parameter(HEAP_VARNAME + "#",REFMAP));
             locals.add(new Decl.Variable(HEAP_VARNAME, REFMAP));
-            stmts.add(new Stmt.Assignment(VAR(HEAP_VARNAME), VAR(HEAP_VARNAME + "#")));
+            stmts.add(ASSIGN(VAR(HEAP_VARNAME), VAR(HEAP_VARNAME + "#")));
         }
         // Translate lambda body
         Expr body = visitExpression(l.getBody());
@@ -776,15 +777,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Add return variable assignments
         List<Decl.Parameter> rs = returns.first();
         if(method) {
-            stmts.add(new Stmt.Assignment(VAR("#" + HEAP_VARNAME), VAR(HEAP_VARNAME)));
+            stmts.add(ASSIGN(VAR("#" + HEAP_VARNAME), VAR(HEAP_VARNAME)));
         }
         if(returnType.shape() == 1) {
-            stmts.add(new Stmt.Assignment(VAR("r#0"), body));
+            stmts.add(ASSIGN(VAR("r#0"), body));
         } else {
             // Handle multiple returns
             List<Expr> tuple = ((FauxTuple) body).getItems();
             for(int i=0;i!=returnType.shape();++i) {
-                stmts.add(new Stmt.Assignment(VAR("r#" + i), tuple.get(i)));
+                stmts.add(ASSIGN(VAR("r#" + i), tuple.get(i)));
             }
         }
         // Add lambda implementation
@@ -810,8 +811,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         stmts.addAll(constructAssertions(stmt.getCondition()));
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getCondition()));
-        // Add assertion itself
-        stmts.add(new Stmt.Assert((Expr.Logical) condition, stmt.getCondition(), WyilFile.STATIC_ASSERTION_FAILURE));
+        // Add assertion itself, along with relevant attributes for disambiguation
+        stmts.add(ASSERT((Expr.Logical) condition, ATTRIBUTE(stmt.getCondition()), ATTRIBUTE(WyilFile.STATIC_ASSERTION_FAILURE)));
         // DONE
         return SEQUENCE(stmts);
     }
@@ -853,7 +854,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             stmts.add(constructAssign(ith, vals.get(i)));
             Expr.Logical c = constructTypeConstraint(ith.getType(), visitExpression(ith), heap);
             if (c != null) {
-                stmts.add(new Stmt.Assert(c,rvals.get(i),WyilFile.STATIC_TYPEINVARIANT_FAILURE));
+                stmts.add(ASSERT(c, ATTRIBUTE(rvals.get(i)), ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
             }
         }
         // Done
@@ -1015,7 +1016,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 // Box the right-hand side (as necessary)
                 rhs = box(lval.getType(), rhs);
                 //
-                return new Stmt.Assignment(VAR(HEAP_VARNAME), PUT(VAR(HEAP_VARNAME), src, rhs));
+                return ASSIGN(VAR(HEAP_VARNAME), PUT(VAR(HEAP_VARNAME), src, rhs));
             }
             case WyilFile.EXPR_fielddereference: {
                 WyilFile.Expr.FieldDereference r = (WyilFile.Expr.FieldDereference) lval;
@@ -1034,7 +1035,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 // Box again!
                 rhs = box(recT, rhs);
                 // Done
-                return new Stmt.Assignment(VAR(HEAP_VARNAME), PUT(VAR(HEAP_VARNAME), src, rhs));
+                return ASSIGN(VAR(HEAP_VARNAME), PUT(VAR(HEAP_VARNAME), src, rhs));
             }
             case WyilFile.EXPR_recordaccess:
             case WyilFile.EXPR_recordborrow: {
@@ -1054,7 +1055,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 WyilFile.Decl.Variable decl = expr.getVariableDeclaration();
                 String name = toVariableName(expr.getVariableDeclaration());
                 // NOTE: the manner in which the following cast is applied seems odd to me, and is an artifact of how WyC is currently typing assignments.
-                return new Stmt.Assignment(VAR(name), cast(decl.getType(), expr.getType(), rhs));
+                return ASSIGN(VAR(name), cast(decl.getType(), expr.getType(), rhs));
             }
             default:
                 throw new UnsupportedOperationException("invalid lval");
@@ -1069,7 +1070,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getCondition()));
         //
-        stmts.add(new Stmt.Assume((Expr.Logical) condition));
+        stmts.add(ASSUME((Expr.Logical) condition, ATTRIBUTE(stmt.getCondition()), ATTRIBUTE(WyilFile.STATIC_ASSUMPTION_FAILURE)));
         // Done
         return SEQUENCE(stmts);
     }
@@ -1099,7 +1100,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getOperand()));
         //
-        stmts.add(new Stmt.Assert(CONST(true),null,0));
+        stmts.add(ASSERT(CONST(true)));
         return SEQUENCE(stmts);
     }
 
@@ -1120,16 +1121,16 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         stmts.add(body);
         // Add continue label (if necessary)
         if (needContinueLabel) {
-            stmts.add(new Stmt.Label("CONTINUE_" + stmt.getIndex()));
+            stmts.add(LABEL("CONTINUE_" + stmt.getIndex()));
         }
         // FIXME: handle preconditions and side-effects for subsequent iterations.
         // Add type constraints arising from modified variables
         invariant.addAll(0, constructTypeConstraints(modified, heap));
         // Add the loop itself
-        stmts.add(new Stmt.While(condition, invariant, body));
+        stmts.add(WHILE((Expr.Logical) condition, invariant, body));
         // Add break label (if necessary)
         if (needBreakLabel) {
-            stmts.add(new Stmt.Label("BREAK_" + stmt.getIndex()));
+            stmts.add(LABEL("BREAK_" + stmt.getIndex()));
         }
         // Done
         return SEQUENCE(stmts);
@@ -1137,7 +1138,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Stmt constructFail(WyilFile.Stmt.Fail stmt) {
-        return new Stmt.Assert(CONST(false), stmt, WyilFile.STATIC_FAULT);
+        return ASSERT(CONST(false), ATTRIBUTE(stmt), ATTRIBUTE(WyilFile.STATIC_FAULT));
     }
 
     @Override
@@ -1160,23 +1161,23 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         ArrayList<Stmt> loopBody = new ArrayList<>();
         loopBody.add(body);
         // Initialise index variable with first value from range
-        stmts.add(new Stmt.Assignment(var, (Expr) range.first()));
+        stmts.add(ASSIGN(var, (Expr) range.first()));
         Expr condition = LT(var, (Expr) range.second());
         // Add variable increment for completeness
-        loopBody.add(new Stmt.Assignment(var, ADD(var, CONST(1))));
+        loopBody.add(ASSIGN(var, ADD(var, CONST(1))));
         // UPdate the invariant
         invariant.add(0, AND(LTEQ((Expr) range.first(), var), LTEQ(var, (Expr) range.second())));
         // Add continue label (if necessary)
         if (needContinueLabel) {
-            stmts.add(new Stmt.Label("CONTINUE_" + stmt.getIndex()));
+            stmts.add(LABEL("CONTINUE_" + stmt.getIndex()));
         }
         // Add any type constraints arising
         invariant.addAll(0, constructTypeConstraints(modified, heap));
         // Construct the loop
-        stmts.add(new Stmt.While(condition, invariant, SEQUENCE(loopBody)));
+        stmts.add(WHILE((Expr.Logical) condition, invariant, SEQUENCE(loopBody)));
         // Add break label (if necessary)
         if (needBreakLabel) {
-            stmts.add(new Stmt.Label("BREAK_" + stmt.getIndex()));
+            stmts.add(LABEL("BREAK_" + stmt.getIndex()));
         }
         // FIXME: handle preconditions and side-effects arising from subsequent
         // iterations.
@@ -1192,7 +1193,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getCondition()));
         // Add statement!
-        stmts.add(new Stmt.IfElse(condition, trueBranch, falseBranch));
+        stmts.add(IFELSE((Expr.Logical) condition, trueBranch, falseBranch));
         // Done
         return SEQUENCE(stmts);
     }
@@ -1222,7 +1223,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 // Add assertion for type constraints (if applicable)
                 Expr.Logical c = constructTypeConstraint(ith.getType(), VAR(name), heap);
                 if (c != null) {
-                    stmts.add(new Stmt.Assert(c, stmt.getInitialiser(), WyilFile.STATIC_TYPEINVARIANT_FAILURE));
+                    stmts.add(ASSERT(c, ATTRIBUTE(stmt.getInitialiser()), ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
                 }
             }
             // FIXME: need post condition!
@@ -1267,12 +1268,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             // Chain through heap variable
             args.add(0, VAR(HEAP_VARNAME));
             // Done
-            stmts.add(CALL(name, lvals, args));
+            stmts.add(CALL(name, lvals, args, ATTRIBUTE(expr)));
         } else {
             // NOTE: this case arises when for a function invocation which discards the
             // return value. That doesn't really make sense, and for now we just treat as a
             // "skip".
-            stmts.add(new Stmt.Assert(Expr.Boolean.TRUE, null, 0));
+            stmts.add(ASSERT(CONST(true)));
         }
         return SEQUENCE(stmts);
     }
@@ -1296,7 +1297,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 }
             }
             // Apply conversions to arguments as necessary
+            System.out.println(">> BOXING PARAMS");
             args = box(ft.getParameter(), args);
+            System.out.println("<< BOXING PARAMS");
             // Chain through heap variable
             args.add(0, VAR(HEAP_VARNAME));
             // Add method pointer
@@ -1304,12 +1307,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             // Determine the methods name
             String name = "m_apply$" + (args.size() - 2) + "#" + (lvals.size() - 1);
             // Done
-            stmts.add(CALL(name, lvals, args));
+            stmts.add(CALL(name, lvals, args, ATTRIBUTE(expr)));
         } else {
             // NOTE: this case arises when for a function invocation which discards the
             // return value. That doesn't really make sense, and for now we just treat as a
             // "skip".
-            stmts.add(new Stmt.Assert(Expr.Boolean.TRUE, null, 0));
+            stmts.add(ASSERT(CONST(true)));
         }
         return SEQUENCE(stmts);
     }
@@ -1344,22 +1347,22 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 // Cast returned value as necessary
                 Expr re = cast(ith.getType(), type.dimension(i), rvs.get(i));
                 // Done
-                stmts.add(new Stmt.Assignment(VAR(rv), re));
+                stmts.add(ASSIGN(VAR(rv), re));
             }
         }
         if (enclosing instanceof WyilFile.Decl.Method) {
             // Return the updated program heap (only for methods).
-            stmts.add(new Stmt.Assignment(VAR("#" + HEAP_VARNAME), VAR(HEAP_VARNAME)));
+            stmts.add(ASSIGN(VAR("#" + HEAP_VARNAME), VAR(HEAP_VARNAME)));
         }
         // Add the actual return statement!
-        stmts.add(new Stmt.Return());
+        stmts.add(RETURN(ATTRIBUTE(stmt)));
         // Done
         return SEQUENCE(stmts);
     }
 
     @Override
     public Stmt constructSkip(WyilFile.Stmt.Skip stmt) {
-        return new Stmt.Assert(Expr.Boolean.TRUE, null, 0);
+        return ASSERT(CONST(true));
     }
 
     @Override
@@ -1398,21 +1401,21 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             if (cs.isEmpty()) {
                 defaultCase = ith.second();
             } else {
-                stmts.add(new Stmt.Label(labels.get(i)));
-                stmts.add(new Stmt.Assume(OR(cs)));
+                stmts.add(LABEL(labels.get(i)));
+                stmts.add(ASSUME(OR(cs)));
                 stmts.add(ith.second());
                 stmts.add(GOTO(breakLabel));
             }
         }
         // Construct default case
-        stmts.add(new Stmt.Label(defaultLabel));
-        stmts.add(new Stmt.Assume(AND(defaultCases)));
+        stmts.add(LABEL(defaultLabel));
+        stmts.add(ASSUME(AND(defaultCases)));
         if (defaultCase != null) {
             stmts.add(defaultCase);
         }
         stmts.add(GOTO(breakLabel));
         // Add final break label
-        stmts.add(new Stmt.Label(breakLabel));
+        stmts.add(LABEL(breakLabel));
         // Done
         return SEQUENCE(stmts);
     }
@@ -1432,7 +1435,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         stmts.addAll(constructSideEffects(stmt.getCondition()));
         // Add continue label (if necessary)
         if (needContinueLabel) {
-            stmts.add(new Stmt.Label("CONTINUE_" + stmt.getIndex()));
+            stmts.add(LABEL("CONTINUE_" + stmt.getIndex()));
         }
         // FIXME: handle preconditions and side-effects arising from subsequent
         // iterations.
@@ -1447,15 +1450,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 invariant.add(constraint);
             }
         }
-        // Add invariants
-        for(int i=0;i!=invariant.size();++i) {
-            invariant.add((Expr.Logical) invariant.get(i));
-        }
         //
-        stmts.add(new Stmt.While(condition, invariant, body));
+        stmts.add(WHILE((Expr.Logical) condition, invariant, body));
         // Add break label (if necessary)
         if (needBreakLabel) {
-            stmts.add(new Stmt.Label("BREAK_" + stmt.getIndex()));
+            stmts.add(LABEL("BREAK_" + stmt.getIndex()));
         }
         return SEQUENCE(stmts);
     }
@@ -1507,7 +1506,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 // Construct lvals
                 List<LVal> lvals = Arrays.asList(VAR(HEAP_VARNAME), VAR(name));
                 // Done
-                allocations.add(CALL("Ref#new", lvals, VAR(HEAP_VARNAME), operand));
+                allocations.add(CALL("Ref#new", lvals, VAR(HEAP_VARNAME), operand, ATTRIBUTE(expr)));
             }
 
             @Override
@@ -1544,7 +1543,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     // Chaing through heap variable
                     args.add(0, VAR(HEAP_VARNAME));
                     // Done
-                    allocations.add(CALL(name, lvals, args));
+                    allocations.add(CALL(name, lvals, args, ATTRIBUTE(expr)));
                 }
             }
 
@@ -1578,7 +1577,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     // Determine the methods name
                     String name = "m_apply$" + (args.size() - 2) + "#" + (lvals.size() - 1);
                     // Done
-                    allocations.add(CALL(name, lvals, args));
+                    allocations.add(CALL(name, lvals, args, ATTRIBUTE(expr)));
                 }
             }
 
@@ -1601,31 +1600,31 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Expr constructArrayAccessLVal(WyilFile.Expr.ArrayAccess expr, Expr source, Expr index) {
-        return GET(source, index);
+        return GET(source, index, ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructDereferenceLVal(WyilFile.Expr.Dereference expr, Expr operand) {
-        return GET(VAR(HEAP_VARNAME), operand);
+        return GET(VAR(HEAP_VARNAME), operand, ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructFieldDereferenceLVal(WyilFile.Expr.FieldDereference expr, Expr operand) {
         // First dereference the pointer.
-        Expr deref = GET(VAR(HEAP_VARNAME), operand);
+        Expr deref = GET(VAR(HEAP_VARNAME), operand, ATTRIBUTE(expr));
         // Second access the given field.
-        return GET(deref, VAR("$" + expr.getField()));
+        return GET(deref, VAR("$" + expr.getField()), ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructRecordAccessLVal(WyilFile.Expr.RecordAccess expr, Expr source) {
-        return GET(source, VAR("$" + expr.getField()));
+        return GET(source, VAR("$" + expr.getField()), ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructTupleInitialiserLVal(WyilFile.Expr.TupleInitialiser expr, List<Expr> operands) {
         // Done
-        return new FauxTuple(operands);
+        return new FauxTuple(operands, ATTRIBUTE(expr));
     }
 
     @Override
@@ -1635,30 +1634,30 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Expr constructArrayAccess(WyilFile.Expr.ArrayAccess expr, Expr source, Expr index) {
-        return unbox(expr.getType(), GET(source, index));
+        return unbox(expr.getType(), GET(source, index, ATTRIBUTE(expr)));
     }
 
     @Override
     public Expr constructArrayLength(WyilFile.Expr.ArrayLength expr, Expr source) {
-        return INVOKE("Array#Length", source);
+        return INVOKE("Array#Length", Arrays.asList(source), ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructArrayGenerator(WyilFile.Expr.ArrayGenerator expr, Expr value, Expr length) {
         WyilFile.Type vt = expr.getFirstOperand().getType();
         WyilFile.Type lt = expr.getSecondOperand().getType();
-        return INVOKE("Array#Generator", box(vt, value), cast(WyilFile.Type.Int, lt, length));
+        return INVOKE("Array#Generator", Arrays.asList(box(vt, value), cast(WyilFile.Type.Int, lt, length)), ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructArrayInitialiser(WyilFile.Expr.ArrayInitialiser expr, List<Expr> values) {
         WyilFile.Type elementType = expr.getType().as(WyilFile.Type.Array.class).getElement();
-        Expr arr = INVOKE("Array#Empty", CONST(values.size()));
+        Expr arr = INVOKE("Array#Empty", Arrays.asList(CONST(values.size())), ATTRIBUTE(expr));
         //
         for (int i = 0; i != values.size(); ++i) {
             WyilFile.Type type = expr.getOperands().get(i).getType();
             Expr ith = box(type, values.get(i));
-            arr = PUT(arr, CONST(i), ith);
+            arr = PUT(arr, CONST(i), ith, ATTRIBUTE(expr));
         }
         //
         return arr;
@@ -1666,14 +1665,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Expr constructBitwiseComplement(WyilFile.Expr.BitwiseComplement expr, Expr operand) {
-        return INVOKE("Byte#Not", operand);
+        return INVOKE("Byte#Not", Arrays.asList(operand), ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructBitwiseAnd(WyilFile.Expr.BitwiseAnd expr, List<Expr> operands) {
         Expr e = operands.get(0);
         for (int i = 1; i != operands.size(); ++i) {
-            e = INVOKE("Byte#And", e, operands.get(i));
+            e = INVOKE("Byte#And", Arrays.asList(e, operands.get(i)), ATTRIBUTE(expr));
         }
         return e;
     }
@@ -1682,7 +1681,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     public Expr constructBitwiseOr(WyilFile.Expr.BitwiseOr expr, List<Expr> operands) {
         Expr e = operands.get(0);
         for (int i = 1; i != operands.size(); ++i) {
-            e = INVOKE("Byte#Or", e, operands.get(i));
+            e = INVOKE("Byte#Or", Arrays.asList(e, operands.get(i)), ATTRIBUTE(expr));
         }
         return e;
     }
@@ -1691,19 +1690,21 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     public Expr constructBitwiseXor(WyilFile.Expr.BitwiseXor expr, List<Expr> operands) {
         Expr e = operands.get(0);
         for (int i = 1; i != operands.size(); ++i) {
-            e = INVOKE("Byte#Xor", e, operands.get(i));
+            e = INVOKE("Byte#Xor", Arrays.asList(e, operands.get(i)), ATTRIBUTE(expr));
         }
         return e;
     }
 
     @Override
     public Expr constructBitwiseShiftLeft(WyilFile.Expr.BitwiseShiftLeft expr, Expr lhs, Expr rhs) {
-        return INVOKE("Byte#Shl", lhs, INVOKE("Byte#fromInt", rhs));
+        Expr cast = INVOKE("Byte#fromInt", Arrays.asList(rhs), ATTRIBUTE(expr));
+        return INVOKE("Byte#Shl", Arrays.asList(lhs, cast), ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructBitwiseShiftRight(WyilFile.Expr.BitwiseShiftRight expr, Expr lhs, Expr rhs) {
-        return INVOKE("Byte#Shr", lhs, INVOKE("Byte#fromInt", rhs));
+        Expr cast = INVOKE("Byte#fromInt", Arrays.asList(rhs), ATTRIBUTE(expr));
+        return INVOKE("Byte#Shr", Arrays.asList(lhs, cast), ATTRIBUTE(expr));
     }
 
     @Override
@@ -1726,28 +1727,28 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             case WyilFile.ITEM_bool: {
                 boolean b = ((WyilFile.Value.Bool) v).get();
                 source = WyilFile.Type.Bool;
-                result = CONST(b);
+                result = CONST(b, ATTRIBUTE(expr));
                 break;
             }
             case WyilFile.ITEM_byte: {
                 byte b = ((WyilFile.Value.Byte) v).get();
                 source = WyilFile.Type.Byte;
-                result = CONST(new byte[]{b});
+                result = CONST(new byte[]{b}, ATTRIBUTE(expr));
                 break;
             }
             case WyilFile.ITEM_int: {
                 BigInteger i = ((WyilFile.Value.Int) v).get();
                 source = WyilFile.Type.Int;
-                result = CONST(i);
+                result = CONST(i, ATTRIBUTE(expr));
                 break;
             }
             case WyilFile.ITEM_utf8: {
                 byte[] bytes = ((WyilFile.Value.UTF8) v).get();
-                result = INVOKE("Array#Empty", CONST(bytes.length));
+                result = INVOKE("Array#Empty", Arrays.asList(CONST(bytes.length, ATTRIBUTE(expr))), ATTRIBUTE(expr));
                 //
                 for (int i = 0; i != bytes.length; ++i) {
                     Expr ith = box(WyilFile.Type.Int, CONST(bytes[i]));
-                    result = PUT(result, CONST(i), ith);
+                    result = PUT(result, CONST(i), ith, ATTRIBUTE(expr));
                 }
                 source = WyilFile.Type.IntArray;
                 break;
@@ -1761,7 +1762,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Expr constructDereference(WyilFile.Expr.Dereference expr, Expr operand) {
-        return unbox(expr.getType(), GET(VAR(HEAP_VARNAME), operand));
+        return unbox(expr.getType(), GET(VAR(HEAP_VARNAME), operand, ATTRIBUTE(expr)));
     }
 
     @Override
@@ -1772,9 +1773,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Extract the source record type
         WyilFile.Type.Record recT = refT.getElement().as(WyilFile.Type.Record.class);
         // Reconstruct source expression
-        Expr deref = unbox(recT, GET(VAR(HEAP_VARNAME), operand));
+        Expr deref = unbox(recT, GET(VAR(HEAP_VARNAME), operand, ATTRIBUTE(expr)));
         //
-        return unbox(expr.getType(), GET(deref, field));
+        return unbox(expr.getType(), GET(deref, field, ATTRIBUTE(expr)));
     }
 
     @Override
@@ -1792,65 +1793,65 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 Expr r = rs.get(i);
                 l = boxing ? box(lhsT.dimension(i), l) : l;
                 r = boxing ? box(rhsT.dimension(i), r) : r;
-                result = i == 0 ? EQ(l, r) : AND(result, EQ(l, r));
+                result = i == 0 ? EQ(l, r, ATTRIBUTE(expr)) : AND(result, EQ(l, r), ATTRIBUTE(expr));
             }
             // Done
             return result;
         } else if (boxing) {
-            return EQ(box(lhsT, lhs), box(rhsT, rhs));
+            return EQ(box(lhsT, lhs), box(rhsT, rhs), ATTRIBUTE(expr));
         } else {
-            return EQ(lhs, rhs);
+            return EQ(lhs, rhs, ATTRIBUTE(expr));
         }
     }
 
     @Override
     public Expr constructIntegerLessThan(WyilFile.Expr.IntegerLessThan expr, Expr lhs, Expr rhs) {
-        return LT(lhs, rhs);
+        return LT(lhs, rhs, ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructIntegerLessThanOrEqual(WyilFile.Expr.IntegerLessThanOrEqual expr, Expr lhs, Expr rhs) {
-        return LTEQ(lhs, rhs);
+        return LTEQ(lhs, rhs, ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructIntegerGreaterThan(WyilFile.Expr.IntegerGreaterThan expr, Expr lhs, Expr rhs) {
-        return GT(lhs, rhs);
+        return GT(lhs, rhs, ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructIntegerGreaterThanOrEqual(WyilFile.Expr.IntegerGreaterThanOrEqual expr, Expr lhs, Expr rhs) {
-        return GTEQ(lhs, rhs);
+        return GTEQ(lhs, rhs, ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructIntegerNegation(WyilFile.Expr.IntegerNegation expr, Expr operand) {
-        return NEG(operand);
+        return NEG(operand, ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructIntegerAddition(WyilFile.Expr.IntegerAddition expr, Expr lhs, Expr rhs) {
-        return ADD(lhs, rhs);
+        return ADD(lhs, rhs, ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructIntegerSubtraction(WyilFile.Expr.IntegerSubtraction expr, Expr lhs, Expr rhs) {
-        return SUB(lhs, rhs);
+        return SUB(lhs, rhs, ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructIntegerMultiplication(WyilFile.Expr.IntegerMultiplication expr, Expr lhs, Expr rhs) {
-        return MUL(lhs, rhs);
+        return MUL(lhs, rhs, ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructIntegerDivision(WyilFile.Expr.IntegerDivision expr, Expr lhs, Expr rhs) {
-        return IDIV(lhs, rhs);
+        return IDIV(lhs, rhs, ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructIntegerRemainder(WyilFile.Expr.IntegerRemainder expr, Expr lhs, Expr rhs) {
-        return REM(lhs, rhs);
+        return REM(lhs, rhs, ATTRIBUTE(expr));
     }
 
     @Override
@@ -1864,27 +1865,27 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Expr constructLogicalAnd(WyilFile.Expr.LogicalAnd expr, List operands) {
-        return AND(operands);
+        return AND(operands, ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructLogicalImplication(WyilFile.Expr.LogicalImplication expr, Expr lhs, Expr rhs) {
-        return IMPLIES((Expr.Logical) lhs, (Expr.Logical) rhs);
+        return IMPLIES((Expr.Logical) lhs, (Expr.Logical) rhs, ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructLogicalIff(WyilFile.Expr.LogicalIff expr, Expr lhs, Expr rhs) {
-        return IFF((Expr.Logical) lhs, (Expr.Logical) rhs);
+        return IFF((Expr.Logical) lhs, (Expr.Logical) rhs, ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructLogicalNot(WyilFile.Expr.LogicalNot expr, Expr operand) {
-        return NOT((Expr.Logical) operand);
+        return NOT((Expr.Logical) operand, ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructLogicalOr(WyilFile.Expr.LogicalOr expr, List operands) {
-        return OR(operands);
+        return OR(operands, ATTRIBUTE(expr));
     }
 
     @Override
@@ -1901,7 +1902,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             clauses.add(LT(VAR(name), ith.second()));
         }
         clauses.add((Expr.Logical) body);
-        return EXISTS(ps, AND(clauses));
+        return EXISTS(ps, AND(clauses), ATTRIBUTE(expr));
     }
 
     @Override
@@ -1917,7 +1918,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             clauses.add(LTEQ(ith.first(), VAR(name)));
             clauses.add(LT(VAR(name), ith.second()));
         }
-        return FORALL(ps, IMPLIES(AND(clauses), (Expr.Logical) body));
+        return FORALL(ps, IMPLIES(AND(clauses), (Expr.Logical) body, ATTRIBUTE(expr)));
     }
 
     @Override
@@ -1956,11 +1957,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             arguments.addAll(0, templateArguments);
             //
             if (rt.shape() == 1) {
-                return cast(rt, ftrt, INVOKE(name, arguments));
+                return cast(rt, ftrt, INVOKE(name, arguments, ATTRIBUTE(expr)));
             } else {
                 List<Expr> items = new ArrayList<>();
                 for (int i = 0; i != rt.shape(); ++i) {
-                    items.add(cast(rt.dimension(i), ftrt.dimension(i), INVOKE(name + "#" + i, arguments)));
+                    items.add(cast(rt.dimension(i), ftrt.dimension(i), INVOKE(name + "#" + i, arguments, ATTRIBUTE(expr))));
                 }
                 return new FauxTuple(items);
             }
@@ -1972,14 +1973,16 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         WyilFile.Type.Callable type = expr.getSource().getType().as(WyilFile.Type.Callable.class);
         boolean method = (type instanceof WyilFile.Type.Method);
         if (method) {
-            return constructIndirectMethodInvoke(expr.getIndex(), expr.getType(), source, arguments);
+            return constructIndirectMethodInvoke(expr.getIndex(), expr, source, arguments);
         } else {
-            return constructIndirectFunctionInvoke((WyilFile.Type.Function) type, expr.getType(), source, arguments);
+            return constructIndirectFunctionInvoke(expr, source, arguments);
         }
     }
 
-    private Expr constructIndirectFunctionInvoke(WyilFile.Type.Function type, WyilFile.Type ret, Expr source,
+    private Expr constructIndirectFunctionInvoke(WyilFile.Expr.IndirectInvoke expr, Expr source,
                                                  List<Expr> arguments) {
+        WyilFile.Type.Function type = expr.getSource().getType().as(WyilFile.Type.Function.class);
+        WyilFile.Type ret = expr.getType();
         String base = "f_apply$";
         ArrayList<Expr> args = new ArrayList<>();
         args.add(CONST(0));
@@ -1988,28 +1991,29 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         args.addAll(box(type.getParameter(), arguments));
         // Unbox return since it's always boxed
         if (ret.shape() == 1) {
-            return unbox(ret, INVOKE(base + arguments.size(), args));
+            return unbox(ret, INVOKE(base + arguments.size(), args, ATTRIBUTE(expr)));
         } else {
             List<Expr> items = new ArrayList<>();
             for (int i = 0; i != ret.shape(); ++i) {
                 args.set(0, CONST(i));
                 items.add(unbox(ret.dimension(i), INVOKE(base + arguments.size(), args)));
             }
-            return new FauxTuple(items);
+            return new FauxTuple(items, ATTRIBUTE(expr));
         }
     }
 
-    private Expr constructIndirectMethodInvoke(int index, WyilFile.Type ret, Expr source, List<Expr> arguments) {
+    private Expr constructIndirectMethodInvoke(int index, WyilFile.Expr.IndirectInvoke expr, Expr source, List<Expr> arguments) {
+        WyilFile.Type ret = expr.getType();
         // This is a side-effecting method invocation which would have been translated
         // previously.
         if (ret.shape() == 1) {
-            return unbox(ret, VAR("m#" + index));
+            return unbox(ret, VAR("m#" + index, ATTRIBUTE(expr)));
         } else {
             List<Expr> items = new ArrayList<>();
             for (int i = 0; i != ret.shape(); ++i) {
                 items.add(unbox(ret.dimension(i), VAR("m#" + index + "#" + i)));
             }
-            return new FauxTuple(items);
+            return new FauxTuple(items, ATTRIBUTE(expr));
         }
     }
 
@@ -2019,12 +2023,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Determine the mangled name for the function in question
         String name = toMangledName(c);
         // Read out its "lambda" value
-        return VAR(name + "#lambda");
+        return VAR(name + "#lambda", ATTRIBUTE(expr));
     }
 
     @Override
     public Expr constructNew(WyilFile.Expr.New expr, Expr operand) {
-        return VAR("l#" + expr.getIndex());
+        return VAR("l#" + expr.getIndex(), ATTRIBUTE(expr));
     }
 
     @Override
@@ -2042,21 +2046,21 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 Expr r = rs.get(i);
                 l = boxing ? box(lhsT.dimension(i), l) : l;
                 r = boxing ? box(rhsT.dimension(i), r) : r;
-                result = i == 0 ? NEQ(l, r) : OR(result, NEQ(l, r));
+                result = i == 0 ? NEQ(l, r, ATTRIBUTE(expr)) : OR(result, NEQ(l, r), ATTRIBUTE(expr));
             }
             // Done
             return result;
         } else if (boxing) {
-            return NEQ(box(lhsT, lhs), box(rhsT, rhs));
+            return NEQ(box(lhsT, lhs), box(rhsT, rhs), ATTRIBUTE(expr));
         } else {
-            return NEQ(lhs, rhs);
+            return NEQ(lhs, rhs, ATTRIBUTE(expr));
         }
     }
 
     @Override
     public Expr constructRecordAccess(WyilFile.Expr.RecordAccess expr, Expr source) {
         Expr field = VAR("$" + expr.getField().get());
-        return unbox(expr.getType(), GET(source, field));
+        return unbox(expr.getType(), GET(source, field, ATTRIBUTE(expr)));
     }
 
     @Override
@@ -2069,7 +2073,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         for (int i = 0; i != operands.size(); ++i) {
             Expr ith = box(values.get(i).getType(), operands.get(i));
             String field = "$" + fields.get(i).get();
-            rec = PUT(rec, VAR(field), ith);
+            rec = PUT(rec, VAR(field), ith, ATTRIBUTE(expr));
         }
         //
         return rec;
@@ -2080,7 +2084,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Cast operands
         operands = cast(expr.getType(),expr.getOperands(),operands);
         // NOTE: at this stage, we won't attempt to support general first-class tuples.
-        return new FauxTuple(operands);
+        return new FauxTuple(operands, ATTRIBUTE(expr));
     }
 
     @Override
@@ -2090,7 +2094,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Apply name mangling
         String name = toMangledName(expr.getLink().getTarget());
         // Done
-        return cast(actual, declared, VAR(name));
+        return cast(actual, declared, VAR(name, ATTRIBUTE(expr)));
     }
 
     @Override
@@ -2100,7 +2104,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Determine mangled name of this variable
         String name = toVariableName(expr.getVariableDeclaration());
         //
-        return cast(actual, declared, VAR(name));
+        return cast(actual, declared, VAR(name, ATTRIBUTE(expr)));
     }
 
     // =========================================================================================
@@ -2171,7 +2175,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     List<Stmt.Assert> ith = operands.get(i);
                     // Construct inference window
                     Expr.Logical w = AND(window.subList(0,i));
-                    rs.addAll(map(ith,s -> new Stmt.Assert(IMPLIES(w,s.getCondition()),s.getSyntacticItem(),s.getErrorCode())));
+                    // Map over existing operands
+                    rs.addAll(map(ith,s -> {
+                        SyntacticItem item = s.getAttribute(SyntacticItem.class);
+                        Integer errcode = s.getAttribute(Integer.class);
+                        return ASSERT(IMPLIES(w,s.getCondition()),ATTRIBUTE(item),ATTRIBUTE(errcode));
+                    }));
                 }
                 return rs;
             }
@@ -2187,7 +2196,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     // Construct inference window
                     Expr.Logical w = OR(window.subList(0,i));
                     // Map over existing operands
-                    rs.addAll(map(ith,s -> new Stmt.Assert(OR(w,s.getCondition()),s.getSyntacticItem(),s.getErrorCode())));
+                    rs.addAll(map(ith,s -> {
+                        SyntacticItem item = s.getAttribute(SyntacticItem.class);
+                        Integer errcode = s.getAttribute(Integer.class);
+                        return ASSERT(OR(w,s.getCondition()),ATTRIBUTE(item),ATTRIBUTE(errcode));
+                    }));
                 }
                 return rs;
             }
@@ -2195,7 +2208,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             @Override
             public List<Stmt.Assert> constructLogicalImplication(WyilFile.Expr.LogicalImplication expr, List<Stmt.Assert> left, List<Stmt.Assert> right) {
                 Expr.Logical w = (Expr.Logical) BoogieCompiler.this.visitExpression(expr.getFirstOperand());
-                List<Stmt.Assert> nright = map(right, s -> new Stmt.Assert(IMPLIES(w, s.getCondition()), s.getSyntacticItem(), s.getErrorCode()));
+                // Map over existing operands
+                List<Stmt.Assert> nright = map(right, s -> {
+                    SyntacticItem item = s.getAttribute(SyntacticItem.class);
+                    Integer errcode = s.getAttribute(Integer.class);
+                    return ASSERT(IMPLIES(w, s.getCondition()),ATTRIBUTE(item),ATTRIBUTE(errcode));
+                });
                 return append(left, nright);
             }
 
@@ -2223,7 +2241,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     clauses.add(LT(VAR(name), end));
                 }
                 List<Stmt.Assert> lhs = flattern(operands, l -> l);
-                List<Stmt.Assert> rhs = map(body, s -> new Stmt.Assert(FORALL(ps, IMPLIES(AND(clauses), s.getCondition())), s.getSyntacticItem(), s.getErrorCode()));
+                List<Stmt.Assert> rhs = map(body, s -> {
+                    SyntacticItem item = s.getAttribute(SyntacticItem.class);
+                    Integer errcode = s.getAttribute(Integer.class);
+                    return ASSERT(FORALL(ps, IMPLIES(AND(clauses), s.getCondition())), ATTRIBUTE(item), ATTRIBUTE(errcode));
+                });
                 return append(lhs, rhs);
             }
 
@@ -2233,9 +2255,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 Expr src = BoogieCompiler.this.visitExpression(expr.getFirstOperand());
                 Expr i = BoogieCompiler.this.visitExpression(expr.getSecondOperand());
                 // Add check that index is not negative
-                result.add(new Stmt.Assert(LTEQ(CONST(0), i),expr.getSecondOperand(),WyilFile.STATIC_BELOWBOUNDS_INDEX_FAILURE));
+                result.add(ASSERT(LTEQ(CONST(0), i), ATTRIBUTE(expr.getSecondOperand()), ATTRIBUTE(WyilFile.STATIC_BELOWBOUNDS_INDEX_FAILURE)));
                 // Add check that index below length
-                result.add(new Stmt.Assert(LT(i, INVOKE("Array#Length", src)),expr.getSecondOperand(),WyilFile.STATIC_ABOVEBOUNDS_INDEX_FAILURE));
+                result.add(ASSERT(LT(i, INVOKE("Array#Length", src)), ATTRIBUTE(expr.getSecondOperand()), ATTRIBUTE(WyilFile.STATIC_ABOVEBOUNDS_INDEX_FAILURE)));
                 // Done
                 return result;
             }
@@ -2246,7 +2268,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 // Translate right-hand side so can compare against 0
                 Expr r = BoogieCompiler.this.visitExpression(expr.getSecondOperand());
                 // Add length check
-                result.add(new Stmt.Assert(LTEQ(CONST(0), r),expr.getSecondOperand(),WyilFile.STATIC_NEGATIVE_LENGTH_FAILURE));
+                result.add(ASSERT(LTEQ(CONST(0), r), ATTRIBUTE(expr.getSecondOperand()), ATTRIBUTE(WyilFile.STATIC_NEGATIVE_LENGTH_FAILURE)));
                 // Done
                 return result;
             }
@@ -2257,7 +2279,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 // Translate right-hand side so can compare against 0
                 Expr r = BoogieCompiler.this.visitExpression(expr.getSecondOperand());
                 // Add check that rhs is non-zero
-                result.add(new Stmt.Assert(NEQ(r, CONST(0)),expr.getSecondOperand(),WyilFile.STATIC_DIVIDEBYZERO_FAILURE));
+                result.add(ASSERT(NEQ(r, CONST(0)),ATTRIBUTE(expr.getSecondOperand()),ATTRIBUTE(WyilFile.STATIC_DIVIDEBYZERO_FAILURE)));
                 // Done
                 return result;
             }
@@ -2268,7 +2290,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 // Translate right-hand side so can compare against 0
                 Expr r = BoogieCompiler.this.visitExpression(expr.getSecondOperand());
                 // Add check that rhs is non-zero
-                result.add(new Stmt.Assert(NEQ(r, CONST(0)),expr.getSecondOperand(),WyilFile.STATIC_DIVIDEBYZERO_FAILURE));
+                result.add(ASSERT(NEQ(r, CONST(0)),ATTRIBUTE(expr.getSecondOperand()),ATTRIBUTE(WyilFile.STATIC_DIVIDEBYZERO_FAILURE)));
                 // Done
                 return result;
             }
@@ -2283,7 +2305,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 // Construct type invariant test
                 Expr.Logical test = constructTypeTest(expr.getType(), expr.getOperand().getType(), src, pure ? null : HEAP_VARNAME);
                 // Add check that source matches type invariant
-                result.add(new Stmt.Assert(test,expr.getOperand(),WyilFile.STATIC_TYPEINVARIANT_FAILURE));
+                result.add(ASSERT(test,ATTRIBUTE(expr.getOperand()),ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
                 // Done
                 return result;
             }
@@ -2308,7 +2330,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                         args.add(i,constructMetaType(binding.get(i), HEAP_VARNAME));
                     }
                     // Append the invocation
-                    result.add(new Stmt.Assert(INVOKE(name + "#pre", args),expr,WyilFile.STATIC_PRECONDITION_FAILURE));
+                    result.add(ASSERT(INVOKE(name + "#pre", args), ATTRIBUTE(expr), ATTRIBUTE(WyilFile.STATIC_PRECONDITION_FAILURE)));
                 }
                 return result;
             }
@@ -2325,7 +2347,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     String heap = WyilUtils.isPure(target) ? null : HEAP_VARNAME;
                     Expr arg = BoogieCompiler.this.visitExpression(ith);
                     Expr.Logical test = constructTypeTest(target,ith.getType(),arg,heap);
-                    result.add(new Stmt.Assert(test,ith,WyilFile.STATIC_TYPEINVARIANT_FAILURE));
+                    result.add(ASSERT(test, ATTRIBUTE(ith), ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
                 }
                 return result;
             }
@@ -3091,8 +3113,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         Expr.Logical[] outclauses = new Expr.Logical[fields.size()];
         // Cast argument to correct (unboxed) type
         Expr nArgument = cast(to, from, argument);
-        // Construct type test (when necessary)
-        Expr.Logical test = argument != nArgument ? INVOKE("Record#is", argument) : Expr.Boolean.TRUE;
         // Iterate fields constructing tests for each.
         for (int i = 0; i != inclauses.length; ++i) {
             WyilFile.Type.Field f = fields.get(i);
@@ -3100,7 +3120,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             inclauses[i] = constructTypeTest(f.getType(), WyilFile.Type.Any, GET(nArgument, VAR(field)), heap);
             outclauses[i] = NEQ(VAR(field),v);
         }
-        Expr.Logical inbound = AND(test,AND(inclauses));
+        // Combine indivudal cases
+        Expr.Logical test = AND(inclauses);
+        // Construct type test (when necessary)
+        Expr.Logical inbound = argument != nArgument ? AND(INVOKE("Record#is", argument), test) : test;
         Expr.Logical outbound = FORALL(v.getVariable(), FIELD, IMPLIES(AND(outclauses), EQ(GET(nArgument, v), VAR("Void"))));
         // Finally, apply outbounds to closed records only since these are the ones whose fields we actually know about.
         return to.isOpen() ?  inbound : AND(inbound, outbound);
@@ -3133,8 +3156,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         Expr.VariableAccess i = VAR(TEMP("i"));
         // Cast argument to (unboxed) array type
         Expr nArgument = cast(to, from, argument);
-        // Construct type test (when necessary)
-        Expr.Logical test = argument != nArgument ? INVOKE("Array#is", argument) : Expr.Boolean.TRUE;
+
         // Construct bounds check for index variable
         Expr.Logical inbounds = AND(LTEQ(CONST(0), i), LT(i, INVOKE("Array#Length", nArgument)));
         // Construct (out of) bounds check for index variable
@@ -3143,20 +3165,22 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         Expr.Logical valid = constructTypeTest(to.getElement(), WyilFile.Type.Any, GET(nArgument, i), heap);
         // Elements outside range equal void
         Expr.Logical invalid = EQ(GET(nArgument,i),VAR("Void"));
-        // Done
-        return AND(test, FORALL(i.getVariable(), Type.Int, AND(IMPLIES(inbounds, valid), IMPLIES(outbounds, invalid))));
+        // Construct concrete test
+        Expr.Logical test = FORALL(i.getVariable(), Type.Int, AND(IMPLIES(inbounds, valid), IMPLIES(outbounds, invalid)));
+        // Construct type test (when necessary)
+        return argument != nArgument ? AND(INVOKE("Array#is", argument), test) : test;
     }
 
     private Expr.Logical constructReferenceTypeTest(WyilFile.Type.Reference to, WyilFile.Type from, Expr argument, String heap) {
         heap = (heap == null) ? "Ref#Empty" : heap;
         // Cast argument to (unboxed) reference type
         Expr nArgument = cast(to, from, argument);
-        // Construct type test (when necessary)
-        Expr.Logical test = argument != nArgument ? INVOKE("Ref#is", argument) : Expr.Boolean.TRUE;
         // Dereference argument
         Expr deref = GET(VAR(heap), nArgument);
-        // Done
-        return AND(test,constructTypeTest(to.getElement(), WyilFile.Type.Any, deref, heap));
+        // Construct element type test
+        Expr.Logical test = constructTypeTest(to.getElement(), WyilFile.Type.Any, deref, heap);
+        // Construct type test (when necessary)
+        return argument != nArgument ? AND(INVOKE("Ref#is", argument), test) : test;
     }
 
     /**
@@ -3195,16 +3219,16 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         WyilFile.Type ret = to.getReturn();
         // Ensure lambda argument unboxed
         Expr nArgument = cast(to,from,argument);
-        // Construct type test (when necessary)
-        Expr.Logical test = argument != nArgument ? INVOKE("Lambda#is", argument) : Expr.Boolean.TRUE;
         // Construct one clause for each return value
         Expr.Logical[] clauses = new Expr.Logical[ret.shape()];
         for (int i = 0; i != clauses.length; ++i) {
             WyilFile.Type ith = ret.dimension(i);
             clauses[i] = constructTypeTest(ith, WyilFile.Type.Any, INVOKE("Lambda#return", nArgument, CONST(i)), heap);
         }
-        // Done
-        return AND(test, AND(clauses));
+        // Combine individual tests
+        Expr.Logical test = AND(clauses);
+        // Construct type test (when necessary)
+        return argument != nArgument ? AND(INVOKE("Lambda#is", argument), test) : test;
     }
 
     // ==============================================================================
@@ -3392,7 +3416,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 return i.getArguments().get(0);
             }
         }
-        return INVOKE(to, e);
+        // NOTE: we need to pass through the attributes from the expression coerced, otherwise there will be problems with error reporting.
+        return INVOKE(to, e, e.getAttributes());
     }
 
     // ==============================================================================
@@ -3663,11 +3688,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      *
      * @author David J. Pearce
      */
-    private static class FauxTuple implements BoogieFile.Expr {
+    private static class FauxTuple extends BoogieFile.AbstractItem implements BoogieFile.Expr {
         private final List<Expr> items;
 
-        public FauxTuple(List<Expr> items) {
-            this.items = items;
+        public FauxTuple(List<Expr> items, Attribute... attributes) {
+            super(attributes); this.items = items;
         }
 
         public List<Expr> getItems() {

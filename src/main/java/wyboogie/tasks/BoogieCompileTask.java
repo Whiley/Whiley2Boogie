@@ -23,6 +23,9 @@ import wyboogie.core.BoogieFile;
 import wyboogie.util.Boogie;
 import wybs.lang.Build;
 import wybs.lang.Build.Meter;
+import wybs.lang.SyntacticException;
+import wybs.lang.SyntacticHeap;
+import wybs.lang.SyntacticItem;
 import wybs.util.AbstractBuildTask;
 import wyc.util.ErrorMessages;
 import wyfs.lang.Path;
@@ -109,31 +112,36 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 				if(ith instanceof Boogie.Error) {
 					Boogie.Error err = (Boogie.Error) ith;
 					BoogieFile.Item item = err.getEnclosingItem();
+					// Attempt to extract corresponding syntactic item (if any)
+					SyntacticItem wyItem = item.getAttribute(SyntacticItem.class);
+					// Attempt to extract error code (if any)
+					Integer errcode = item.getAttribute(Integer.class);
 					switch(err.getCode()) {
 						case Boogie.ERROR_ASSERTION_FAILURE: {
 							BoogieFile.Stmt.Assert stmt = (BoogieFile.Stmt.Assert) item;
 							// NOTE: since a lot of Whiley failures are encoded as Boogie asserts, we must decode the exact kind of failure.
-							ErrorMessages.syntaxError(stmt.getSyntacticItem(),stmt.getErrorCode());
+							ErrorMessages.syntaxError(wyItem,errcode);
+							break;
 						}
 						case Boogie.ERROR_PRECONDITION_FAILURE: {
-							BoogieFile.Stmt.Invariant stmt = (BoogieFile.Stmt.Invariant) item;
-							ErrorMessages.syntaxError(stmt.getSyntacticItem(), WyilFile.STATIC_PRECONDITION_FAILURE);
+							ErrorMessages.syntaxError(wyItem, WyilFile.STATIC_PRECONDITION_FAILURE);
 							break;
 						}
 						case Boogie.ERROR_POSTCONDITION_FAILURE: {
-							BoogieFile.Stmt.Invariant stmt = (BoogieFile.Stmt.Invariant) item;
-							ErrorMessages.syntaxError(stmt.getSyntacticItem(), WyilFile.STATIC_POSTCONDITION_FAILURE);
+							ErrorMessages.syntaxError(wyItem, WyilFile.STATIC_POSTCONDITION_FAILURE);
 							break;
 						}
 						case Boogie.ERROR_ESTABLISH_LOOP_INVARIANT_FAILURE: {
-							BoogieFile.Stmt.Invariant stmt = (BoogieFile.Stmt.Invariant) item;
-							ErrorMessages.syntaxError(stmt.getSyntacticItem(), WyilFile.STATIC_ENTER_LOOPINVARIANT_FAILURE);
+							ErrorMessages.syntaxError(wyItem, WyilFile.STATIC_ENTER_LOOPINVARIANT_FAILURE);
 							break;
 						}
 						case Boogie.ERROR_RESTORE_LOOP_INVARIANT_FAILURE: {
-							BoogieFile.Stmt.Invariant stmt = (BoogieFile.Stmt.Invariant) item;
-							ErrorMessages.syntaxError(stmt.getSyntacticItem(), WyilFile.STATIC_RESTORE_LOOPINVARIANT_FAILURE);
+							ErrorMessages.syntaxError(wyItem, WyilFile.STATIC_RESTORE_LOOPINVARIANT_FAILURE);
 							break;
+						}
+						default: {
+							// Fall back
+							throw new SyntacticException(err.toString(), source.getEntry(), wyItem);
 						}
 					}
 				}

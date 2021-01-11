@@ -247,10 +247,13 @@ public class Boogie {
 				if (a >= 0 && b >= 0 && c >= 0 && d >= 0 && e >= 0 && f >= 0) {
 					int line = Integer.parseInt(ith.substring(a + 1, b));
 					int col = Integer.parseInt(ith.substring(b + 1, c));
-					int errcode = Integer.parseInt(ith.substring(e + 8, f));
+					int errcode = 0;
+					// Check whether is an error code to parse
+					if(e+8 < f) {
+						errcode = Integer.parseInt(ith.substring(e + 8, f));
+					}
 					String message = ith.substring(f + 1);
-					BoogieFile.Item item = m.get(line,col);
-
+					BoogieFile.Item item = m.get(line, col);
 					errors[i] = new Error(line, col, errcode, message, item);
 				}
 			}

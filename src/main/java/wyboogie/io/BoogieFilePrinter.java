@@ -120,16 +120,16 @@ public class BoogieFilePrinter {
 	}
 
 	private void writeFunction(int indent, Decl.Function d) {
-		List<String> attributes = d.getAttributes();
+		List<String> modifiers = d.getModifiers();
 		out.tab(indent);
 		out.print("function ",d);
-		if(!attributes.isEmpty()) {
+		if(!modifiers.isEmpty()) {
 			out.print("{",d);
-			for(int i=0;i!=attributes.size();++i) {
+			for(int i=0;i!=modifiers.size();++i) {
 				if(i != 0) {
 					out.print(" ",d);
 				}
-				out.print(attributes.get(i),d);
+				out.print(modifiers.get(i),d);
 			}
 			out.print("} ",d);
 		}
@@ -169,13 +169,21 @@ public class BoogieFilePrinter {
 		} else {
 			out.println();
 		}
-		List<Stmt.Invariant> requires = d.getRequires();
-		List<Stmt.Invariant> ensures = d.getEnsures();
+		List<Expr.Logical> requires = d.getRequires();
+		List<Expr.Logical> ensures = d.getEnsures();
 		for(int i=0;i!=requires.size();++i) {
-			writeInvariant(indent,"requires", requires.get(i));
-		}
+			Expr.Logical ith = requires.get(i);
+			out.tab(indent);
+			out.print("requires ", ith);
+			writeExpression(ith);
+			out.println(";", ith);
+		};;;
 		for(int i=0;i!=ensures.size();++i) {
-			writeInvariant(indent,"ensures", requires.get(i));
+			Expr.Logical ith = ensures.get(i);
+			out.tab(indent);
+			out.print("ensures ", ith);
+			writeExpression(ith);
+			out.println(";", ith);
 		}
 		List<String> modifies = d.getModifies();
 		if(modifies.size() > 0) {
@@ -361,19 +369,17 @@ public class BoogieFilePrinter {
 		out.print("while(",s);
 		writeExpression(s.getCondition());
 		out.println(")",s);
-		List<Stmt.Invariant> invariant = s.getInvariant();
-		for(int i=0;i!=invariant.size();++i) {
-			writeInvariant(indent, "invariant", invariant.get(i));
+		List<Expr.Logical> invariant = s.getInvariant();
+		for (int i = 0; i != invariant.size(); ++i) {
+			Expr.Logical ith = invariant.get(i);
+			out.tab(indent);
+			out.print("invariant ", ith);
+			writeExpression(ith);
+			out.println(";", ith);
 		}
 		out.tab(indent);out.println("{",s);
 		writeStmt(indent + 1, s.getBody());
 		out.tab(indent);out.println("}",s);
-	}
-	private void writeInvariant(int indent, String txt, Stmt.Invariant s) {
-		out.tab(indent);
-		out.print(txt,s);
-		writeExpression(s.getCondition());
-		out.println(";",s);
 	}
 	private void writeExpressionWithBraces(Expr e) {
 		if (e instanceof Expr.UnaryOperator || e instanceof Expr.BinaryOperator || e instanceof Expr.NaryOperator) {
