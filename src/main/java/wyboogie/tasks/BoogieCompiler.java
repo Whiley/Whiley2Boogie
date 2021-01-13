@@ -1297,9 +1297,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 }
             }
             // Apply conversions to arguments as necessary
-            System.out.println(">> BOXING PARAMS");
             args = box(ft.getParameter(), args);
-            System.out.println("<< BOXING PARAMS");
             // Chain through heap variable
             args.add(0, VAR(HEAP_VARNAME));
             // Add method pointer
