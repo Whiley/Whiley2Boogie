@@ -13,7 +13,6 @@
 // limitations under the License.
 package wyboogie.core;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -80,17 +79,54 @@ public class BoogieFile {
 		return declarations;
 	}
 
-	public byte[] getBytes() {
-		ByteArrayOutputStream output = new ByteArrayOutputStream();
-		new BoogieFilePrinter(output).write(this);
-		return output.toByteArray();
+	// =========================================================================
+	// Top-Level Item
+	// =========================================================================
+
+	public interface Item {
+		/**
+		 * Get a particular attribute associated with this item.
+		 * @param kind
+		 * @param <T>
+		 * @return
+		 */
+		public <T> T getAttribute(Class<T> kind);
+
+		/**
+		 * Get all attributes within this item.
+		 * @return
+		 */
+		public Attribute[] getAttributes();
+	}
+
+	public static class AbstractItem implements Item {
+		private final Attribute[] attributes;
+
+		public AbstractItem(Attribute[] attributes) {
+			this.attributes = attributes;
+		}
+
+		@Override
+		public <T> T getAttribute(Class<T> kind) {
+			for(int i=0;i!=attributes.length;++i) {
+				T ith = attributes[i].as(kind);
+				if(ith != null) {
+					return ith;
+				}
+			}
+			return null;
+		}
+
+		public Attribute[] getAttributes() {
+			return attributes;
+		}
 	}
 
 	// =========================================================================
 	// Declarations
 	// =========================================================================
 
-	public interface Decl {
+	public interface Decl extends Item {
 
 		/**
 		 * <p>
@@ -116,10 +152,11 @@ public class BoogieFile {
 		 * @author David J. Pearce
 		 *
 		 */
-		public static class Axiom implements Decl {
+		public static class Axiom extends AbstractItem implements Decl {
 			private final Expr operand;
 
-			public Axiom(Expr operand) {
+			public Axiom(Expr operand, Attribute... attributes) {
+				super(attributes);
 				this.operand = operand;
 			}
 
@@ -136,10 +173,11 @@ public class BoogieFile {
 		 * @author David J. Pearce
 		 *
 		 */
-		public static class LineComment implements Decl {
+		public static class LineComment extends AbstractItem implements Decl {
 			private final String message;
 
-			public LineComment(String message) {
+			public LineComment(String message, Attribute... attributes) {
+				super(attributes);
 				this.message = message;
 			}
 
@@ -180,8 +218,8 @@ public class BoogieFile {
 			 * @param name Name of constant.
 			 * @param type Type of constant.
 			 */
-			public Constant(String name, Type type) {
-				super(name, type);
+			public Constant(String name, Type type, Attribute... attributes) {
+				super(name, type, attributes);
 				this.unique = false;
 			}
 
@@ -192,8 +230,8 @@ public class BoogieFile {
 			 * @param name   Name of constant.
 			 * @param type   Type of constant.
 			 */
-			public Constant(boolean unique, String name, Type type) {
-				super(name, type);
+			public Constant(boolean unique, String name, Type type, Attribute... attributes) {
+				super(name, type, attributes);
 				this.unique = unique;
 			}
 
@@ -207,15 +245,16 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Function implements Decl {
+		public static class Function extends AbstractItem implements Decl {
 			private final String name;
-			private final List<String> attributes;
+			private final List<String> modifiers;
 			private final List<Parameter> parameters;
 			private final Type returns;
 			private final Expr body;
 
-			public Function(List<String> attributes, String name, List<Parameter> parameters, Type returns, Expr body) {
-				this.attributes = new ArrayList<>(attributes);
+			public Function(List<String> modifiers, String name, List<Parameter> parameters, Type returns, Expr body, Attribute... attributes) {
+				super(attributes);
+				this.modifiers = new ArrayList<>(modifiers);
 				this.name = name;
 				this.parameters = new ArrayList<>(parameters);
 				this.returns = returns;
@@ -226,8 +265,8 @@ public class BoogieFile {
 				return name;
 			}
 
-			public List<String> getAttributes() {
-				return attributes;
+			public List<String> getModifiers() {
+				return modifiers;
 			}
 
 			public List<Parameter> getParmeters() {
@@ -243,7 +282,7 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Procedure implements Decl {
+		public static class Procedure extends AbstractItem implements Decl {
 			private final String name;
 			private final List<Parameter> parameters;
 			private final List<Parameter> returns;
@@ -254,12 +293,13 @@ public class BoogieFile {
 			private final Stmt body;
 
 			public Procedure(String name, List<Parameter> parameters, List<Parameter> returns, List<Expr.Logical> requires,
-					List<Expr.Logical> ensures, List<String> modifies) {
-				this(name, parameters, returns, requires, ensures, Collections.EMPTY_LIST, modifies, null);
+					List<Expr.Logical> ensures, List<String> modifies, Attribute... attributes) {
+				this(name, parameters, returns, requires, ensures, Collections.EMPTY_LIST, modifies, null, attributes);
 			}
 
 			public Procedure(String name, List<Parameter> parameters, List<Parameter> returns, List<Expr.Logical> requires,
-					List<Expr.Logical> ensures, List<Decl.Variable> locals, List<String> modifies, Stmt body) {
+					List<Expr.Logical> ensures, List<Decl.Variable> locals, List<String> modifies, Stmt body, Attribute... attributes) {
+				super(attributes);
 				if (body == null && locals.size() > 0) {
 					throw new IllegalArgumentException("Cannot specify local variables for procedure prototype");
 				}
@@ -313,7 +353,7 @@ public class BoogieFile {
 		 * @author djp
 		 *
 		 */
-		public static class Implementation implements Decl {
+		public static class Implementation extends AbstractItem implements Decl {
 			private final String name;
 			private final List<Parameter> parameters;
 			private final List<Parameter> returns;
@@ -321,7 +361,8 @@ public class BoogieFile {
 			private final Stmt body;
 
 			public Implementation(String name, List<Parameter> parameters, List<Parameter> returns,
-					List<Decl.Variable> locals, Stmt body) {
+					List<Decl.Variable> locals, Stmt body, Attribute... attributes) {
+				super(attributes);
 				this.name = name;
 				this.parameters = new ArrayList<>(parameters);
 				this.returns = new ArrayList<>(returns);
@@ -350,11 +391,12 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Parameter {
+		public static class Parameter extends AbstractItem implements Item {
 			private final String name;
 			private final Type type;
 
-			public Parameter(String name, Type type) {
+			public Parameter(String name, Type type, Attribute... attributes) {
+				super(attributes);
 				this.name = name;
 				this.type = type;
 			}
@@ -368,14 +410,15 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Sequence implements Decl {
+		public static class Sequence extends AbstractItem implements Decl {
 			private final List<Decl> decls;
 
 			public Sequence(Decl... decls) {
 				this(Arrays.asList(decls));
 			}
 
-			public Sequence(Collection<Decl> decls) {
+			public Sequence(Collection<Decl> decls, Attribute... attributes) {
+				super(attributes);
 				this.decls = new ArrayList<>(decls);
 			}
 
@@ -400,11 +443,12 @@ public class BoogieFile {
 		 * @author djp
 		 *
 		 */
-		public static class TypeSynonym implements Decl {
+		public static class TypeSynonym extends AbstractItem implements Decl {
 			private final String name;
 			private final Type synonym;
 
-			public TypeSynonym(String name, Type synonym) {
+			public TypeSynonym(String name, Type synonym, Attribute... attributes) {
+				super(attributes);
 				this.name = name;
 				this.synonym = synonym;
 			}
@@ -425,8 +469,8 @@ public class BoogieFile {
 				this(name, type, null);
 			}
 
-			public Variable(String name, Type type, Expr initialiser) {
-				super(name, type);
+			public Variable(String name, Type type, Expr initialiser, Attribute... attributes) {
+				super(name, type, attributes);
 				this.invariant = initialiser;
 			}
 
@@ -440,12 +484,13 @@ public class BoogieFile {
 	// Statements
 	// =========================================================================
 
-	public interface Stmt {
+	public interface Stmt extends Item {
 
-		public static class Assert implements Stmt {
+		public static class Assert extends AbstractItem implements Stmt {
 			private final Expr.Logical condition;
 
-			public Assert(Expr.Logical condition) {
+			private Assert(Expr.Logical condition, Attribute[] attributes) {
+				super(attributes);
 				this.condition = condition;
 			}
 
@@ -454,10 +499,11 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Assume implements Stmt {
+		public static class Assume extends AbstractItem implements Stmt {
 			private final Expr.Logical condition;
 
-			public Assume(Expr.Logical condition) {
+			private Assume(Expr.Logical condition, Attribute[] attributes) {
+				super(attributes);
 				this.condition = condition;
 			}
 
@@ -466,11 +512,12 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Assignment implements Stmt {
+		public static class Assignment extends AbstractItem implements Stmt {
 			private final LVal lhs;
 			private final Expr rhs;
 
-			public Assignment(LVal lhs, Expr rhs) {
+			private Assignment(LVal lhs, Expr rhs, Attribute[] attributes) {
+				super(attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
 			}
@@ -484,12 +531,13 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Call implements Stmt {
+		public static class Call extends AbstractItem implements Stmt {
 			private final String name;
 			private final List<LVal> lvals;
 			private final List<Expr> arguments;
 
-			public Call(String name, List<LVal> lvals, Collection<Expr> arguments) {
+			private Call(String name, List<LVal> lvals, Collection<Expr> arguments, Attribute[] attributes) {
+				super(attributes);
 				this.name = name;
 				this.lvals = lvals;
 				this.arguments = new ArrayList<>(arguments);
@@ -508,11 +556,11 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Goto implements Stmt {
+		public static class Goto extends AbstractItem implements Stmt {
 			private final List<String> labels;
 
-			public Goto(Collection<String> labels) {
-				this.labels = new ArrayList<>(labels);
+			private Goto(Collection<String> labels, Attribute[] attributes) {
+				super(attributes);this.labels = new ArrayList<>(labels);
 			}
 
 			public int size() {
@@ -528,11 +576,11 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Label implements Stmt {
+		public static class Label extends AbstractItem implements Stmt {
 			private final String label;
 
-			public Label(String label) {
-				this.label = label;
+			private Label(String label, Attribute[] attributes) {
+				super(attributes);this.label = label;
 			}
 
 			public String getLabel() {
@@ -540,12 +588,13 @@ public class BoogieFile {
 			}
 		}
 
-		public static class IfElse implements Stmt {
+		public static class IfElse extends AbstractItem implements Stmt {
 			private final Expr condition;
 			private final Stmt trueBranch;
 			private final Stmt falseBranch;
 
-			public IfElse(Expr condition, Stmt trueBranch, Stmt falseBranch) {
+			private IfElse(Expr condition, Stmt trueBranch, Stmt falseBranch, Attribute... attributes) {
+				super(attributes);
 				this.condition = condition;
 				this.trueBranch = trueBranch;
 				this.falseBranch = falseBranch;
@@ -564,12 +613,13 @@ public class BoogieFile {
 			}
 		}
 
-		public static class While implements Stmt {
+		public static class While extends AbstractItem implements Stmt {
 			private final Expr condition;
 			private final List<Expr.Logical> invariant;
 			private final Stmt body;
 
-			public While(Expr condition, List<Expr.Logical> invariant, Stmt body) {
+			private While(Expr condition, List<Expr.Logical> invariant, Stmt body, Attribute... attributes) {
+				super(attributes);
 				this.condition = condition;
 				this.invariant = new ArrayList<>(invariant);
 				this.body = body;
@@ -588,18 +638,21 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Return implements Stmt {
-
+		public static class Return extends AbstractItem implements Stmt {
+			private Return(Attribute... attributes) {
+				super(attributes);
+			}
 		}
 
-		public static class Sequence implements Stmt {
+		public static class Sequence extends AbstractItem implements Stmt {
 			private final List<Stmt> stmts;
 
-			private Sequence(Collection<Stmt> stmts) {
-				this.stmts = new ArrayList<>(stmts);
+			private Sequence(Collection<Stmt> stmts, Attribute[] attributes) {
+				super(attributes); this.stmts = new ArrayList<>(stmts);
 			}
 
-			public Sequence(Collection<Stmt> stmts, Stmt stmt) {
+			public Sequence(Collection<Stmt> stmts, Stmt stmt, Attribute[] attributes) {
+				super(attributes);
 				this.stmts = new ArrayList<>(stmts);
 				this.stmts.add(stmt);
 			}
@@ -622,10 +675,9 @@ public class BoogieFile {
 	// Expressions
 	// =========================================================================
 
-	public interface Expr {
+	public interface Expr extends Item {
 
 		public interface Logical extends Expr {
-
 		}
 
 		public interface Quantifier extends Logical {
@@ -647,11 +699,12 @@ public class BoogieFile {
 			List<? extends Expr> getOperands();
 		}
 
-		public static class Equals implements Logical, BinaryOperator {
+		public static class Equals extends AbstractItem implements Logical,  BinaryOperator {
 			private final Expr lhs;
 			private final Expr rhs;
 
-			private Equals(Expr lhs, Expr rhs) {
+			private Equals(Expr lhs, Expr rhs, Attribute[] attributes) {
+				super(attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
 			}
@@ -665,11 +718,12 @@ public class BoogieFile {
 			}
 		}
 
-		public static class NotEquals implements Logical, BinaryOperator {
+		public static class NotEquals extends AbstractItem implements Logical,  BinaryOperator {
 			private final Expr lhs;
 			private final Expr rhs;
 
-			private NotEquals(Expr lhs, Expr rhs) {
+			private NotEquals(Expr lhs, Expr rhs, Attribute[] attributes) {
+				super(attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
 			}
@@ -683,11 +737,12 @@ public class BoogieFile {
 			}
 		}
 
-		public static class LessThan implements Logical, BinaryOperator {
+		public static class LessThan extends AbstractItem implements Logical,  BinaryOperator {
 			private final Expr lhs;
 			private final Expr rhs;
 
-			private LessThan(Expr lhs, Expr rhs) {
+			private LessThan(Expr lhs, Expr rhs, Attribute[] attributes) {
+				super(attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
 			}
@@ -701,11 +756,12 @@ public class BoogieFile {
 			}
 		}
 
-		public static class LessThanOrEqual implements Logical, BinaryOperator {
+		public static class LessThanOrEqual extends AbstractItem implements Logical,  BinaryOperator {
 			private final Expr lhs;
 			private final Expr rhs;
 
-			private LessThanOrEqual(Expr lhs, Expr rhs) {
+			private LessThanOrEqual(Expr lhs, Expr rhs, Attribute[] attributes) {
+				super(attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
 			}
@@ -719,11 +775,12 @@ public class BoogieFile {
 			}
 		}
 
-		public static class GreaterThan implements Logical, BinaryOperator {
+		public static class GreaterThan extends AbstractItem implements Logical,  BinaryOperator {
 			private final Expr lhs;
 			private final Expr rhs;
 
-			private GreaterThan(Expr lhs, Expr rhs) {
+			private GreaterThan(Expr lhs, Expr rhs, Attribute[] attributes) {
+				super(attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
 			}
@@ -737,11 +794,12 @@ public class BoogieFile {
 			}
 		}
 
-		public static class GreaterThanOrEqual implements Logical, BinaryOperator {
+		public static class GreaterThanOrEqual extends AbstractItem implements Logical,  BinaryOperator {
 			private final Expr lhs;
 			private final Expr rhs;
 
-			private GreaterThanOrEqual(Expr lhs, Expr rhs) {
+			private GreaterThanOrEqual(Expr lhs, Expr rhs, Attribute[] attributes) {
+				super(attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
 			}
@@ -755,11 +813,12 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Iff implements Logical, BinaryOperator {
+		public static class Iff extends AbstractItem implements Logical,  BinaryOperator {
 			private final Logical lhs;
 			private final Logical rhs;
 
-			private Iff(Logical lhs, Logical rhs) {
+			private Iff(Logical lhs, Logical rhs, Attribute[] attributes) {
+				super(attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
 			}
@@ -773,11 +832,12 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Implies implements Logical, BinaryOperator {
+		public static class Implies extends AbstractItem implements Logical,  BinaryOperator {
 			private final Logical lhs;
 			private final Logical rhs;
 
-			private Implies(Logical lhs, Logical rhs) {
+			private Implies(Logical lhs, Logical rhs, Attribute[] attributes) {
+				super(attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
 			}
@@ -791,11 +851,12 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Addition implements Expr, BinaryOperator {
+		public static class Addition extends AbstractItem implements Expr, BinaryOperator {
 			private final Expr lhs;
 			private final Expr rhs;
 
-			private Addition(Expr lhs, Expr rhs) {
+			private Addition(Expr lhs, Expr rhs, Attribute[] attributes) {
+				super(attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
 			}
@@ -809,11 +870,12 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Subtraction implements Expr, BinaryOperator {
+		public static class Subtraction extends AbstractItem implements Expr, BinaryOperator {
 			private final Expr lhs;
 			private final Expr rhs;
 
-			private  Subtraction(Expr lhs, Expr rhs) {
+			private  Subtraction(Expr lhs, Expr rhs, Attribute[] attributes) {
+				super(attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
 			}
@@ -827,11 +889,12 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Multiplication implements Expr, BinaryOperator {
+		public static class Multiplication extends AbstractItem implements Expr, BinaryOperator {
 			private final Expr lhs;
 			private final Expr rhs;
 
-			private Multiplication(Expr lhs, Expr rhs) {
+			private Multiplication(Expr lhs, Expr rhs, Attribute[] attributes) {
+				super(attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
 			}
@@ -845,11 +908,12 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Division implements Expr, BinaryOperator {
+		public static class Division extends AbstractItem implements Expr, BinaryOperator {
 			private final Expr lhs;
 			private final Expr rhs;
 
-			public Division(Expr lhs, Expr rhs) {
+			public Division(Expr lhs, Expr rhs, Attribute[] attributes) {
+				super(attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
 			}
@@ -863,11 +927,12 @@ public class BoogieFile {
 			}
 		}
 
-		public static class IntegerDivision implements Expr, BinaryOperator {
+		public static class IntegerDivision extends AbstractItem implements Expr, BinaryOperator {
 			private Expr lhs;
 			private Expr rhs;
 
-			public IntegerDivision(Expr lhs, Expr rhs) {
+			public IntegerDivision(Expr lhs, Expr rhs, Attribute[] attributes) {
+				super(attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
 			}
@@ -881,11 +946,12 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Remainder implements Expr, BinaryOperator {
+		public static class Remainder extends AbstractItem implements Expr, BinaryOperator {
 			private Expr lhs;
 			private Expr rhs;
 
-			private Remainder(Expr lhs, Expr rhs) {
+			private Remainder(Expr lhs, Expr rhs, Attribute[] attributes) {
+				super(attributes);
 				this.lhs = lhs;
 				this.rhs = rhs;
 			}
@@ -899,13 +965,11 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Boolean implements Logical {
-			public final static Boolean TRUE = new Boolean(true);
-			public final static Boolean FALSE = new Boolean(false);
-
+		public static class Boolean extends AbstractItem implements Logical {
 			private final boolean value;
 
-			private Boolean(boolean v) {
+			private Boolean(boolean v, Attribute[] attributes) {
+				super(attributes);
 				this.value = v;
 			}
 
@@ -914,11 +978,11 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Integer implements Expr {
+		public static class Integer extends AbstractItem implements Expr {
 			private final BigInteger value;
 
-			private Integer(BigInteger v) {
-				this.value = v;
+			private Integer(BigInteger v, Attribute[] attributes) {
+				super(attributes);this.value = v;
 			}
 
 			public BigInteger getValue() {
@@ -926,10 +990,11 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Bytes implements Expr {
+		public static class Bytes extends AbstractItem implements Expr {
 			private final byte[] value;
 
-			private Bytes(byte[] v) {
+			private Bytes(byte[] v, Attribute[] attributes) {
+				super(attributes);
 				this.value = v;
 			}
 
@@ -938,11 +1003,12 @@ public class BoogieFile {
 			}
 		}
 
-		public static class DictionaryAccess implements LVal {
+		public static class DictionaryAccess extends AbstractItem implements LVal {
 			private final Expr source;
 			private final Expr index;
 
-			private DictionaryAccess(Expr source, Expr index) {
+			private DictionaryAccess(Expr source, Expr index, Attribute[] attributes) {
+				super(attributes);
 				this.source = source;
 				this.index = index;
 			}
@@ -956,12 +1022,13 @@ public class BoogieFile {
 			}
 		}
 
-		public static class DictionaryUpdate implements LVal {
+		public static class DictionaryUpdate extends AbstractItem implements LVal {
 			private final Expr source;
 			private final Expr index;
 			private final Expr value;
 
-			private DictionaryUpdate(Expr source, Expr index, Expr value) {
+			private DictionaryUpdate(Expr source, Expr index, Expr value, Attribute[] attributes) {
+				super(attributes);
 				this.source = source;
 				this.index = index;
 				this.value = value;
@@ -980,11 +1047,12 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Invoke implements Logical {
+		public static class Invoke extends AbstractItem implements Logical {
 			private final String name;
 			private final List<Expr> arguments;
 
-			private Invoke(String name, Collection<Expr> arguments) {
+			private Invoke(String name, Collection<Expr> arguments, Attribute[] attributes) {
+				super(attributes);
 				this.name = name;
 				this.arguments = new ArrayList<>(arguments);
 			}
@@ -998,10 +1066,23 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Negation implements Expr, UnaryOperator {
+		public static class Negation extends AbstractItem implements Expr, UnaryOperator {
 			private final Expr operand;
 
-			private Negation(Expr operand) {
+			private Negation(Expr operand, Attribute[] attributes) {
+				super(attributes);this.operand = operand;
+			}
+
+			public Expr getOperand() {
+				return operand;
+			}
+		}
+
+		public static class Old extends AbstractItem implements Expr, UnaryOperator {
+			private final Expr operand;
+
+			private Old(Expr operand, Attribute[] attributes) {
+				super(attributes);
 				this.operand = operand;
 			}
 
@@ -1010,23 +1091,11 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Old implements Expr, UnaryOperator {
-			private final Expr operand;
-
-			private Old(Expr operand) {
-				this.operand = operand;
-			}
-
-			public Expr getOperand() {
-				return operand;
-			}
-		}
-
-		public static class LogicalNot implements Logical, UnaryOperator {
+		public static class LogicalNot extends AbstractItem implements Logical,  UnaryOperator {
 			private final Logical operand;
 
-			private LogicalNot(Logical operand) {
-				this.operand = operand;
+			private LogicalNot(Logical operand, Attribute[] attributes) {
+				super(attributes); this.operand = operand;
 			}
 
 			public Logical getOperand() {
@@ -1034,10 +1103,11 @@ public class BoogieFile {
 			}
 		}
 
-		public static class LogicalAnd implements Logical, NaryOperator {
+		public static class LogicalAnd extends AbstractItem implements Logical,  NaryOperator {
 			private final List<Logical> operands;
 
-			private LogicalAnd(List<Logical> operands) {
+			private LogicalAnd(List<Logical> operands, Attribute[] attributes) {
+				super(attributes);
 				this.operands = new ArrayList<>(operands);
 			}
 
@@ -1046,10 +1116,11 @@ public class BoogieFile {
 			}
 		}
 
-		public static class LogicalOr implements Logical, NaryOperator {
+		public static class LogicalOr extends AbstractItem implements Logical,  NaryOperator {
 			private final List<Logical> operands;
 
-			private LogicalOr(List<Logical> operands) {
+			private LogicalOr(List<Logical> operands, Attribute[] attributes) {
+				super(attributes);
 				this.operands = new ArrayList<>(operands);
 			}
 
@@ -1058,11 +1129,12 @@ public class BoogieFile {
 			}
 		}
 
-		public static class UniversalQuantifier implements Quantifier {
+		public static class UniversalQuantifier extends AbstractItem implements Logical,  Quantifier {
 			private final List<Decl.Parameter> parameters;
 			private final Logical body;
 
-			private UniversalQuantifier(Collection<Decl.Parameter> parameters, Expr.Logical body) {
+			private UniversalQuantifier(Collection<Decl.Parameter> parameters, Expr.Logical body, Attribute[] attributes) {
+				super(attributes);
 				this.parameters = new ArrayList<>(parameters);
 				this.body = body;
 			}
@@ -1076,11 +1148,12 @@ public class BoogieFile {
 			}
 		}
 
-		public static class ExistentialQuantifier implements Quantifier {
+		public static class ExistentialQuantifier extends AbstractItem implements Logical,  Quantifier {
 			private final List<Decl.Parameter> parameters;
 			private final Logical body;
 
-			private ExistentialQuantifier(Collection<Decl.Parameter> parameters, Expr.Logical body) {
+			private ExistentialQuantifier(Collection<Decl.Parameter> parameters, Expr.Logical body, Attribute[] attributes) {
+				super(attributes);
 				this.parameters = new ArrayList<>(parameters);
 				this.body = body;
 			}
@@ -1094,10 +1167,11 @@ public class BoogieFile {
 			}
 		}
 
-		public static class VariableAccess implements LVal, Logical {
+		public static class VariableAccess extends AbstractItem implements Logical,  LVal {
 			private final String variable;
 
-			private VariableAccess(String var) {
+			private VariableAccess(String var, Attribute[] attributes) {
+				super(attributes);
 				if(var == null) {
 					throw new IllegalArgumentException();
 				}
@@ -1118,20 +1192,35 @@ public class BoogieFile {
 	// Types
 	// =========================================================================
 
-	public interface Type {
-		public static final Type Bool = new Type() {
-		};
-		public static final Type Int = new Type() {
-		};
-		public static final Type Real = new Type() {
-		};
+	public interface Type extends Item {
+		public static final Type Bool = new Bool();
+		public static final Type Int = new Int();
+		public static final Type Real = new Real();
 		public static final Type BitVector8 = new BitVector(8);
 
-		public static class Synonym implements Type {
+		public static class Bool extends AbstractItem implements Type {
+			public Bool(Attribute... attributes) {
+				super(attributes);
+			}
+		}
+
+		public static class Int extends AbstractItem  implements Type {
+			public Int(Attribute... attributes) {
+				super(attributes);
+			}
+		}
+
+		public static class Real extends AbstractItem  implements Type {
+			public Real(Attribute... attributes) {
+				super(attributes);
+			}
+		}
+
+		public static class Synonym extends AbstractItem implements Type {
 			private final String name;
 
-			public Synonym(String name) {
-				this.name = name;
+			public Synonym(String name, Attribute... attributes) {
+				super(attributes); this.name = name;
 			}
 
 			public String getSynonym() {
@@ -1139,11 +1228,11 @@ public class BoogieFile {
 			}
 		}
 
-		public static class BitVector implements Type {
+		public static class BitVector extends AbstractItem implements Type {
 			private final int digits;
 
-			public BitVector(int digits) {
-				this.digits = digits;
+			public BitVector(int digits, Attribute... attributes) {
+				super(attributes); this.digits = digits;
 			}
 
 			public int getDigits() {
@@ -1151,11 +1240,12 @@ public class BoogieFile {
 			}
 		}
 
-		public static class Dictionary implements Type {
+		public static class Dictionary extends AbstractItem implements Type {
 			private final Type key;
 			private final Type value;
 
-			public Dictionary(Type key, Type value) {
+			public Dictionary(Type key, Type value, Attribute... attributes) {
+				super(attributes);
 				this.key = key;
 				this.value = value;
 			}
@@ -1170,9 +1260,36 @@ public class BoogieFile {
 		}
 	}
 
+	// =========================================================================
+	// Attributes
+	// =========================================================================
+
+	public interface Attribute {
+		/**
+		 * Get the contents of this attribute as a given kind.  If that doesn't match, then return <code>null</code>.
+		 * @param kind
+		 * @param <T>
+		 * @return
+		 */
+		public <T> T as(Class<T> kind);
+	}
+
 	// =======================================================
 	// Constructor API (for convenience)
 	// =======================================================
+
+	public static Attribute ATTRIBUTE(Object o) {
+		return new Attribute() {
+			@Override
+			public <T> T as(Class<T> kind) {
+				if(kind.isInstance(o)) {
+					return (T) o;
+				} else {
+					return null;
+				}
+			}
+		};
+	}
 
 	// Declarations
 
@@ -1223,265 +1340,304 @@ public class BoogieFile {
 		return new Decl.Procedure(name, parameters, returns, requires, ensures, Collections.EMPTY_LIST);
 	}
 
-	public static Stmt ASSIGN(LVal lhs, Expr rhs) {
-		return new Stmt.Assignment(lhs,rhs);
+	// Statement
+	public static Stmt.Assert ASSERT(Expr.Logical condition, Attribute... attributes) {
+		return new Stmt.Assert(condition,attributes);
+	}
+	public static Stmt.Assignment ASSIGN(LVal lhs, Expr rhs, Attribute... attributes) {
+		return new Stmt.Assignment(lhs,rhs,attributes);
+	}
+	public static Stmt.Assume ASSUME(Expr.Logical condition, Attribute... attributes) {
+		return new Stmt.Assume(condition,attributes);
+	}
+	public static Stmt.Call CALL(String name, Expr[] parameters, Attribute... attributes) {
+		return new Stmt.Call(name, Collections.EMPTY_LIST, Arrays.asList(parameters),attributes);
+	}
+	public static Stmt.Call CALL(String name, List<Expr> parameters, Attribute... attributes) {
+		return new Stmt.Call(name, Collections.EMPTY_LIST, parameters,attributes);
+	}
+	public static Stmt.Call CALL(String name, LVal lhs, Expr[] parameters, Attribute... attributes) {
+		return new Stmt.Call(name, Arrays.asList(lhs), Arrays.asList(parameters),attributes);
+	}
+	public static Stmt.Call CALL(String name, LVal lhs, List<Expr> parameters, Attribute... attributes) {
+		return new Stmt.Call(name, Arrays.asList(lhs), parameters,attributes);
+	}
+	public static Stmt.Call CALL(String name, List<LVal> lvals, Expr parameter, Attribute... attributes) {
+		return new Stmt.Call(name, lvals, Arrays.asList(parameter),attributes);
+	}
+	public static Stmt.Call CALL(String name, List<LVal> lvals, Expr parameter1, Expr parameter2 , Attribute... attributes) {
+		return new Stmt.Call(name, lvals, Arrays.asList(parameter1,parameter2),attributes);
+	}
+	public static Stmt.Call CALL(String name, List<LVal> lvals, List<Expr> parameters, Attribute... attributes) {
+		return new Stmt.Call(name, lvals, parameters,attributes);
+	}
+	public static Stmt.IfElse IFELSE(Expr.Logical condition, Stmt trueBranch, Stmt falseBranch, Attribute... attributes) {
+		return new Stmt.IfElse(condition, trueBranch, falseBranch, attributes);
+	}
+	public static Stmt.Label LABEL(String label, Attribute... attributes) {
+		return new Stmt.Label(label,attributes);
+	}
+	public static Stmt.Goto GOTO(List<String> labels, Attribute... attributes) {
+		return new Stmt.Goto(labels,attributes);
 	}
 
-	public static Stmt GOTO(List<String> labels) {
-		return new Stmt.Goto(labels);
+	public static Stmt.Goto GOTO(String label, Attribute... attributes) {
+		return new Stmt.Goto(Arrays.asList(label),attributes);
+	}
+	public static Stmt.While WHILE(Expr.Logical condition, List<Expr.Logical> invariant, Stmt body, Attribute... attributes) {
+		return new Stmt.While(condition, invariant, body, attributes);
 	}
 
-	public static Stmt GOTO(String... labels) {
-		return new Stmt.Goto(Arrays.asList(labels));
+	public static Stmt.Sequence SEQUENCE(List<Stmt> stmts, Attribute... attributes) {
+		return new Stmt.Sequence(stmts,attributes);
 	}
 
-	public static Stmt SEQUENCE(List<Stmt> stmts) {
-		return new Stmt.Sequence(stmts);
-	}
-
-	public static Stmt SEQUENCE(List<Stmt> stmts, Stmt stmt) {
+	public static Stmt.Sequence SEQUENCE(List<Stmt> stmts, Stmt stmt, Attribute... attributes) {
 		ArrayList<Stmt> ss = new ArrayList<>(stmts);
 		ss.add(stmt);
-		return new Stmt.Sequence(ss);
+		return new Stmt.Sequence(ss,attributes);
 	}
-
-	public static Stmt SEQUENCE(Stmt... stmts) {
-		return new Stmt.Sequence(Arrays.asList(stmts));
+	public static Stmt.Sequence SEQUENCE(Attribute... attributes) {
+		return new Stmt.Sequence(Collections.EMPTY_LIST,attributes);
 	}
-
+	public static Stmt.Sequence SEQUENCE(Stmt stmt, Attribute... attributes) {
+		return new Stmt.Sequence(Arrays.asList(stmt),attributes);
+	}
+	public static Stmt.Sequence SEQUENCE(Stmt stmt1, Stmt stmt2, Attribute... attributes) {
+		return new Stmt.Sequence(Arrays.asList(stmt1,stmt2),attributes);
+	}
+	public static Stmt.Return RETURN(Attribute... attributes) {
+		return new Stmt.Return(attributes);
+	}
 	// Logical Operators
-
-	public static Expr.Logical AND(List<Expr.Logical> operands) {
-		if (operands.contains(Expr.Boolean.FALSE)) {
-			return Expr.Boolean.FALSE;
-		} else {
-			operands = removeAll(Expr.Boolean.TRUE, operands);
-			switch (operands.size()) {
-				case 0:
-					return Expr.Boolean.TRUE;
-				case 1:
-					return operands.get(0);
-				default:
-					return new Expr.LogicalAnd(operands);
+	public static Expr.Logical AND(List<Expr.Logical> operands, Attribute... attributes) {
+		ArrayList<Expr.Logical> noperands = new ArrayList<>();
+		for(int i=0;i!=operands.size();++i) {
+			Expr.Logical ith = operands.get(i);
+			if(ith instanceof Expr.Boolean && !((Expr.Boolean)ith).getValue()) {
+				return new Expr.Boolean(false,attributes);
+			} else if(!(ith instanceof Expr.Boolean)) {
+				noperands.add(ith);
 			}
+		}
+		switch (noperands.size()) {
+			case 0:
+				return new Expr.Boolean(true,attributes);
+			case 1:
+				return noperands.get(0);
+			default:
+				return new Expr.LogicalAnd(noperands, attributes);
 		}
 	}
 
-	public static Expr.Logical AND(Expr.Logical... operands) {
-		return AND(Arrays.asList(operands));
+	public static Expr.Logical AND(Expr.Logical operand1, Expr.Logical operand2, Attribute... attributes) {
+		return AND(Arrays.asList(operand1, operand2),attributes);
 	}
 
-	public static Expr.UniversalQuantifier FORALL(String name, BoogieFile.Type type, Expr.Logical body) {
-		return new Expr.UniversalQuantifier(Arrays.asList(new Decl.Parameter(name, type)),body);
+	public static Expr.Logical AND(Expr.Logical operand1, Expr.Logical operand2, Expr.Logical operand3, Attribute... attributes) {
+		return AND(Arrays.asList(operand1, operand2, operand3),attributes);
+	}
+	public static Expr.Logical AND(Expr.Logical[] operands, Attribute... attributes) {
+		return AND(Arrays.asList(operands),attributes);
+	}
+	public static Expr.UniversalQuantifier FORALL(String name, BoogieFile.Type type, Expr.Logical body, Attribute... attributes) {
+		return new Expr.UniversalQuantifier(Arrays.asList(new Decl.Parameter(name, type)),body, attributes);
 	}
 
 	public static Expr.UniversalQuantifier FORALL(String name1, BoogieFile.Type type1, String name2, BoogieFile.Type type2,
-												  Expr.Logical body) {
-		return new Expr.UniversalQuantifier(Arrays.asList(new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2)), body);
+												  Expr.Logical body, Attribute... attributes) {
+		return new Expr.UniversalQuantifier(Arrays.asList(new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2)), body, attributes);
 	}
 
 	public static Expr.UniversalQuantifier FORALL(String name1, BoogieFile.Type type1, String name2, BoogieFile.Type type2,String name3, BoogieFile.Type type3,
-												  Expr.Logical body) {
-		return new Expr.UniversalQuantifier(Arrays.asList(new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2), new Decl.Parameter(name3, type3)), body);
+												  Expr.Logical body, Attribute... attributes) {
+		return new Expr.UniversalQuantifier(Arrays.asList(new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2), new Decl.Parameter(name3, type3)), body, attributes);
 	}
 
-	public static Expr.UniversalQuantifier FORALL(List<Decl.Parameter> parameters, Expr.Logical body) {
-		return new Expr.UniversalQuantifier(parameters, body);
+	public static Expr.UniversalQuantifier FORALL(List<Decl.Parameter> parameters, Expr.Logical body, Attribute... attributes) {
+		return new Expr.UniversalQuantifier(parameters, body, attributes);
 	}
 
 
-	public static Expr.ExistentialQuantifier EXISTS(String name, BoogieFile.Type type, Expr.Logical body) {
-		return new Expr.ExistentialQuantifier(Arrays.asList(new Decl.Parameter(name, type)),body);
+	public static Expr.ExistentialQuantifier EXISTS(String name, BoogieFile.Type type, Expr.Logical body, Attribute... attributes) {
+		return new Expr.ExistentialQuantifier(Arrays.asList(new Decl.Parameter(name, type)),body, attributes);
 	}
 
 	public static Expr.ExistentialQuantifier EXISTS(String name1, BoogieFile.Type type1, String name2, BoogieFile.Type type2,
-												  Expr.Logical body) {
-		return new Expr.ExistentialQuantifier(Arrays.asList(new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2)), body);
+												  Expr.Logical body, Attribute... attributes) {
+		return new Expr.ExistentialQuantifier(Arrays.asList(new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2)), body, attributes);
 	}
 
 	public static Expr.ExistentialQuantifier EXISTS(String name1, BoogieFile.Type type1, String name2, BoogieFile.Type type2,String name3, BoogieFile.Type type3,
-												  Expr.Logical body) {
-		return new Expr.ExistentialQuantifier(Arrays.asList(new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2), new Decl.Parameter(name3, type3)), body);
+												  Expr.Logical body, Attribute... attributes) {
+		return new Expr.ExistentialQuantifier(Arrays.asList(new Decl.Parameter(name1, type1), new Decl.Parameter(name2, type2), new Decl.Parameter(name3, type3)), body, attributes);
 	}
 
-	public static Expr.ExistentialQuantifier EXISTS(List<Decl.Parameter> parameters, Expr.Logical body) {
-		return new Expr.ExistentialQuantifier(parameters, body);
+	public static Expr.ExistentialQuantifier EXISTS(List<Decl.Parameter> parameters, Expr.Logical body, Attribute... attributes) {
+		return new Expr.ExistentialQuantifier(parameters, body, attributes);
 	}
 
 
-	public static Expr.Logical IFF(Expr.Logical lhs, Expr.Logical rhs) {
+	public static Expr.Logical IFF(Expr.Logical lhs, Expr.Logical rhs, Attribute... attributes) {
 		if(lhs instanceof Expr.Boolean && rhs instanceof Expr.Boolean) {
-			return (lhs == rhs) ? Expr.Boolean.TRUE : Expr.Boolean.FALSE;
+			return (lhs == rhs) ? new Expr.Boolean(true,attributes) : new Expr.Boolean(false,attributes);
 		} else {
-			return new Expr.Iff(lhs, rhs);
+			return new Expr.Iff(lhs, rhs, attributes);
 		}
 	}
 
-	public static Expr.Logical IMPLIES(Expr.Logical lhs, Expr.Logical rhs) {
-		if(lhs == Expr.Boolean.FALSE || rhs == Expr.Boolean.TRUE) {
-			return Expr.Boolean.TRUE;
-		} else if(lhs == Expr.Boolean.TRUE) {
+	public static Expr.Logical IMPLIES(Expr.Logical lhs, Expr.Logical rhs, Attribute... attributes) {
+		boolean lhs_TRUE = (lhs instanceof Expr.Boolean) && ((Expr.Boolean)lhs).getValue();
+		boolean lhs_FALSE = (lhs instanceof Expr.Boolean) && !((Expr.Boolean)lhs).getValue();
+		boolean rhs_TRUE = (rhs instanceof Expr.Boolean) && ((Expr.Boolean)rhs).getValue();
+		boolean rhs_FALSE = (rhs instanceof Expr.Boolean) && !((Expr.Boolean)rhs).getValue();
+		//
+		if(lhs_FALSE || rhs_TRUE) {
+			return new Expr.Boolean(true,attributes);
+		} else if(lhs_TRUE) {
 			return rhs;
-		} else if(rhs == Expr.Boolean.FALSE) {
+		} else if(rhs_FALSE) {
 			return lhs;
 		} else {
-			return new Expr.Implies(lhs, rhs);
+			return new Expr.Implies(lhs, rhs, attributes);
 		}
 	}
 
-	public static Expr.LogicalNot NOT(Expr.Logical lhs) {
+	public static Expr.LogicalNot NOT(Expr.Logical lhs, Attribute... attributes) {
 		// FIXME: could apply some simplification here.
-		return new Expr.LogicalNot(lhs);
+		return new Expr.LogicalNot(lhs, attributes);
 	}
 
-	public static Expr.Logical OR(List<Expr.Logical> operands) {
-		if (operands.contains(Expr.Boolean.TRUE)) {
-			return Expr.Boolean.TRUE;
-		} else {
-			operands = removeAll(Expr.Boolean.FALSE, operands);
-			switch (operands.size()) {
-				case 0:
-					return Expr.Boolean.FALSE;
-				case 1:
-					return operands.get(0);
-				default:
-					return new Expr.LogicalOr(operands);
+	public static Expr.Logical OR(List<Expr.Logical> operands, Attribute... attributes) {
+		ArrayList<Expr.Logical> noperands = new ArrayList<>();
+		for(int i=0;i!=operands.size();++i) {
+			Expr.Logical ith = operands.get(i);
+			if(ith instanceof Expr.Boolean && ((Expr.Boolean)ith).getValue()) {
+				return new Expr.Boolean(true,attributes);
+			} else if(!(ith instanceof Expr.Boolean)) {
+				noperands.add(ith);
 			}
 		}
+		switch (noperands.size()) {
+			case 0:
+				return new Expr.Boolean(false,attributes);
+			case 1:
+				return noperands.get(0);
+			default:
+				return new Expr.LogicalOr(noperands, attributes);
+		}
 	}
 
-	public static Expr.Logical OR(Expr.Logical... operands) {
-		return OR(Arrays.asList(operands));
+	public static Expr.Logical OR(Expr.Logical operand1, Expr.Logical operand2, Attribute... attributes) {
+		return OR(new Expr.Logical[]{operand1, operand2}, attributes);
+	}
+
+	public static Expr.Logical OR(Expr.Logical operand1, Expr.Logical operand2, Expr.Logical operand3, Attribute... attributes) {
+		return OR(new Expr.Logical[]{operand1, operand2, operand3}, attributes);
+	}
+
+	public static Expr.Logical OR(Expr.Logical[] operands, Attribute... attributes) {
+		return OR(Arrays.asList(operands),attributes);
 	}
 
 	// Relational Operators
 
-	public static Expr.Equals EQ(Expr lhs, Expr rhs) {
-		return new Expr.Equals(lhs, rhs);
+	public static Expr.Equals EQ(Expr lhs, Expr rhs, Attribute... attributes) {
+		return new Expr.Equals(lhs, rhs,attributes);
 	}
 
-	public static Expr.NotEquals NEQ(Expr lhs, Expr rhs) {
-		return new Expr.NotEquals(lhs, rhs);
+	public static Expr.NotEquals NEQ(Expr lhs, Expr rhs, Attribute... attributes) {
+		return new Expr.NotEquals(lhs, rhs,attributes);
 	}
 
-	public static Expr.GreaterThanOrEqual GTEQ(Expr lhs, Expr rhs) {
-		return new Expr.GreaterThanOrEqual(lhs, rhs);
+	public static Expr.GreaterThanOrEqual GTEQ(Expr lhs, Expr rhs, Attribute... attributes) {
+		return new Expr.GreaterThanOrEqual(lhs, rhs,attributes);
 	}
 
-	public static Expr.GreaterThan GT(Expr lhs, Expr rhs) {
-		return new Expr.GreaterThan(lhs, rhs);
+	public static Expr.GreaterThan GT(Expr lhs, Expr rhs, Attribute... attributes) {
+		return new Expr.GreaterThan(lhs, rhs,attributes);
 	}
 
-	public static Expr.LessThanOrEqual LTEQ(Expr lhs, Expr rhs) {
-		return new Expr.LessThanOrEqual(lhs, rhs);
+	public static Expr.LessThanOrEqual LTEQ(Expr lhs, Expr rhs, Attribute... attributes) {
+		return new Expr.LessThanOrEqual(lhs, rhs,attributes);
 	}
 
-	public static Expr.LessThan LT(Expr lhs, Expr rhs) {
-		return new Expr.LessThan(lhs, rhs);
+	public static Expr.LessThan LT(Expr lhs, Expr rhs, Attribute... attributes) {
+		return new Expr.LessThan(lhs, rhs, attributes);
 	}
 
 	// Arithmetic Operators
-	public static Expr.Addition ADD(Expr lhs, Expr rhs) {
-		return new Expr.Addition(lhs, rhs);
+	public static Expr.Addition ADD(Expr lhs, Expr rhs, Attribute... attributes) {
+		return new Expr.Addition(lhs, rhs, attributes);
 	}
 
-	public static Expr.Negation NEG(Expr lhs) {
-		return new Expr.Negation(lhs);
+	public static Expr.Negation NEG(Expr lhs, Attribute... attributes) {
+		return new Expr.Negation(lhs, attributes);
 	}
 
-	public static Expr.Subtraction SUB(Expr lhs, Expr rhs) {
-		return new Expr.Subtraction(lhs, rhs);
+	public static Expr.Subtraction SUB(Expr lhs, Expr rhs, Attribute... attributes) {
+		return new Expr.Subtraction(lhs, rhs, attributes);
+	}
+	public static Expr.Multiplication MUL(Expr lhs, Expr rhs, Attribute... attributes) {
+		return new Expr.Multiplication(lhs, rhs, attributes);
+	}
+	public static Expr.Division DIV(Expr lhs, Expr rhs, Attribute... attributes) {
+		return new Expr.Division(lhs, rhs, attributes);
 	}
 
-	public static Expr.Multiplication MUL(Expr lhs, Expr rhs) {
-		return new Expr.Multiplication(lhs, rhs);
+	public static Expr.IntegerDivision IDIV(Expr lhs, Expr rhs, Attribute... attributes) {
+		return new Expr.IntegerDivision(lhs, rhs, attributes);
 	}
-
-	public static Expr.Division DIV(Expr lhs, Expr rhs) {
-		return new Expr.Division(lhs, rhs);
-	}
-
-	public static Expr.IntegerDivision IDIV(Expr lhs, Expr rhs) {
-		return new Expr.IntegerDivision(lhs, rhs);
-	}
-
-	public static Expr.Remainder REM(Expr lhs, Expr rhs) {
-		return new Expr.Remainder(lhs, rhs);
+	public static Expr.Remainder REM(Expr lhs, Expr rhs, Attribute... attributes) {
+		return new Expr.Remainder(lhs, rhs, attributes);
 	}
 	// Dictionaries
-
-	public static Expr.DictionaryAccess GET(Expr src, Expr index) {
-		return new Expr.DictionaryAccess(src, index);
+	public static Expr.DictionaryAccess GET(Expr src, Expr index, Attribute... attributes) {
+		return new Expr.DictionaryAccess(src, index, attributes);
 	}
-
-	public static Expr.DictionaryUpdate PUT(Expr src, Expr index, Expr value) {
-		return new Expr.DictionaryUpdate(src, index, value);
+	public static Expr.DictionaryUpdate PUT(Expr src, Expr index, Expr value, Attribute... attributes) {
+		return new Expr.DictionaryUpdate(src, index, value, attributes);
 	}
-
 	// Misc
-	public static Expr.Logical CONST(boolean b) {
-		return new Expr.Boolean(b);
+	public static Expr.Logical CONST(boolean b, Attribute... attributes) {
+		return new Expr.Boolean(b,attributes);
 	}
 
-	public static Expr.Integer CONST(int i) {
-		return new Expr.Integer(BigInteger.valueOf(i));
+	public static Expr.Integer CONST(int i, Attribute... attributes) {
+		return new Expr.Integer(BigInteger.valueOf(i), attributes);
 	}
 
-	public static Expr.Integer CONST(BigInteger i) {
-		return new Expr.Integer(i);
+	public static Expr.Integer CONST(BigInteger i, Attribute... attributes) {
+		return new Expr.Integer(i, attributes);
 	}
 
-	public static Expr.Bytes CONST(byte[] bytes) {
-		return new Expr.Bytes(bytes);
+	public static Expr.Bytes CONST(byte[] bytes, Attribute... attributes) {
+		return new Expr.Bytes(bytes, attributes);
 	}
 
-	public static Expr.Old OLD(Expr lhs) {
-		return new Expr.Old(lhs);
-	}
-	public static Stmt.Call CALL(String name, Expr... parameters) {
-		return new Stmt.Call(name, Collections.EMPTY_LIST, Arrays.asList(parameters));
-	}
-	public static Stmt.Call CALL(String name, List<Expr> parameters) {
-		return new Stmt.Call(name, Collections.EMPTY_LIST, parameters);
-	}
-	public static Stmt.Call CALL(String name, LVal lhs, Expr... parameters) {
-		return new Stmt.Call(name, Arrays.asList(lhs), Arrays.asList(parameters));
-	}
-	public static Stmt.Call CALL(String name, LVal lhs, List<Expr> parameters) {
-		return new Stmt.Call(name, Arrays.asList(lhs), parameters);
-	}
-	public static Stmt.Call CALL(String name, List<LVal> lvals, Expr... parameters) {
-		return new Stmt.Call(name, lvals, Arrays.asList(parameters));
-	}
-	public static Stmt.Call CALL(String name, List<LVal> lvals, List<Expr> parameters) {
-		return new Stmt.Call(name, lvals, parameters);
-	}
-	public static Expr.Invoke INVOKE(String name, Expr... parameters) {
-		return new Expr.Invoke(name, Arrays.asList(parameters));
+	public static Expr.Old OLD(Expr lhs, Attribute... attributes) {
+		return new Expr.Old(lhs, attributes);
 	}
 
-	public static Expr.Invoke INVOKE(String name, List<Expr> parameters) {
-		return new Expr.Invoke(name, parameters);
+	public static Expr.Invoke INVOKE(String name, Expr[] parameters, Attribute... attributes) {
+		return new Expr.Invoke(name, Arrays.asList(parameters),attributes);
 	}
-
-	public static Expr.VariableAccess VAR(String name) {
-		return new Expr.VariableAccess(name);
+	public static Expr.Invoke INVOKE(String name, Attribute... attributes) {
+		return new Expr.Invoke(name, Collections.EMPTY_LIST,attributes);
 	}
-
-	private static <T extends Expr> List<T> removeAll(T item, List<T> items) {
-		for(int i=0;i!=items.size();++i) {
-			if(items.get(i).equals(item)) {
-				ArrayList<T> nitems = new ArrayList<>();
-				for(int j=0;j!=items.size();++j) {
-					T jth = items.get(j);
-					if(!jth.equals(item)) {
-						nitems.add(jth);
-					}
-				}
-				return nitems;
-			}
-		}
-		// Nothing removed
-		return items;
+	public static Expr.Invoke INVOKE(String name, Expr parameter, Attribute... attributes) {
+		return new Expr.Invoke(name, Arrays.asList(parameter),attributes);
+	}
+	public static Expr.Invoke INVOKE(String name, Expr parameter1, Expr parameter2, Attribute... attributes) {
+		return new Expr.Invoke(name, Arrays.asList(parameter1,parameter2),attributes);
+	}
+	public static Expr.Invoke INVOKE(String name, Expr parameter1, Expr parameter2, Expr parameter3, Attribute... attributes) {
+		return new Expr.Invoke(name, Arrays.asList(parameter1,parameter2,parameter3),attributes);
+	}
+	public static Expr.Invoke INVOKE(String name, List<Expr> parameters, Attribute... attributes) {
+		return new Expr.Invoke(name, parameters,attributes);
+	}
+	public static Expr.VariableAccess VAR(String name, Attribute... attributes) {
+		return new Expr.VariableAccess(name,attributes);
 	}
 }

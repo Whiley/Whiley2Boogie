@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import wyboogie.core.BoogieFile;
+import wyboogie.io.BoogieFilePrinter;
 import wybs.lang.SyntacticException;
 import wyfs.util.ArrayUtils;
 
@@ -35,6 +36,12 @@ import wyfs.util.ArrayUtils;
  */
 public class Boogie {
 	private static final String BOOGIE_COMMAND = "boogie";
+
+	public static final int ERROR_ASSERTION_FAILURE = 5001;
+	public static final int ERROR_PRECONDITION_FAILURE = 5002;
+	public static final int ERROR_POSTCONDITION_FAILURE = 5003;
+	public static final int ERROR_ESTABLISH_LOOP_INVARIANT_FAILURE = 5004;
+	public static final int ERROR_RESTORE_LOOP_INVARIANT_FAILURE = 5005;
 
 	private final String boogieCmd;
 
@@ -86,11 +93,17 @@ public class Boogie {
 	 * @param boogie  Boogie contents (as a string)
 	 * @return
 	 */
-	public Error[] check(int timeout, String id, BoogieFile boogie) {
+	public Message[] check(int timeout, String id, BoogieFile boogie) {
 		String filename = null;
 		try {
+			// Convert the boogie file into a byte sequence
+			ByteArrayOutputStream output = new ByteArrayOutputStream();
+			BoogieFilePrinter bfp = new BoogieFilePrinter(output);
+			bfp.write(boogie);
+			bfp.flush();
+			byte[] bytes = output.toByteArray();
 			// Create the temporary file.
-			filename = createTemporaryFile(id, ".bpl", boogie.getBytes());
+			filename = createTemporaryFile(id, ".bpl", bytes);
 			// ===================================================
 			// Construct command
 			// ===================================================
@@ -121,7 +134,7 @@ public class Boogie {
 				byte[] stdout = readInputStream(input);
 				byte[] stderr = readInputStream(error);
 				if(success && child.exitValue() == 0) {
-					return parseErrors(new String(stdout));
+					return parseErrors(new String(stdout),bfp.getMapping());
 				}
 			} finally {
 				// make sure child process is destroyed.
@@ -140,15 +153,26 @@ public class Boogie {
 		return null;
 	}
 
-	public static class Error {
-		private int line;
-		private int column;
-		private String message;
+	public static interface Message {
+	}
 
-		public Error(int line, int col, String message) {
+	public static class FatalError implements Message {
+
+	}
+
+	public static class Error implements Message {
+		private final int line;
+		private final int column;
+		private final int code;
+		private final String message;
+		private final BoogieFile.Item item;
+
+		public Error(int line, int col, int code, String message, BoogieFile.Item item) {
 			this.line = line;
 			this.column = col;
+			this.code = code;
 			this.message = message;
+			this.item = item;
 		}
 
 		/**
@@ -170,6 +194,13 @@ public class Boogie {
 		}
 
 		/**
+		 * Get the error code reported.
+		 *
+		 * @return
+		 */
+		public int getCode() { return code; }
+
+		/**
 		 * Get the error message.
 		 * @return
 		 */
@@ -177,9 +208,17 @@ public class Boogie {
 			return message;
 		}
 
+		/**
+		 * Get the item associated with this error message.
+		 * @return
+		 */
+		public BoogieFile.Item getEnclosingItem() {
+			return item;
+		}
+
 		@Override
 		public String toString() {
-			return Integer.toString(line) + ":" + column + ":" + message;
+			return Integer.toString(line) + ":" + column + ":BP" + code + ":" + message;
 		}
 	}
 
@@ -189,25 +228,33 @@ public class Boogie {
 	 * @param output
 	 * @return
 	 */
-	private static Error[] parseErrors(String output) {
+	private static Message[] parseErrors(String output, MappablePrintWriter.Mapping<BoogieFile.Item> m) {
 		String[] lines = output.split("\n");
-		Error[] errors = new Error[lines.length];
+		Message[] errors = new Message[lines.length];
 		for (int i = 0; i != lines.length; ++i) {
 			// Decode boogie error line
 			String ith = lines[i];
 			if(ith.startsWith("Fatal Error:")) {
-				errors[i] = new Error(0,0,ith);
+				errors[i] = new FatalError();
 				break;
 			} else {
 				int a = ith.indexOf('(');
 				int b = ith.indexOf(',');
 				int c = ith.indexOf(')');
 				int d = ith.indexOf(':');
-				if (a >= 0 && b >= 0 && c >= 0 && d >= 0) {
+				int e = ith.indexOf("Error");
+				int f = ith.indexOf(':',e);
+				if (a >= 0 && b >= 0 && c >= 0 && d >= 0 && e >= 0 && f >= 0) {
 					int line = Integer.parseInt(ith.substring(a + 1, b));
 					int col = Integer.parseInt(ith.substring(b + 1, c));
-					String message = ith.substring(d + 1);
-					errors[i] = new Error(line, col, message);
+					int errcode = 0;
+					// Check whether is an error code to parse
+					if(e+8 < f) {
+						errcode = Integer.parseInt(ith.substring(e + 8, f));
+					}
+					String message = ith.substring(f + 1);
+					BoogieFile.Item item = m.get(line, col);
+					errors[i] = new Error(line, col, errcode, message, item);
 				}
 			}
 		}

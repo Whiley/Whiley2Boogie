@@ -64,7 +64,32 @@ public class InvalidTests {
 	 * Ignored tests and a reason why we ignore them.
 	 */
 	public final static Map<String, String> IGNORED = new HashMap<>();
-
+		static {
+			IGNORED.put("Parsing_Invalid_1", "608");
+			IGNORED.put("Parsing_Invalid_2", "608");
+			// Access Static Variable from Type Invariant
+			IGNORED.put("Type_Invalid_11", "793");
+			// Problems with counterexample generation?
+//			IGNORED.put("DoWhile_Invalid_6", "??");
+//			IGNORED.put("DoWhile_Invalid_8", "??");
+//			IGNORED.put("While_Invalid_18", "??");
+//			IGNORED.put("While_Invalid_20", "??");
+//			IGNORED.put("While_Invalid_21", "??");
+//			IGNORED.put("While_Invalid_22", "??");
+//			IGNORED.put("While_Invalid_23", "??");
+//			IGNORED.put("TupleAssign_Invalid_3", "??");
+//			IGNORED.put("TypeEquals_Invalid_5", "??");
+//		// #885 --- Contractive Types and isVoid()
+			IGNORED.put("Type_Invalid_5", "885");
+			IGNORED.put("Type_Invalid_8", "??");
+			IGNORED.put("Reference_Invalid_2", "unclassified");
+			IGNORED.put("Type_Invalid_14", "??");
+			IGNORED.put("Type_Invalid_15", "??");
+			IGNORED.put("While_Invalid_24", "??");
+			IGNORED.put("While_Invalid_25", "#956");
+			IGNORED.put("For_Invalid_9", "#982");
+			IGNORED.put("Reference_Invalid_5", "??");
+		}
 	// ======================================================================
 	// Test Harness
 	// ======================================================================
@@ -101,6 +126,7 @@ public class InvalidTests {
 	public static Pair<Boolean,String> compileWhiley2Boogie(String whileydir, String arg) throws IOException {
 		ByteArrayOutputStream syserr = new ByteArrayOutputStream();
 		ByteArrayOutputStream sysout = new ByteArrayOutputStream();
+		PrintStream psyserr = new PrintStream(syserr);
 		//
 		boolean result = true;
 		//
@@ -146,9 +172,9 @@ public class InvalidTests {
 			// Flush any created resources (e.g. wyil files)
 			root.flush();
 			// Check whether any syntax error produced
-			//result = !TestUtils.findSyntaxErrors(wyilTarget.read().getRootItem(), new BitSet());
+			result = !TestUtils.findSyntaxErrors(wyilTarget.read().getRootItem(), new BitSet());
 			// Print out any error messages
-			//wycli.commands.Build.printSyntacticMarkers(psyserr, (List) sources, (Path.Entry) wyilTarget);
+			wycli.commands.Build.printSyntacticMarkers(psyserr, (List) sources, (Path.Entry) wyilTarget);
 			// Flush any created resources (e.g. wyil files)
 			root.flush();
 		} catch (SyntacticException e) {

@@ -25,6 +25,7 @@ import wyfs.util.Trie;
 import wyil.lang.WyilFile;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.util.Collection;
 import java.util.List;
 
@@ -37,6 +38,8 @@ public class Activator implements Module.Activator {
 	public static Trie SOURCE_CONFIG_OPTION = Trie.fromString("build/whiley/target");
 	public static Trie TARGET_CONFIG_OPTION = Trie.fromString("build/boogie/target");
 	public static Trie VERIFY_CONFIG_OPTION = Trie.fromString("build/boogie/verify");
+	public static Trie VERBOSE_CONFIG_OPTION = Trie.fromString("build/boogie/verbose");
+	public static Trie TIMEOUT_CONFIG_OPTION = Trie.fromString("build/boogie/timeout");
 	private static Value.UTF8 TARGET_DEFAULT = new Value.UTF8("bin".getBytes());
 
 	public static Command.Platform BOOGIE_PLATFORM = new Command.Platform() {
@@ -50,7 +53,10 @@ public class Activator implements Module.Activator {
 		public Configuration.Schema getConfigurationSchema() {
 			return Configuration.fromArray(
 					Configuration.UNBOUND_STRING(TARGET_CONFIG_OPTION, "Specify location for generated Boogie .bpl files", TARGET_DEFAULT),
-					Configuration.UNBOUND_BOOLEAN(VERIFY_CONFIG_OPTION, "Enable verification of Whiley files using Boogie", new Value.Bool(true)));
+					Configuration.UNBOUND_BOOLEAN(VERIFY_CONFIG_OPTION, "Enable verification of Whiley files using Boogie", new Value.Bool(true)),
+					Configuration.UNBOUND_BOOLEAN(VERBOSE_CONFIG_OPTION, "Enable verbose output", new Value.Bool(false)),
+					Configuration.UNBOUND_INTEGER(TIMEOUT_CONFIG_OPTION, "Set timeout limit (ms)", new Value.Int(10000))
+			);
 		}
 
 		@Override
@@ -70,6 +76,10 @@ public class Activator implements Module.Activator {
 			Trie target= Trie.fromString(configuration.get(Value.UTF8.class, TARGET_CONFIG_OPTION).unwrap());
 			// Determine whether verification enabled or not
 			boolean verification = configuration.get(Value.Bool.class, VERIFY_CONFIG_OPTION).unwrap();
+			// Determine whether verbose output enabled or not
+			boolean verbose = configuration.get(Value.Bool.class, VERBOSE_CONFIG_OPTION).unwrap();
+			// Determine timeout to use
+			BigInteger timeout = configuration.get(Value.Int.class, TIMEOUT_CONFIG_OPTION).unwrap();
 			// Construct the binary root
 			Path.Root binaryRoot = project.getRoot().createRelativeRoot(target);
 			// Initialise the target file being built
@@ -83,8 +93,10 @@ public class Activator implements Module.Activator {
 						throws IOException {
 					// Construct a new build task
 					BoogieCompileTask task = new BoogieCompileTask(project, binary, matches.get(0));
-					// task.setVerbose();
+					// Configure task
+					task.setVerbose(verbose);
 					task.setVerification(verification);
+					task.setTimeout(timeout.intValueExact());
 					// Submit the task for execution
 					tasks.add(task);
 				}
