@@ -124,15 +124,12 @@ public class ValidTests {
 		IGNORED.put("Reference_Valid_9","#48");
 		IGNORED.put("Template_Valid_18","#48");
 		IGNORED.put("Template_Valid_27","#48");
+		IGNORED.put("Process_Valid_6","#48");
 		IGNORED.put("Process_Valid_10","#48");
-		// Problem with Reference Type Invariants
-		IGNORED.put("MessageRef_Valid_1","#49");
-		IGNORED.put("Process_Valid_6","#49");
-		IGNORED.put("Reference_Valid_11","#49");
-		IGNORED.put("Template_Valid_5","#49");
-		IGNORED.put("UnknownReference_Valid_3","#49");
 		// Problem with Lambda Type Invariants
 		IGNORED.put("Lambda_Valid_11","#51");
+		IGNORED.put("Template_Valid_22","#51");
+		IGNORED.put("MessageRef_Valid_1","#51");
 		IGNORED.put("MessageRef_Valid_2","#51");
 		IGNORED.put("MethodRef_Valid_1","#51");
 		IGNORED.put("MethodRef_Valid_2","#51");
@@ -146,6 +143,15 @@ public class ValidTests {
 		IGNORED.put("Process_Valid_9","#56");
 		// Problem with Record Generator and Type Test
 		IGNORED.put("Template_Valid_60","#57");
+		// Problem with Lambda Unions
+		IGNORED.put("Lambda_Valid_24","#59");
+		IGNORED.put("Lambda_Valid_25","#59");
+		// Preserving loop invariant HEAP locations
+		IGNORED.put("UnknownReference_Valid_3","#60");
+		// Problem with Cyclic Reference Type Invariants
+		IGNORED.put("Reference_Valid_11","#61");
+		// Type Exclusion Problem
+		IGNORED.put("RecursiveType_Valid_22","#62");
 	}
 
 	// ======================================================================
@@ -187,11 +193,10 @@ public class ValidTests {
 		PrintStream psyserr = new PrintStream(syserr);
 		//
 		boolean result = true;
+		// Construct the project
+		DirectoryRoot root = new DirectoryRoot(whileydir, registry);
 		//
 		try {
-			// Construct the project
-			DirectoryRoot root = new DirectoryRoot(whileydir, registry);
-			//
 			SequentialBuildProject project = new SequentialBuildProject(root);
 			// Identify source files and target files
 			Pair<Path.Entry<WhileyFile>,Path.Entry<WyilFile>> p = TestUtils.findSourceFiles(root,arg);
@@ -227,14 +232,10 @@ public class ValidTests {
 			project.refresh();
 			// Actually force the project to build
 			result = project.build(ForkJoinPool.commonPool(), Build.NULL_METER).get();
-			// Flush any created resources (e.g. wyil files)
-			root.flush();
 			// Check whether any syntax error produced
 			result = !TestUtils.findSyntaxErrors(wyilTarget.read().getRootItem(), new BitSet());
 			// Print out any error messages
 			wycli.commands.Build.printSyntacticMarkers(psyserr, (List) sources, (Path.Entry) wyilTarget);
-			// Flush any created resources (e.g. wyil files)
-			root.flush();
 		} catch (SyntacticException e) {
 			// Print out the syntax error
 			e.outputSourceError(new PrintStream(syserr),false);
@@ -243,6 +244,8 @@ public class ValidTests {
 			// Print out the syntax error
 			e.printStackTrace(new PrintStream(syserr));
 			result = false;
+		} finally {
+			root.flush();
 		}
 		// Convert bytes produced into resulting string.
 		byte[] errBytes = syserr.toByteArray();

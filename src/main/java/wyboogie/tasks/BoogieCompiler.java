@@ -142,7 +142,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         Expr inv = AND(invariant);
         decls.add(FUNCTION(name + "#inv", parameters, Type.Bool, inv));
         // Generate test for the type itself
-        Expr.Logical test = constructTypeTest(instantiation, WyilFile.Type.Any, VAR(varName), pure ? null : HEAP_VARNAME);
+        Expr.Logical test = constructTypeTest(instantiation, WyilFile.Type.Any, VAR(varName), pure ? null : HEAP_VARNAME, decl.getType());
         test = AND(test, INVOKE(name + "#inv", arguments));
         parameters.set(template.size(), new Decl.Parameter(varName, ANY));
         decls.add(FUNCTION(name + "#is", parameters, Type.Bool, test));
@@ -375,10 +375,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         WyilFile.Type param = d.getType().getParameter();
         WyilFile.Type ret = d.getType().getReturn();
         String name = toMangledName(d, instantiation) + "#lambda";
-        return constructLambdaAxioms(name, param, ret, d.getTemplate());
+        return constructLambdaAxioms(name, param, ret, d.getTemplate(),d);
     }
 
-    private List<Decl> constructLambdaAxioms(String name, WyilFile.Type param, WyilFile.Type ret, Tuple<WyilFile.Template.Variable> template) {
+    private List<Decl> constructLambdaAxioms(String name, WyilFile.Type param, WyilFile.Type ret, Tuple<WyilFile.Template.Variable> template, SyntacticItem item) {
         // Construct template parameters
         ArrayList<Decl.Parameter> params = new ArrayList<>();
         for(int i=0;i!=template.size();++i) {
@@ -392,7 +392,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Add axiom(s) for the return values
         Expr[] axioms = new Expr[ret.shape()];
         for (int i = 0; i != axioms.length; ++i) {
-            Expr.Logical axiom = constructTypeTest(ret.dimension(i), WyilFile.Type.Any, INVOKE("Lambda#return", VAR(name), CONST(i)), heap);
+            Expr.Logical axiom = constructTypeTest(ret.dimension(i), WyilFile.Type.Any, INVOKE("Lambda#return", VAR(name), CONST(i)), heap, item);
             if(params.size() > 0) {
                 axiom = FORALL(params,axiom);
             }
@@ -433,7 +433,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             WyilFile.Decl.Variable ith = parameters.get(i);
             String name = toVariableName(ith);
             name = shadow ? name + "#" : name;
-            params.add(constructParameter(name, ith.getType(), constraints, heap));
+            params.add(constructParameter(name, ith.getType(), constraints, heap,ith));
         }
         return new Pair<>(params, constraints);
     }
@@ -484,7 +484,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         }
         //
         for (int i = 0; i != type.shape(); ++i) {
-            parameters.add(constructParameter(prefix + "#" + i, type.dimension(i), constraints, heap));
+            parameters.add(constructParameter(prefix + "#" + i, type.dimension(i), constraints, heap, type));
         }
         return new Pair<>(parameters, constraints);
     }
@@ -498,9 +498,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      *                     constraints.
      * @return
      */
-    public Decl.Parameter constructParameter(String name, WyilFile.Type type, List<Expr.Logical> constraints, String heap) {
+    public Decl.Parameter constructParameter(String name, WyilFile.Type type, List<Expr.Logical> constraints, String heap, SyntacticItem item) {
         // Construct any constraints arising from the parameter's type
-        Expr.Logical constraint = constructTypeConstraint(type, VAR(name), heap);
+        Expr.Logical constraint = constructTypeConstraint(type, VAR(name), heap, item);
         //
         if (constraint != null) {
             constraints.add(constraint);
@@ -793,7 +793,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 Collections.EMPTY_LIST));
         decls.add(new Decl.Implementation(name, shadowParameters, returns.first(), locals, SEQUENCE(stmts)));
         // Add the "lambda" value
-        decls.addAll(constructLambdaAxioms(name, type.getParameter(), returnType, new Tuple<>()));
+        decls.addAll(constructLambdaAxioms(name, type.getParameter(), returnType, new Tuple<>(), l));
         // Done
         return decls;
     }
@@ -852,7 +852,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         for (int i = 0; i != lvals.size(); ++i) {
             WyilFile.LVal ith = lvals.get(i);
             stmts.add(constructAssign(ith, vals.get(i)));
-            Expr.Logical c = constructTypeConstraint(ith.getType(), visitExpression(ith), heap);
+            Expr.Logical c = constructTypeConstraint(ith.getType(), visitExpression(ith), heap, ith);
             if (c != null) {
                 stmts.add(ASSERT(c, ATTRIBUTE(rvals.get(i)), ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
             }
@@ -1221,7 +1221,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 String name = toVariableName(ith);
                 stmts.add(ASSIGN(VAR(name), cast(ith.getType(), initT.dimension(i), inits.get(i))));
                 // Add assertion for type constraints (if applicable)
-                Expr.Logical c = constructTypeConstraint(ith.getType(), VAR(name), heap);
+                Expr.Logical c = constructTypeConstraint(ith.getType(), VAR(name), heap, ith);
                 if (c != null) {
                     stmts.add(ASSERT(c, ATTRIBUTE(stmt.getInitialiser()), ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
                 }
@@ -1442,7 +1442,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         for(int i=0;i!=modified.size();++i) {
             WyilFile.Decl.Variable ith = modified.get(i);
             // Construct corresponding type constraint
-            Expr.Logical constraint = constructTypeConstraint(ith.getType(),VAR(toVariableName(ith)), heap);
+            Expr.Logical constraint = constructTypeConstraint(ith.getType(),VAR(toVariableName(ith)), heap, ith);
             //
             if(constraint != null) {
                 invariant.add(constraint);
@@ -1858,7 +1858,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Determine enclosing heap name
         String heap = pure ? null : determineHeapName(expr);
         //
-        return constructTypeTest(expr.getTestType(), expr.getOperand().getType(), operand, heap);
+        return constructTypeTest(expr.getTestType(), expr.getOperand().getType(), operand, heap, expr);
     }
 
     @Override
@@ -2301,7 +2301,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 // Translate source expression
                 Expr src = BoogieCompiler.this.visitExpression(expr.getOperand());
                 // Construct type invariant test
-                Expr.Logical test = constructTypeTest(expr.getType(), expr.getOperand().getType(), src, pure ? null : HEAP_VARNAME);
+                Expr.Logical test = constructTypeTest(expr.getType(), expr.getOperand().getType(), src, pure ? null : HEAP_VARNAME, expr);
                 // Add check that source matches type invariant
                 result.add(ASSERT(test,ATTRIBUTE(expr.getOperand()),ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
                 // Done
@@ -2344,7 +2344,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     WyilFile.Type target = param.dimension(i);
                     String heap = WyilUtils.isPure(target) ? null : HEAP_VARNAME;
                     Expr arg = BoogieCompiler.this.visitExpression(ith);
-                    Expr.Logical test = constructTypeTest(target,ith.getType(),arg,heap);
+                    Expr.Logical test = constructTypeTest(target,ith.getType(),arg,heap,ith);
                     result.add(ASSERT(test, ATTRIBUTE(ith), ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
                 }
                 return result;
@@ -2801,7 +2801,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         decls.add(FUNCTION("Type#is",TYPE,ANY,Type.Bool));
         decls.add(FUNCTION("Type#his",REFMAP,TYPE,ANY,Type.Bool));
         // Add axiom relating is and h(eap)is.
-        decls.add(new Decl.Axiom(FORALL("T", TYPE, "v", ANY, IFF(INVOKE("Type#is", VAR("T"), VAR("v")), INVOKE("Type#his", VAR("Ref#Empty"), VAR("T"), VAR("v"))))));
+        //decls.add(new Decl.Axiom(FORALL("H", REFMAP, "T", TYPE, "v", ANY, IMPLIES(INVOKE("Type#is", VAR("T"), VAR("v")), INVOKE("Type#his", VAR("H"), VAR("T"), VAR("v"))))));
          // Extract all types used in a meta-type position
         Set<WyilFile.Type> types = extractMetaTypes(f);
         //
@@ -2817,17 +2817,18 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 String name = "Type#" + mangler.getMangle(type);
                 decls.add(new Decl.Constant(true, name, TYPE));
                 // Construct a suitable type test
-                Expr.Logical test = constructTypeTest(type, WyilFile.Type.Any, VAR("v"), heap);
+                Expr.Logical test = constructTypeTest(type, WyilFile.Type.Any, VAR("v"), heap, type);
                 ArrayList<Decl.Parameter> params = new ArrayList<>();
                 params.add(new Decl.Parameter("v",ANY));
-                if(heap != null) {
-                    params.add(0,new Decl.Parameter(heap,REFMAP));
-                    // Assert relationship between constant and type test
-                    decls.add(new Decl.Axiom(FORALL(params, IFF(INVOKE("Type#his", VAR(heap), VAR(name), VAR("v")), test))));
-                } else {
+                if(heap == null) {
                     // Assert relationship between constant and type test
                     decls.add(new Decl.Axiom(FORALL(params, IFF(INVOKE("Type#is", VAR(name), VAR("v")), test))));
+                    // Configure heap
+                    heap = HEAP_VARNAME;
                 }
+                params.add(0,new Decl.Parameter(heap,REFMAP));
+                // Assert relationship between constant and type test
+                decls.add(new Decl.Axiom(FORALL(params, IFF(INVOKE("Type#his", VAR(heap), VAR(name), VAR("v")), test))));
             } else {
                 String name = "Type#" + mangler.getMangle(type);
                 ArrayList<Decl.Parameter> params = new ArrayList<>();
@@ -2840,15 +2841,17 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 decls.add(FUNCTION(name,params,TYPE));
                 Expr ivk = INVOKE(name,args);
                 // Construct a suitable type test
-                Expr.Logical test = constructTypeTest(type, WyilFile.Type.Any, VAR("v"), heap);
+                Expr.Logical test = constructTypeTest(type, WyilFile.Type.Any, VAR("v"), heap, type);
                 params.add(new Decl.Variable("v",ANY));
                 // Assert relationship between constant and type test
-                if(heap != null) {
-                    params.add(0,new Decl.Parameter(heap,REFMAP));
-                    decls.add(new Decl.Axiom(FORALL(params, IFF(INVOKE("Type#his", VAR(heap), ivk, VAR("v")), test))));
-                } else {
+                if(heap == null) {
+                    // Assert relationship between constant and type test
                     decls.add(new Decl.Axiom(FORALL(params, IFF(INVOKE("Type#is", ivk, VAR("v")), test))));
+                    // Configure heap
+                    heap = HEAP_VARNAME;
                 }
+                params.add(0,new Decl.Parameter(heap,REFMAP));
+                decls.add(new Decl.Axiom(FORALL(params, IFF(INVOKE("Type#his", VAR(heap), ivk, VAR("v")), test))));
             }
         }
 
@@ -2934,7 +2937,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @param expr An expression representing the item being constrained (e.g. a parameter or local variable).
      * @return
      */
-    private Expr.Logical constructTypeConstraint(WyilFile.Type type, Expr expr, String heap) {
+    private Expr.Logical constructTypeConstraint(WyilFile.Type type, Expr expr, String heap, SyntacticItem item) {
         switch (type.getOpcode()) {
             case WyilFile.TYPE_null:
             case WyilFile.TYPE_bool:
@@ -2944,7 +2947,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 return null;
             default:
                 // Fall back to primitive test
-                return constructTypeTest(type, type, expr, heap);
+                return constructTypeTest(type, type, expr, heap, item);
         }
     }
 
@@ -2959,7 +2962,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         List<Expr.Logical> constraints = new ArrayList<>();
         for (int i = 0; i != vars.size(); ++i) {
             WyilFile.Decl.Variable ith = vars.get(i);
-            Expr.Logical c = constructTypeConstraint(ith.getType(), VAR(toVariableName(ith)), heap);
+            Expr.Logical c = constructTypeConstraint(ith.getType(), VAR(toVariableName(ith)), heap, ith);
             if (c != null) {
                 constraints.add(0, c);
             }
@@ -2989,35 +2992,35 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @param argument The argument being tested.
      * @return
      */
-    private Expr.Logical constructTypeTest(WyilFile.Type to, WyilFile.Type from, Expr argument, String heap) {
+    private Expr.Logical constructTypeTest(WyilFile.Type to, WyilFile.Type from, Expr argument, String heap, SyntacticItem item) {
         switch (to.getOpcode()) {
             case WyilFile.TYPE_any:
-                return NEQ(box(from, argument), VAR("Void"));
+                return NEQ(box(from, argument), VAR("Void"), ATTRIBUTE(item));
             case WyilFile.TYPE_null:
-                return EQ(box(from, argument), VAR("Null"));
+                return EQ(box(from, argument), VAR("Null"), ATTRIBUTE(item));
             case WyilFile.TYPE_bool:
-                return INVOKE("Bool#is", box(from, argument));
+                return INVOKE("Bool#is", box(from, argument), ATTRIBUTE(item));
             case WyilFile.TYPE_byte:
-                return INVOKE("Byte#is", box(from, argument));
+                return INVOKE("Byte#is", box(from, argument), ATTRIBUTE(item));
             case WyilFile.TYPE_int:
-                return INVOKE("Int#is", box(from, argument));
+                return INVOKE("Int#is", box(from, argument), ATTRIBUTE(item));
             case WyilFile.TYPE_universal:
-                return constructUniversalTypeTest((WyilFile.Type.Universal) to, from, argument, heap);
+                return constructUniversalTypeTest((WyilFile.Type.Universal) to, from, argument, heap, item);
             case WyilFile.TYPE_property:
-                return INVOKE("Lambda#is", box(from, argument));
+                return INVOKE("Lambda#is", box(from, argument), ATTRIBUTE(item));
             case WyilFile.TYPE_function:
             case WyilFile.TYPE_method:
-                return constructLambdaTypeTest((WyilFile.Type.Callable) to, from, argument, heap);
+                return constructLambdaTypeTest((WyilFile.Type.Callable) to, from, argument, heap, item);
             case WyilFile.TYPE_nominal:
-                return constructNominalTypeTest((WyilFile.Type.Nominal) to, from, argument, heap);
+                return constructNominalTypeTest((WyilFile.Type.Nominal) to, from, argument, heap, item);
             case WyilFile.TYPE_array:
-                return constructArrayTypeTest((WyilFile.Type.Array) to, from, argument, heap);
+                return constructArrayTypeTest((WyilFile.Type.Array) to, from, argument, heap, item);
             case WyilFile.TYPE_record:
-                return constructRecordTypeTest((WyilFile.Type.Record) to, from, argument, heap);
+                return constructRecordTypeTest((WyilFile.Type.Record) to, from, argument, heap, item);
             case WyilFile.TYPE_reference:
-                return constructReferenceTypeTest((WyilFile.Type.Reference) to, from, argument, heap);
+                return constructReferenceTypeTest((WyilFile.Type.Reference) to, from, argument, heap, item);
             case WyilFile.TYPE_union:
-                return constructUnionTypeTest((WyilFile.Type.Union) to, from, argument, heap);
+                return constructUnionTypeTest((WyilFile.Type.Union) to, from, argument, heap, item);
             default:
                 throw new IllegalArgumentException("unknown type encoutnered (" + to.getClass().getName() + ")");
         }
@@ -3049,7 +3052,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @param argument The argument being tested.
      * @return
      */
-    private Expr.Logical constructNominalTypeTest(WyilFile.Type.Nominal to, WyilFile.Type from, Expr argument, String heap) {
+    private Expr.Logical constructNominalTypeTest(WyilFile.Type.Nominal to, WyilFile.Type from, Expr argument, String heap, SyntacticItem item) {
         // Determine whether this type is pure or not
         boolean pure = WyilUtils.isPure(to.getLink().getTarget().getType());
         ArrayList<Expr> arguments = new ArrayList<>();
@@ -3070,14 +3073,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             arguments.add(VAR((heap == null) ? "Ref#Empty" : heap));
         }
         // Ensure argument is boxed!
-        return INVOKE(name + "#is", arguments);
+        return INVOKE(name + "#is", arguments, ATTRIBUTE(item));
     }
 
-    public Expr.Logical constructUniversalTypeTest(WyilFile.Type.Universal to, WyilFile.Type from, Expr argument, String heap) {
+    public Expr.Logical constructUniversalTypeTest(WyilFile.Type.Universal to, WyilFile.Type from, Expr argument, String heap, SyntacticItem item) {
         if (heap != null) {
-            return INVOKE("Type#his", VAR(heap), VAR(to.getOperand().get()), argument);
+            return INVOKE("Type#his", VAR(heap), VAR(to.getOperand().get()), argument, ATTRIBUTE(item));
         } else {
-            return INVOKE("Type#is", VAR(to.getOperand().get()), argument);
+            return INVOKE("Type#is", VAR(to.getOperand().get()), argument, ATTRIBUTE(item));
         }
     }
 
@@ -3101,7 +3104,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @param argument The argument being tested.
      * @return
      */
-    private Expr.Logical constructRecordTypeTest(WyilFile.Type.Record to, WyilFile.Type from, Expr argument, String heap) {
+    private Expr.Logical constructRecordTypeTest(WyilFile.Type.Record to, WyilFile.Type from, Expr argument, String heap, SyntacticItem item) {
         // NOTE: this method for describing a type test should be deprecated in the
         // future in favour of something based around type tags.
         Expr.VariableAccess v = VAR(TEMP("f"));
@@ -3115,16 +3118,16 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         for (int i = 0; i != inclauses.length; ++i) {
             WyilFile.Type.Field f = fields.get(i);
             String field = "$" + f.getName().get();
-            inclauses[i] = constructTypeTest(f.getType(), WyilFile.Type.Any, GET(nArgument, VAR(field)), heap);
+            inclauses[i] = constructTypeTest(f.getType(), WyilFile.Type.Any, GET(nArgument, VAR(field)), heap, item);
             outclauses[i] = NEQ(VAR(field),v);
         }
         // Combine indivudal cases
-        Expr.Logical test = AND(inclauses);
+        Expr.Logical test = AND(inclauses, ATTRIBUTE(item));
         // Construct type test (when necessary)
-        Expr.Logical inbound = argument != nArgument ? AND(INVOKE("Record#is", argument), test) : test;
+        Expr.Logical inbound = argument != nArgument ? AND(INVOKE("Record#is", argument), test, ATTRIBUTE(item)) : test;
         Expr.Logical outbound = FORALL(v.getVariable(), FIELD, IMPLIES(AND(outclauses), EQ(GET(nArgument, v), VAR("Void"))));
         // Finally, apply outbounds to closed records only since these are the ones whose fields we actually know about.
-        return to.isOpen() ?  inbound : AND(inbound, outbound);
+        return to.isOpen() ?  inbound : AND(inbound, outbound, ATTRIBUTE(item));
     }
 
     /**
@@ -3147,7 +3150,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @param nArgument The argument being tested.
      * @return
      */
-    private Expr.Logical constructArrayTypeTest(WyilFile.Type.Array to, WyilFile.Type from, Expr argument, String heap) {
+    private Expr.Logical constructArrayTypeTest(WyilFile.Type.Array to, WyilFile.Type from, Expr argument, String heap, SyntacticItem item) {
         // Generate temporary index variable (which avoids name clashes). Observe that we cannot use the index in this
         // case, because types are not guaranteed to be part of the heap.  For example, when they are constructed for
         // generic nominal types.
@@ -3160,25 +3163,25 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Construct (out of) bounds check for index variable
         Expr.Logical outbounds = OR(LT(i, CONST(0)), LTEQ(INVOKE("Array#Length", nArgument), i));
         // Recursively construct type test for element
-        Expr.Logical valid = constructTypeTest(to.getElement(), WyilFile.Type.Any, GET(nArgument, i), heap);
+        Expr.Logical valid = constructTypeTest(to.getElement(), WyilFile.Type.Any, GET(nArgument, i), heap, item);
         // Elements outside range equal void
         Expr.Logical invalid = EQ(GET(nArgument,i),VAR("Void"));
         // Construct concrete test
-        Expr.Logical test = FORALL(i.getVariable(), Type.Int, AND(IMPLIES(inbounds, valid), IMPLIES(outbounds, invalid)));
+        Expr.Logical test = FORALL(i.getVariable(), Type.Int, AND(IMPLIES(inbounds, valid), IMPLIES(outbounds, invalid)), ATTRIBUTE(item));
         // Construct type test (when necessary)
-        return argument != nArgument ? AND(INVOKE("Array#is", argument), test) : test;
+        return argument != nArgument ? AND(INVOKE("Array#is", argument), test, ATTRIBUTE(item)) : test;
     }
 
-    private Expr.Logical constructReferenceTypeTest(WyilFile.Type.Reference to, WyilFile.Type from, Expr argument, String heap) {
+    private Expr.Logical constructReferenceTypeTest(WyilFile.Type.Reference to, WyilFile.Type from, Expr argument, String heap, SyntacticItem item) {
         heap = (heap == null) ? "Ref#Empty" : heap;
         // Cast argument to (unboxed) reference type
         Expr nArgument = cast(to, from, argument);
         // Dereference argument
         Expr deref = GET(VAR(heap), nArgument);
         // Construct element type test
-        Expr.Logical test = constructTypeTest(to.getElement(), WyilFile.Type.Any, deref, heap);
+        Expr.Logical test = constructTypeTest(to.getElement(), WyilFile.Type.Any, deref, heap, item);
         // Construct type test (when necessary)
-        return argument != nArgument ? AND(INVOKE("Ref#is", argument), test) : test;
+        return argument != nArgument ? AND(INVOKE("Ref#is", argument), test, ATTRIBUTE(item)) : test;
     }
 
     /**
@@ -3202,15 +3205,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @param argument The argument being tested.
      * @return
      */
-    private Expr.Logical constructUnionTypeTest(WyilFile.Type.Union to, WyilFile.Type from, Expr argument, String heap) {
+    private Expr.Logical constructUnionTypeTest(WyilFile.Type.Union to, WyilFile.Type from, Expr argument, String heap, SyntacticItem item) {
         Expr.Logical[] clauses = new Expr.Logical[to.size()];
         for (int i = 0; i != clauses.length; ++i) {
-            clauses[i] = constructTypeTest(to.get(i), from, argument, heap);
+            clauses[i] = constructTypeTest(to.get(i), from, argument, heap, item);
         }
-        return OR(clauses);
+        return OR(clauses, ATTRIBUTE(item));
     }
 
-    private Expr.Logical constructLambdaTypeTest(WyilFile.Type.Callable to, WyilFile.Type from, Expr argument, String heap) {
+    private Expr.Logical constructLambdaTypeTest(WyilFile.Type.Callable to, WyilFile.Type from, Expr argument, String heap, SyntacticItem item) {
         // Determine number of requirement argtuments
         int n = to.getParameter().shape();
         // Extract Return Type
@@ -3221,12 +3224,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         Expr.Logical[] clauses = new Expr.Logical[ret.shape()];
         for (int i = 0; i != clauses.length; ++i) {
             WyilFile.Type ith = ret.dimension(i);
-            clauses[i] = constructTypeTest(ith, WyilFile.Type.Any, INVOKE("Lambda#return", nArgument, CONST(i)), heap);
+            clauses[i] = constructTypeTest(ith, WyilFile.Type.Any, INVOKE("Lambda#return", nArgument, CONST(i)), heap, item);
         }
         // Combine individual tests
-        Expr.Logical test = AND(clauses);
+        Expr.Logical test = AND(clauses, ATTRIBUTE(item));
         // Construct type test (when necessary)
-        return argument != nArgument ? AND(INVOKE("Lambda#is", argument), test) : test;
+        return argument != nArgument ? AND(INVOKE("Lambda#is", argument), test, ATTRIBUTE(item)) : test;
     }
 
     // ==============================================================================

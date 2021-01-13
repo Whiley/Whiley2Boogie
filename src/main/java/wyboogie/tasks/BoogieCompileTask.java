@@ -40,7 +40,7 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 	/**
 	 * Specify whether to print verbose progress messages or not
 	 */
-	private boolean verbose = false;
+	private boolean verbose = true;
 	/**
 	 * Boogie process timeout (in milli-seconds)
 	 */
