@@ -83,6 +83,7 @@ public class ValidTests {
 		// ===================================================
 
 		// Timeouts.  These timeout after 10s.
+		IGNORED.put("Complex_Valid_4","#???");
 		IGNORED.put("Complex_Valid_10","#???");
 		IGNORED.put("Complex_Valid_11","#???");
 		IGNORED.put("ConstrainedList_Valid_23","#???");
@@ -91,6 +92,7 @@ public class ValidTests {
 		IGNORED.put("RecursiveType_Valid_20","#???");
 		IGNORED.put("RecursiveType_Valid_7","#???");
 		IGNORED.put("Template_Valid_29","#???");
+		IGNORED.put("Process_Valid_10","#???");
 		// Not verifiable yet!  These are incomplete in some way which means they could not be verified.
 		IGNORED.put("For_Valid_7","");
 		IGNORED.put("Lambda_Valid_3","");
@@ -113,22 +115,10 @@ public class ValidTests {
 		IGNORED.put("Lambda_Valid_19","#35");
 		IGNORED.put("Template_Valid_56","#35");
 		IGNORED.put("Template_Valid_57","#35");
-		// Problem with Method Side Effects
-		IGNORED.put("FunctionRef_Valid_7","#48");
-		IGNORED.put("FunctionRef_Valid_9","#48");
-		IGNORED.put("MessageSend_Valid_5","#48");
-		IGNORED.put("MethodCall_Valid_4","#48");
-		IGNORED.put("Process_Valid_7","#48");
-		IGNORED.put("Process_Valid_8","#48");
-		IGNORED.put("Reference_Valid_6","#48");
-		IGNORED.put("Reference_Valid_9","#48");
-		IGNORED.put("Template_Valid_18","#48");
-		IGNORED.put("Template_Valid_27","#48");
-		IGNORED.put("Process_Valid_6","#48");
-		IGNORED.put("Process_Valid_10","#48");
 		// Problem with Lambda Type Invariants
 		IGNORED.put("Lambda_Valid_11","#51");
 		IGNORED.put("Template_Valid_22","#51");
+		IGNORED.put("MethodCall_Valid_4","#51");
 		IGNORED.put("MessageRef_Valid_1","#51");
 		IGNORED.put("MessageRef_Valid_2","#51");
 		IGNORED.put("MethodRef_Valid_1","#51");
@@ -141,17 +131,21 @@ public class ValidTests {
 		IGNORED.put("Property_Valid_17","#55");
 		// Problem with Dereference in Postcondition
 		IGNORED.put("Process_Valid_9","#56");
+		IGNORED.put("Reference_Valid_6","#56");
 		// Problem with Record Generator and Type Test
 		IGNORED.put("Template_Valid_60","#57");
 		// Problem with Lambda Unions
 		IGNORED.put("Lambda_Valid_24","#59");
 		IGNORED.put("Lambda_Valid_25","#59");
 		// Preserving loop invariant HEAP locations
+		IGNORED.put("Process_Valid_6","#60");
 		IGNORED.put("UnknownReference_Valid_3","#60");
 		// Problem with Cyclic Reference Type Invariants
 		IGNORED.put("Reference_Valid_11","#61");
 		// Type Exclusion Problem
 		IGNORED.put("RecursiveType_Valid_22","#62");
+		// Passing Reference to Template Function
+		IGNORED.put("Template_Valid_18","#63");
 	}
 
 	// ======================================================================

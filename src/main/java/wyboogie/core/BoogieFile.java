@@ -120,6 +120,14 @@ public class BoogieFile {
 		public Attribute[] getAttributes() {
 			return attributes;
 		}
+
+		public boolean isFalse() {
+			return (this instanceof Expr.Boolean) && !((Expr.Boolean) this).getValue();
+		}
+
+		public boolean isTrue() {
+			return (this instanceof Expr.Boolean) && ((Expr.Boolean) this).getValue();
+		}
 	}
 
 	// =========================================================================
@@ -678,6 +686,8 @@ public class BoogieFile {
 	public interface Expr extends Item {
 
 		public interface Logical extends Expr {
+			public boolean isFalse();
+			public boolean isTrue();
 		}
 
 		public interface Quantifier extends Logical {
@@ -1414,9 +1424,9 @@ public class BoogieFile {
 		ArrayList<Expr.Logical> noperands = new ArrayList<>();
 		for(int i=0;i!=operands.size();++i) {
 			Expr.Logical ith = operands.get(i);
-			if(ith instanceof Expr.Boolean && !((Expr.Boolean)ith).getValue()) {
-				return new Expr.Boolean(false,attributes);
-			} else if(!(ith instanceof Expr.Boolean)) {
+			if (ith.isFalse()) {
+				return new Expr.Boolean(false, attributes);
+			} else if (!ith.isTrue()) {
 				noperands.add(ith);
 			}
 		}
@@ -1487,16 +1497,12 @@ public class BoogieFile {
 	}
 
 	public static Expr.Logical IMPLIES(Expr.Logical lhs, Expr.Logical rhs, Attribute... attributes) {
-		boolean lhs_TRUE = (lhs instanceof Expr.Boolean) && ((Expr.Boolean)lhs).getValue();
-		boolean lhs_FALSE = (lhs instanceof Expr.Boolean) && !((Expr.Boolean)lhs).getValue();
-		boolean rhs_TRUE = (rhs instanceof Expr.Boolean) && ((Expr.Boolean)rhs).getValue();
-		boolean rhs_FALSE = (rhs instanceof Expr.Boolean) && !((Expr.Boolean)rhs).getValue();
 		//
-		if(lhs_FALSE || rhs_TRUE) {
+		if(lhs.isFalse() || rhs.isTrue()) {
 			return new Expr.Boolean(true,attributes);
-		} else if(lhs_TRUE) {
+		} else if(lhs.isTrue()) {
 			return rhs;
-		} else if(rhs_FALSE) {
+		} else if(rhs.isFalse()) {
 			return lhs;
 		} else {
 			return new Expr.Implies(lhs, rhs, attributes);
@@ -1512,9 +1518,9 @@ public class BoogieFile {
 		ArrayList<Expr.Logical> noperands = new ArrayList<>();
 		for(int i=0;i!=operands.size();++i) {
 			Expr.Logical ith = operands.get(i);
-			if(ith instanceof Expr.Boolean && ((Expr.Boolean)ith).getValue()) {
+			if(ith.isTrue()) {
 				return new Expr.Boolean(true,attributes);
-			} else if(!(ith instanceof Expr.Boolean)) {
+			} else if(!ith.isFalse()) {
 				noperands.add(ith);
 			}
 		}
