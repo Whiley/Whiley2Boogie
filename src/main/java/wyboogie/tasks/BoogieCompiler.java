@@ -3181,8 +3181,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             case WyilFile.TYPE_property:
                 return INVOKE("Lambda#is", box(from, argument), ATTRIBUTE(item));
             case WyilFile.TYPE_function:
+                return constructFunctionTypeTest((WyilFile.Type.Function) to, from, argument, heap, item);
             case WyilFile.TYPE_method:
-                return constructLambdaTypeTest((WyilFile.Type.Callable) to, from, argument, heap, item);
+                return constructMethodTypeTest((WyilFile.Type.Method) to, from, argument, heap, item);
             case WyilFile.TYPE_nominal:
                 return constructNominalTypeTest((WyilFile.Type.Nominal) to, from, argument, heap, item);
             case WyilFile.TYPE_array:
@@ -3405,7 +3406,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         return OR(clauses, ATTRIBUTE(item));
     }
 
-    private Expr.Logical constructLambdaTypeTest(WyilFile.Type.Callable to, WyilFile.Type from, Expr argument, String heap, SyntacticItem item) {
+    private Expr.Logical constructFunctionTypeTest(WyilFile.Type.Function to, WyilFile.Type from, Expr argument, String heap, SyntacticItem item) {
         // Determine number of requirement argtuments
         int n = to.getParameter().shape();
         // Extract Return Type
@@ -3422,6 +3423,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         Expr.Logical test = AND(clauses, ATTRIBUTE(item));
         // Construct type test (when necessary)
         return argument != nArgument ? AND(INVOKE("Lambda#is", argument), test, ATTRIBUTE(item)) : test;
+    }
+
+    private Expr.Logical constructMethodTypeTest(WyilFile.Type.Method to, WyilFile.Type from, Expr argument, String heap, SyntacticItem item) {
+        // Ensure lambda argument unboxed
+        Expr nArgument = cast(to,from,argument);
+        // Construct type test (when necessary)
+        return nArgument != argument ? INVOKE("Lambda#is", argument, ATTRIBUTE(item)) : CONST(true);
     }
 
     // ==============================================================================
