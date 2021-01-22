@@ -440,20 +440,19 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         return decls;
     }
 
-    private List<Decl> constructLambdaAxioms(WyilFile.Decl.FunctionOrMethod d, WyilFile.Type.Callable instantiation) {
+    private List<Decl> constructLambdaAxioms(WyilFile.Decl.Function d, WyilFile.Type.Callable instantiation) {
         WyilFile.Type param = d.getType().getParameter();
         WyilFile.Type ret = d.getType().getReturn();
         String name = toMangledName(d, instantiation) + "#lambda";
-        return constructLambdaAxioms(name, param, ret, d.getTemplate(),d);
+        return constructLambdaAxioms(name, param, ret, d.getTemplate(), null, d);
     }
 
-    private List<Decl> constructLambdaAxioms(String name, WyilFile.Type param, WyilFile.Type ret, Tuple<WyilFile.Template.Variable> template, SyntacticItem item) {
+    private List<Decl> constructLambdaAxioms(String name, WyilFile.Type param, WyilFile.Type ret, Tuple<WyilFile.Template.Variable> template, String heap, SyntacticItem item) {
         // Construct template parameters
         ArrayList<Decl.Parameter> params = new ArrayList<>();
         for(int i=0;i!=template.size();++i) {
             params.add(new Decl.Parameter(template.get(i).getName().get(),TYPE));
         }
-        String heap = "Ref#Empty"; // not sure what makes sense for methods?
         final int n = param.shape();
         ArrayList<Decl> decls = new ArrayList<>();
         // Add the lambda value
@@ -863,7 +862,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 Collections.EMPTY_LIST));
         decls.add(new Decl.Implementation(name, shadowParameters, returns.first(), locals, SEQUENCE(stmts)));
         // Add the "lambda" value
-        decls.addAll(constructLambdaAxioms(name, type.getParameter(), returnType, new Tuple<>(), l));
+        decls.addAll(constructLambdaAxioms(name, type.getParameter(), returnType, new Tuple<>(), heap, l));
         // Done
         return decls;
     }
@@ -889,10 +888,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Stmt constructAssign(WyilFile.Stmt.Assign stmt, List<Expr> _unused, List<Expr> rhs) {
-        WyilFile.Decl.Method m = stmt.getAncestor(WyilFile.Decl.Method.class);
-        // NOTE: in a functional setting, there is no heap variable in play. Therefore,
-        // we provide an empty heap in its place.
-        String heap = m != null ? HEAP_VARNAME : "Ref#Empty";
+        String heap = determineHeapName(stmt);
+
         ArrayList<Stmt> stmts = new ArrayList<>();
         // Add all preconditions arising.
         stmts.addAll(constructAssertions(stmt.getLeftHandSide()));
@@ -3803,7 +3800,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         WyilFile.Decl.Method m = stmt.getAncestor(WyilFile.Decl.Method.class);
         // NOTE: in a functional setting, there is no heap variable in play. Therefore,
         // we provide an empty heap in its place.
-        return m != null ? HEAP_VARNAME : "Ref#Empty";
+        return m != null ? HEAP_VARNAME : null;
     }
 
 

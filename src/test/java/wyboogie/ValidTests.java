@@ -115,8 +115,6 @@ public class ValidTests {
 		IGNORED.put("Lambda_Valid_19","#35");
 		IGNORED.put("Template_Valid_56","#35");
 		IGNORED.put("Template_Valid_57","#35");
-		// Problem with Lambda Type Invariants
-		IGNORED.put("Template_Valid_22","#51");
 		// Disconnect between Lambdas and their Applications
 		IGNORED.put("Lambda_Valid_13","#52");
 		// Another Problem with Existentials?
