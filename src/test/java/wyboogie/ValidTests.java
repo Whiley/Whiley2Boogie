@@ -124,8 +124,6 @@ public class ValidTests {
 		// Problem with Dereference in Postcondition
 		IGNORED.put("Process_Valid_9","#56");
 		IGNORED.put("Reference_Valid_6","#56");
-		// Problem with Record Generator and Type Test
-		IGNORED.put("Template_Valid_60","#57");
 		// Problem with Lambda Unions
 		IGNORED.put("Lambda_Valid_24","#59");
 		IGNORED.put("Lambda_Valid_25","#59");
@@ -134,8 +132,6 @@ public class ValidTests {
 		IGNORED.put("UnknownReference_Valid_3","#60");
 		// Problem with Cyclic Reference Type Invariants
 		IGNORED.put("Reference_Valid_11","#61");
-		// Type Exclusion Problem
-		IGNORED.put("RecursiveType_Valid_22","#62");
 		// Passing Reference to Template Function
 		IGNORED.put("Template_Valid_18","#63");
 	}
