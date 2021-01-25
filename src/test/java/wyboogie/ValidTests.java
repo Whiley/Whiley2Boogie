@@ -111,10 +111,6 @@ public class ValidTests {
 		IGNORED.put("Property_Valid_4","#26");
 		// Adding Implicit Information from Postconditions
 		IGNORED.put("Assert_Valid_1","#28");
-		// Template Arguments with Lambdas
-		IGNORED.put("Lambda_Valid_19","#35");
-		IGNORED.put("Template_Valid_56","#35");
-		IGNORED.put("Template_Valid_57","#35");
 		// Disconnect between Lambdas and their Applications
 		IGNORED.put("Lambda_Valid_13","#52");
 		// Another Problem with Existentials?
@@ -134,6 +130,9 @@ public class ValidTests {
 		IGNORED.put("Reference_Valid_11","#61");
 		// Passing Reference to Template Function
 		IGNORED.put("Template_Valid_18","#63");
+		// Lambda Type Invariant with Templates
+		IGNORED.put("Template_Valid_57","#66");
+
 	}
 
 	// ======================================================================

@@ -806,7 +806,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     private List<Decl> constructStandaloneLambda(WyilFile.Decl.Lambda l) {
+        // Identify enclosing function/method to figure out names of returns.
+        WyilFile.Decl.Callable enclosing = l.getAncestor(WyilFile.Decl.FunctionOrMethod.class);
+        //
         WyilFile.Type.Callable type = l.getType();
+        // Determine any unbound type variables (if applicable)
+        Tuple<WyilFile.Template.Variable> template = enclosing != null ? enclosing.getTemplate() : new Tuple<>();
+        // Extract any free type variables
         WyilFile.Type returnType = type.getReturn();
         boolean method = (type instanceof WyilFile.Type.Method);
         // Extract variables captured in the lambda
@@ -820,7 +826,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Convert explicit parameters
         String heap = method ? HEAP_VARNAME : null;
         String nheap = method ? "#" + HEAP_VARNAME : null;
-        Pair<List<Decl.Parameter>,List<Expr.Logical>> declaredParameters = constructParameters(l.getTemplate(),l.getParameters(), heap);
+        Pair<List<Decl.Parameter>, List<Expr.Logical>> declaredParameters = constructParameters(template, l.getParameters(), heap);
         Pair<List<Decl.Parameter>,List<Expr.Logical>> capturedParameters = constructParameters(null,new Tuple<>(l.getCapturedVariables(meter)),heap);
         List<Decl.Parameter> parameters = append(declaredParameters.first(),capturedParameters.first());
         if(heap != null) {
@@ -862,7 +868,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 Collections.EMPTY_LIST));
         decls.add(new Decl.Implementation(name, shadowParameters, returns.first(), locals, SEQUENCE(stmts)));
         // Add the "lambda" value
-        decls.addAll(constructLambdaAxioms(name, type.getParameter(), returnType, new Tuple<>(), heap, l));
+        decls.addAll(constructLambdaAxioms(name, type.getParameter(), returnType, template, heap, l));
         // Done
         return decls;
     }
@@ -1359,7 +1365,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             // Extract declared return type
             WyilFile.Type type = ft.getReturn();
             // Extract any holes
-            Set<WyilFile.Type.Universal> holes = extractMetaHoles(ft);
+            Tuple<WyilFile.Template.Variable> holes = WyilUtils.extractTemplate(ft,meter);
             // Determine lvals. Observe that we have to assign any return values from the
             // procedure called, even if they are never used.
             List<LVal> lvals = new ArrayList<>();
@@ -1377,8 +1383,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             args.add(1, VAR(HEAP_VARNAME));
             // Add meta types arguments (if any)
             int i = 2;
-            for(WyilFile.Type.Universal hole : holes) {
-                args.add(i++,VAR(hole.getOperand().get()));
+            for(WyilFile.Template.Variable hole : holes) {
+                args.add(i++,VAR(hole.getName().get()));
             }
             // Determine the methods name
             String name = "apply$" + getMangle(ft);
@@ -1631,7 +1637,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 if (ft instanceof WyilFile.Type.Method) {
                     WyilFile.Type type = expr.getType();
                     // Extract any holes
-                    Set<WyilFile.Type.Universal> holes = extractMetaHoles(ft);
+                    Tuple<WyilFile.Template.Variable> holes = WyilUtils.extractTemplate(ft,meter);
                     // Construct temporary variable(s)
                     List<LVal> lvals = new ArrayList<>();
                     lvals.add(VAR(HEAP_VARNAME));
@@ -1652,8 +1658,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     args.add(1, VAR(HEAP_VARNAME));
                     // Add meta types
                     int i = 2;
-                    for(WyilFile.Type.Universal hole : holes) {
-                        args.add(i++,VAR(hole.getOperand().get()));
+                    for(WyilFile.Template.Variable hole : holes) {
+                        args.add(i++,VAR(hole.getName().get()));
                     }
                     // Determine the methods name
                     String name = "apply$" + getMangle(ft);
@@ -2868,7 +2874,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         return decls;
     }
     private List<Decl> constructMethodLambda(WyilFile.Type.Method mt) {
-        Set<WyilFile.Type.Universal> holes = extractMetaHoles(mt);
+        Tuple<WyilFile.Template.Variable> holes = WyilUtils.extractTemplate(mt,meter);
         //
         String name = "apply$" + getMangle(mt);
         ArrayList<Decl> decls = new ArrayList<>();
@@ -2886,8 +2892,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         parameters.add(0, new Decl.Parameter("l", LAMBDA));
         {
             int i = 2;
-            for (WyilFile.Type.Universal hole : holes) {
-                parameters.add(i++, new Decl.Parameter(hole.getOperand().get(), TYPE));
+            for (WyilFile.Template.Variable hole : holes) {
+                parameters.add(i++, new Decl.Parameter(hole.getName().get(), TYPE));
             }
         }
         // Add connection to lambda reference
@@ -2936,7 +2942,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         for (WyilFile.Type type : types) {
             String heap = WyilUtils.isPure(type) ? null : HEAP_VARNAME;
             // Extract all holes
-            Set<WyilFile.Type.Universal> holes = extractMetaHoles(type);
+            Tuple<WyilFile.Template.Variable> holes = WyilUtils.extractTemplate(type,meter);
             // Act accordingly
             if(type instanceof WyilFile.Type.Universal) {
                 // Always substituted directly
@@ -2961,8 +2967,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 String name = "Type#" + getMangle(type);
                 ArrayList<Decl.Parameter> params = new ArrayList<>();
                 ArrayList<Expr> args = new ArrayList<>();
-                for(WyilFile.Type.Universal t : holes) {
-                    String n = t.getOperand().get();
+                for(WyilFile.Template.Variable t : holes) {
+                    String n = t.getName().get();
                     params.add(new Decl.Parameter(n,TYPE));
                     args.add(VAR(n));
                 }
@@ -2984,19 +2990,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         }
 
         return decls;
-    }
-
-    private Set<WyilFile.Type.Universal> extractMetaHoles(WyilFile.Type t) {
-        HashSet<WyilFile.Type.Universal> holes = new HashSet<>();
-        // Traverse the type looking for universals
-        new AbstractVisitor(meter) {
-            @Override
-            public void visitTypeVariable(WyilFile.Type.Universal t) {
-                holes.add(t);
-            }
-        }.visitType(t);
-        // Done
-        return holes;
     }
 
     // ==============================================================================
@@ -3758,7 +3751,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     private Expr constructMetaType(WyilFile.Type type, String heap) {
         String name = "Type#" + getMangle(type);
-        Set<WyilFile.Type.Universal> holes = extractMetaHoles(type);
+        Tuple<WyilFile.Template.Variable> holes = WyilUtils.extractTemplate(type,meter);
         if(type instanceof WyilFile.Type.Universal) {
             WyilFile.Type.Universal ut = (WyilFile.Type.Universal) type;
             return VAR(ut.getOperand().get());
@@ -3770,8 +3763,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             if(!pure) {
                 args.add(VAR(heap));
             }
-            for(WyilFile.Type.Universal hole : holes) {
-                args.add(VAR(hole.getOperand().get()));
+            for(WyilFile.Template.Variable hole : holes) {
+                args.add(VAR(hole.getName().get()));
             }
             return INVOKE(name,args);
         }
