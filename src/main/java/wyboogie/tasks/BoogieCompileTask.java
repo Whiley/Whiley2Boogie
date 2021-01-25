@@ -42,9 +42,9 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 	 */
 	private boolean verbose = true;
 	/**
-	 * Boogie process timeout (in milli-seconds)
+	 * Boogie process timeout (in seconds)
 	 */
-	private int timeout = 10000;
+	private int timeout = 10;
 	/**
 	 * Determines whether or not to verify generate files with Boogie.
 	 */
@@ -96,9 +96,12 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 		//
 		if (verification) {
 			String id = source.getEntry().id().toString();
-			Boogie.Message[] errors = verifier.check(timeout, id, target);
+			Boogie.Message[] errors = verifier.check(timeout * 1000, id, target);
 			//
-			if(verbose && errors != null && errors.length > 0) {
+			if(errors == null) {
+				// A timeout occurred
+				throw new SyntacticException("Boogie timeout after " + timeout + "s", source.getEntry(), null);
+			} else if(verbose && errors.length > 0) {
 				System.out.println("=================================================");
 				System.out.println("Errors: " + id);
 				System.out.println("=================================================");
@@ -107,20 +110,20 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 				}
 			}
 			// Apply errors
-			for(int i=0;i!=errors.length;++i) {
+			for (int i = 0; i != errors.length; ++i) {
 				Boogie.Message ith = errors[i];
-				if(ith instanceof Boogie.Error) {
+				if (ith instanceof Boogie.Error) {
 					Boogie.Error err = (Boogie.Error) ith;
 					BoogieFile.Item item = err.getEnclosingItem();
 					// Attempt to extract corresponding syntactic item (if any)
 					SyntacticItem wyItem = item.getAttribute(SyntacticItem.class);
 					// Attempt to extract error code (if any)
 					Integer errcode = item.getAttribute(Integer.class);
-					switch(err.getCode()) {
+					switch (err.getCode()) {
 						case Boogie.ERROR_ASSERTION_FAILURE: {
 							BoogieFile.Stmt.Assert stmt = (BoogieFile.Stmt.Assert) item;
 							// NOTE: since a lot of Whiley failures are encoded as Boogie asserts, we must decode the exact kind of failure.
-							ErrorMessages.syntaxError(wyItem,errcode);
+							ErrorMessages.syntaxError(wyItem, errcode);
 							break;
 						}
 						case Boogie.ERROR_PRECONDITION_FAILURE: {

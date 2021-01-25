@@ -57,6 +57,8 @@ import wyil.lang.WyilFile;
  */
 @RunWith(Parameterized.class)
 public class ValidTests {
+	// Timeout to use for Boogie (in seconds)
+	public final static int TIMEOUT = 20;
 
 	/**
 	 * The directory containing the source files for each test case. Every test
@@ -83,16 +85,16 @@ public class ValidTests {
 		// ===================================================
 
 		// Timeouts.  These timeout after 10s.
-		IGNORED.put("Complex_Valid_4","#???");
-		IGNORED.put("Complex_Valid_10","#???");
-		IGNORED.put("Complex_Valid_11","#???");
-		IGNORED.put("ConstrainedList_Valid_23","#???");
-		IGNORED.put("ConstrainedRecord_Valid_9","#???");
-		IGNORED.put("RecursiveType_Valid_19","#???");
-		IGNORED.put("RecursiveType_Valid_20","#???");
-		IGNORED.put("RecursiveType_Valid_7","#???");
-		IGNORED.put("Template_Valid_29","#???");
-		IGNORED.put("Process_Valid_10","#???");
+//		IGNORED.put("Complex_Valid_4","#???");
+//		IGNORED.put("Complex_Valid_10","#???");
+//		IGNORED.put("Complex_Valid_11","#???");
+//		IGNORED.put("ConstrainedList_Valid_23","#???");
+//		IGNORED.put("ConstrainedRecord_Valid_9","#???");
+//		IGNORED.put("RecursiveType_Valid_19","#???");
+//		IGNORED.put("RecursiveType_Valid_20","#???");
+//		IGNORED.put("RecursiveType_Valid_7","#???");
+//		IGNORED.put("Template_Valid_29","#???");
+//		IGNORED.put("Process_Valid_10","#???");
 		// Not verifiable yet!  These are incomplete in some way which means they could not be verified.
 		IGNORED.put("For_Valid_7","");
 		IGNORED.put("Lambda_Valid_3","");
@@ -204,6 +206,8 @@ public class ValidTests {
 				public void apply(Collection<Build.Task> tasks) throws IOException {
 					// Construct a new build task
 					BoogieCompileTask task = new BoogieCompileTask(project, bgTarget, wyilTarget);
+					// Set longer timeout
+					task.setTimeout(TIMEOUT);
 					// Enable verification!
 					task.setVerification(true);
 					// Submit the task for execution
