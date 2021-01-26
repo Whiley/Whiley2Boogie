@@ -85,16 +85,16 @@ public class ValidTests {
 		// ===================================================
 
 		// Timeouts.  These timeout after 10s.
-//		IGNORED.put("Complex_Valid_4","#???");
-//		IGNORED.put("Complex_Valid_10","#???");
+		IGNORED.put("Complex_Valid_4","#???");
+		IGNORED.put("Complex_Valid_10","#???");
 //		IGNORED.put("Complex_Valid_11","#???");
-//		IGNORED.put("ConstrainedList_Valid_23","#???");
-//		IGNORED.put("ConstrainedRecord_Valid_9","#???");
+		IGNORED.put("ConstrainedList_Valid_23","#???");
+		IGNORED.put("ConstrainedRecord_Valid_9","#???");
 //		IGNORED.put("RecursiveType_Valid_19","#???");
-//		IGNORED.put("RecursiveType_Valid_20","#???");
-//		IGNORED.put("RecursiveType_Valid_7","#???");
+		IGNORED.put("RecursiveType_Valid_20","#???");
+		IGNORED.put("RecursiveType_Valid_7","#???");
 //		IGNORED.put("Template_Valid_29","#???");
-//		IGNORED.put("Process_Valid_10","#???");
+		IGNORED.put("Process_Valid_10","#???");
 		// Not verifiable yet!  These are incomplete in some way which means they could not be verified.
 		IGNORED.put("For_Valid_7","");
 		IGNORED.put("Lambda_Valid_3","");
