@@ -46,7 +46,7 @@ public class Activator implements Module.Activator {
 		//
 		@Override
 		public String getName() {
-			return "boogie2";
+			return "boogie";
 		}
 
 		@Override
@@ -55,7 +55,7 @@ public class Activator implements Module.Activator {
 					Configuration.UNBOUND_STRING(TARGET_CONFIG_OPTION, "Specify location for generated Boogie .bpl files", TARGET_DEFAULT),
 					Configuration.UNBOUND_BOOLEAN(VERIFY_CONFIG_OPTION, "Enable verification of Whiley files using Boogie", new Value.Bool(true)),
 					Configuration.UNBOUND_BOOLEAN(VERBOSE_CONFIG_OPTION, "Enable verbose output", new Value.Bool(false)),
-					Configuration.UNBOUND_INTEGER(TIMEOUT_CONFIG_OPTION, "Set timeout limit (ms)", new Value.Int(10000))
+					Configuration.UNBOUND_INTEGER(TIMEOUT_CONFIG_OPTION, "Set timeout limit (s)", new Value.Int(10))
 			);
 		}
 

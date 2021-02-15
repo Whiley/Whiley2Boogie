@@ -58,7 +58,7 @@ import wyil.lang.WyilFile;
 @RunWith(Parameterized.class)
 public class ValidTests {
 	// Timeout to use for Boogie (in seconds)
-	public final static int TIMEOUT = 20;
+	public final static int TIMEOUT = 60;
 
 	/**
 	 * The directory containing the source files for each test case. Every test
@@ -87,13 +87,10 @@ public class ValidTests {
 		// Timeouts.  These timeout after 10s.
 		IGNORED.put("Complex_Valid_4","#???");
 		IGNORED.put("Complex_Valid_10","#???");
-//		IGNORED.put("Complex_Valid_11","#???");
 		IGNORED.put("ConstrainedList_Valid_23","#???");
 		IGNORED.put("ConstrainedRecord_Valid_9","#???");
-//		IGNORED.put("RecursiveType_Valid_19","#???");
 		IGNORED.put("RecursiveType_Valid_20","#???");
 		IGNORED.put("RecursiveType_Valid_7","#???");
-//		IGNORED.put("Template_Valid_29","#???");
 		IGNORED.put("Process_Valid_10","#???");
 		// Not verifiable yet!  These are incomplete in some way which means they could not be verified.
 		IGNORED.put("For_Valid_7","");
@@ -104,6 +101,10 @@ public class ValidTests {
 		IGNORED.put("RecursiveType_Valid_28","#???");
 		IGNORED.put("While_Valid_2","");
 		IGNORED.put("While_Valid_71","");
+		IGNORED.put("ConstrainedRecord_Valid_9","#???");
+        IGNORED.put("Complex_Valid_11","#???");
+        IGNORED.put("Template_Valid_29","#???");
+        IGNORED.put("Process_Valid_10","#???");
 		// Known issues.  These are known problems with issues raised on github.
 		// Loop Conditions with Preconditions and SideEffects
 		IGNORED.put("DoWhile_Valid_6","#3");
