@@ -193,10 +193,33 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         if (initialiser != null) {
             Expr rhs = cast(d.getType(), d.getInitialiser().getType(), initialiser);
             decls.add(new Decl.Axiom(EQ(VAR(name), rhs)));
+            // Add type invariant guarantee
+            decls.add(new Decl.Axiom(IMPLIES(GT(VAR("Context#Level"), CONST(1)), constructTypeTest(d.getType(), VAR(name), null, d))));
+            decls.addAll(constructStaticVariableCheck(d));
             // Add any lambda's used within the function
             decls.addAll(constructLambdas(d));
         }
         return new Decl.Sequence(decls);
+    }
+
+    /**
+     * Construct an appropriate check that a given initialiser meets any invariants imposed by the static variable's type.
+     *
+     * @param d
+     * @return
+     */
+    private List<Decl> constructStaticVariableCheck(WyilFile.Decl.StaticVariable d) {
+        ArrayList<Decl> decls = new ArrayList<>();
+        // Apply name mangling
+        String name = toMangledName(d);
+        // Construct precondition to prevents axiom firing trivially
+        List<Expr.Logical> precondition = Arrays.asList(EQ(VAR("Context#Level"),CONST(1)));
+        // Construct simple assertion for the body
+        Stmt body = SEQUENCE(ASSERT(constructTypeTest(d.getType(), VAR(name), null, d), ATTRIBUTE(d.getInitialiser()), ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
+        // Construct the checking method method
+        decls.add(new Decl.Procedure(name + "check", Collections.EMPTY_LIST, Collections.EMPTY_LIST, precondition, Collections.EMPTY_LIST, Collections.EMPTY_LIST, Collections.EMPTY_LIST, body));
+        // Done
+        return decls;
     }
 
     @Override
@@ -316,6 +339,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             // Add assignment from shadow to parameter
             stmts.add(ASSIGN(VAR(p),VAR(p + "#")));
         }
+        // Add Context Level Guarantee
+        requires.add(GT(VAR("Context#Level"), CONST(1)));
         //
         stmts.add(body);
         // Construct procedure implementation
@@ -356,6 +381,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Merge preconditions / postconditions
         List<Expr.Logical> requires = append(parameters.second(),precondition);
         List<Expr.Logical> ensures = append(returns.second(),postcondition);
+        // Add Context Level Guarantee
+        requires.add(GT(VAR("Context#Level"), CONST(1)));
         // Add type invariant preservation guarantee
         ensures.addAll(constructFrameAxioms(d));
         // Construct procedure prototype
@@ -2566,6 +2593,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         ArrayList<Decl> decls = new ArrayList<>();
         //
         decls.addAll(constructCommentHeading("Preamble"));
+        // Define the context-level
+        decls.add(new Decl.Constant("Context#Level", Type.Int));
         // Define the top-level Whiley value which contains all others.
         decls.add(new Decl.TypeSynonym("Any", null));
         // Define the top-level Whiley type which contains all others.
