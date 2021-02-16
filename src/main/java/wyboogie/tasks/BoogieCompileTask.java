@@ -119,6 +119,7 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 					SyntacticItem wyItem = item.getAttribute(SyntacticItem.class);
 					// Attempt to extract error code (if any)
 					Integer errcode = item.getAttribute(Integer.class);
+					//
 					switch (err.getCode()) {
 						case Boogie.ERROR_ASSERTION_FAILURE: {
 							BoogieFile.Stmt.Assert stmt = (BoogieFile.Stmt.Assert) item;
