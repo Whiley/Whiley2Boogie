@@ -107,9 +107,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @return
      */
     private List<Decl> constructConcreteType(WyilFile.Decl.Type decl, WyilFile.Type instantiation, List<Expr.Logical> invariant) {
-        // Determine whether type is "pure" or not.  Essentially, whether or not it contains a heap reference somewhere.
-        // If that is the case, then we need an additional heap parameter.
-        boolean pure = WyilUtils.isPure(instantiation);
         ArrayList<Decl> decls = new ArrayList<>();
         // Extract template
         Tuple<WyilFile.Template.Variable> template = decl.getTemplate();
@@ -134,21 +131,17 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         }
         parameters.add(new Decl.Parameter(varName, type));
         arguments.add(unbox(var.getType(), VAR(varName)));
-        if(!pure) {
-            parameters.add(new Decl.Parameter(HEAP_VARNAME, REFMAP));
-            arguments.add(VAR(HEAP_VARNAME));
-        }
+        parameters.add(new Decl.Parameter(HEAP_VARNAME, REFMAP));
+        arguments.add(VAR(HEAP_VARNAME));
         Expr inv = AND(invariant);
         decls.add(FUNCTION(name + "#inv", parameters, Type.Bool, inv));
         // Generate test for the type itself
-        Expr.Logical test = constructTypeTest(instantiation, WyilFile.Type.Any, VAR(varName), pure ? null : HEAP_VARNAME, decl.getType());
+        Expr.Logical test = constructTypeTest(instantiation, WyilFile.Type.Any, VAR(varName), HEAP_VARNAME, decl.getType());
         test = AND(test, INVOKE(name + "#inv", arguments));
         parameters.set(template.size(), new Decl.Parameter(varName, ANY));
         decls.add(FUNCTION(name + "#is", parameters, Type.Bool, test));
         // Add frame condition (if applicable)
-        if(!pure) {
-            decls.add(constructConcreteTypeFrameCondition(decl,instantiation));
-        }
+        decls.add(constructConcreteTypeFrameCondition(decl,instantiation));
         // Done
         return decls;
     }
@@ -194,7 +187,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             Expr rhs = cast(d.getType(), d.getInitialiser().getType(), initialiser);
             decls.add(new Decl.Axiom(EQ(VAR(name), rhs)));
             // Add type invariant guarantee
-            decls.add(new Decl.Axiom(IMPLIES(GT(VAR("Context#Level"), CONST(1)), constructTypeTest(d.getType(), VAR(name), null, d))));
+            decls.add(new Decl.Axiom(IMPLIES(GT(VAR("Context#Level"), CONST(1)), constructTypeTest(d.getType(), VAR(name), HEAP_VARNAME, d))));
             decls.addAll(constructStaticVariableCheck(d));
             // Add any lambda's used within the function
             decls.addAll(constructLambdas(d));
@@ -215,7 +208,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Construct precondition to prevents axiom firing trivially
         List<Expr.Logical> precondition = Arrays.asList(EQ(VAR("Context#Level"),CONST(1)));
         // Construct simple assertion for the body
-        Stmt body = SEQUENCE(ASSERT(constructTypeTest(d.getType(), VAR(name), null, d), ATTRIBUTE(d.getInitialiser()), ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
+        Stmt body = SEQUENCE(ASSERT(constructTypeTest(d.getType(), VAR(name), HEAP_VARNAME, d), ATTRIBUTE(d.getInitialiser()), ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
         // Construct the checking method method
         decls.add(new Decl.Procedure(name + "#check", Collections.EMPTY_LIST, Collections.EMPTY_LIST, precondition, Collections.EMPTY_LIST, Collections.EMPTY_LIST, Collections.EMPTY_LIST, body));
         // Done
@@ -269,7 +262,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         WyilFile.Type.Callable instantiation = d.getType();
         ArrayList<Decl> decls = new ArrayList<>();
         // Determine concrete instantiations of this function / method
-        Pair<List<Decl.Parameter>, List<Expr.Logical>> parameters = constructParameters(d.getTemplate(), d.getParameters(), null);
+        Pair<List<Decl.Parameter>, List<Expr.Logical>> parameters = constructParameters(d.getTemplate(), d.getParameters(), HEAP_VARNAME);
         Pair<List<Decl.Parameter>, List<Expr.Logical>> returns = constructParameters(null, d.getReturns(), null);
         // Merge preconditions / postconditions
         List<Expr.Logical> requires = append(parameters.second(),precondition);
@@ -342,10 +335,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Apply name mangling
         String name = toMangledName(d);
         // Construct parameters and returns
-        Pair<List<Decl.Parameter>, List<Expr.Logical>> parameters = constructParameters(d.getTemplate(),d.getParameters(), null);
+        Pair<List<Decl.Parameter>, List<Expr.Logical>> parameters = constructParameters(d.getTemplate(),d.getParameters(), HEAP_VARNAME);
         Pair<List<Decl.Parameter>, List<Expr.Logical>> returns = constructParameters(null, d.getReturns(), null);
         // Construct shadow parameters (if applicable, and before heap variable)
-        List<Decl.Parameter> shadowParameters = constructShadowParameters(d.getTemplate(), d.getParameters(), null);
+        List<Decl.Parameter> shadowParameters = constructShadowParameters(d.getTemplate(), d.getParameters(), HEAP_VARNAME);
         // Merge preconditions / postconditions
         List<Expr.Logical> requires = append(parameters.second(),precondition);
         List<Expr.Logical> ensures = append(returns.second(),postcondition);
@@ -493,12 +486,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         WyilFile.Type param = d.getType().getParameter();
         WyilFile.Type ret = d.getType().getReturn();
         String name = toMangledName(d, instantiation) + "#lambda";
-        return constructLambdaAxioms(name, param, ret, d.getTemplate(), null, d);
+        return constructLambdaAxioms(name, param, ret, d.getTemplate(), d);
     }
 
-    private List<Decl> constructLambdaAxioms(String name, WyilFile.Type param, WyilFile.Type ret, Tuple<WyilFile.Template.Variable> template, String heap, SyntacticItem item) {
+    private List<Decl> constructLambdaAxioms(String name, WyilFile.Type param, WyilFile.Type ret, Tuple<WyilFile.Template.Variable> template, SyntacticItem item) {
         // Construct template parameters
         ArrayList<Decl.Parameter> params = new ArrayList<>();
+        params.add(new Decl.Parameter(HEAP_VARNAME,REFMAP));
         for(int i=0;i!=template.size();++i) {
             params.add(new Decl.Parameter(template.get(i).getName().get(),TYPE));
         }
@@ -509,7 +503,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Add axiom(s) for the return values
         Expr[] axioms = new Expr[ret.shape()];
         for (int i = 0; i != axioms.length; ++i) {
-            Expr.Logical axiom = constructTypeTest(ret.dimension(i), WyilFile.Type.Any, INVOKE("Lambda#return", VAR(name), CONST(i)), heap, item);
+            Expr.Logical axiom = constructTypeTest(ret.dimension(i), WyilFile.Type.Any, INVOKE("Lambda#return", VAR(name), CONST(i)), HEAP_VARNAME, item);
             if(params.size() > 0) {
                 axiom = FORALL(params,axiom);
             }
@@ -820,7 +814,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Extract any necessary local variable declarations
         List<Decl.Variable> locals = constructLocals(l.getBody());
         // Convert explicit parameters
-        String heap = method ? HEAP_VARNAME : null;
+        String heap = HEAP_VARNAME;
         String nheap = method ? "#" + HEAP_VARNAME : null;
         Pair<List<Decl.Parameter>, List<Expr.Logical>> declaredParameters = constructParameters(template, l.getParameters(), heap);
         Pair<List<Decl.Parameter>,List<Expr.Logical>> capturedParameters = constructParameters(null,new Tuple<>(l.getCapturedVariables(meter)),heap);
@@ -867,7 +861,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 Collections.EMPTY_LIST));
         decls.add(new Decl.Implementation(name, shadowParameters, returns.first(), locals, SEQUENCE(stmts)));
         // Add the "lambda" value
-        decls.addAll(constructLambdaAxioms(name, type.getParameter(), returnType, template, heap, l));
+        decls.addAll(constructLambdaAxioms(name, type.getParameter(), returnType, template, l));
         // Done
         return decls;
     }
@@ -893,8 +887,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Stmt constructAssign(WyilFile.Stmt.Assign stmt, List<Expr> _unused, List<Expr> rhs) {
-        String heap = determineHeapName(stmt);
-
         ArrayList<Stmt> stmts = new ArrayList<>();
         // Add all preconditions arising.
         stmts.addAll(constructAssertions(stmt.getLeftHandSide()));
@@ -924,7 +916,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         for (int i = 0; i != lvals.size(); ++i) {
             WyilFile.LVal ith = lvals.get(i);
             stmts.add(constructAssign(ith, vals.get(i)));
-            Expr.Logical c = constructTypeConstraint(ith.getType(), visitExpression(ith), heap, ith);
+            Expr.Logical c = constructTypeConstraint(ith.getType(), visitExpression(ith), HEAP_VARNAME, ith);
             if (c != null) {
                 stmts.add(ASSERT(c, ATTRIBUTE(rvals.get(i)), ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
             }
@@ -1178,8 +1170,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Stmt constructDoWhile(WyilFile.Stmt.DoWhile stmt, Stmt body, Expr condition, List invariant) {
-        String heap = determineHeapName(stmt);
-        //
         boolean needContinueLabel = containsContinueOrBreak(stmt, false);
         boolean needBreakLabel = containsContinueOrBreak(stmt, true);
         Tuple<WyilFile.Decl.Variable> modified = stmt.getModified();
@@ -1197,7 +1187,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         }
         // FIXME: handle preconditions and side-effects for subsequent iterations.
         // Add type constraints arising from modified variables
-        invariant.addAll(0, constructTypeConstraints(modified, heap));
+        invariant.addAll(0, constructTypeConstraints(modified, HEAP_VARNAME));
         // Add the loop itself
         stmts.add(WHILE((Expr.Logical) condition, invariant, body));
         // Add break label (if necessary)
@@ -1215,8 +1205,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Stmt constructFor(WyilFile.Stmt.For stmt, Pair range, List invariant, Stmt body) {
-        String heap = determineHeapName(stmt);
-        //
         boolean needContinueLabel = containsContinueOrBreak(stmt, false);
         boolean needBreakLabel = containsContinueOrBreak(stmt, true);
         Tuple<WyilFile.Decl.Variable> modified = stmt.getModified();
@@ -1244,7 +1232,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             stmts.add(LABEL("CONTINUE_" + stmt.getIndex()));
         }
         // Add any type constraints arising
-        invariant.addAll(0, constructTypeConstraints(modified, heap));
+        invariant.addAll(0, constructTypeConstraints(modified, HEAP_VARNAME));
         // Construct the loop
         stmts.add(WHILE((Expr.Logical) condition, invariant, SEQUENCE(loopBody)));
         // Add break label (if necessary)
@@ -1272,7 +1260,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Stmt constructInitialiser(WyilFile.Stmt.Initialiser stmt, Expr init) {
-        String heap = determineHeapName(stmt);
         WyilFile.Tuple<WyilFile.Decl.Variable> vars = stmt.getVariables();
         //
         if (init == null) {
@@ -1293,7 +1280,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 String name = toVariableName(ith);
                 stmts.add(ASSIGN(VAR(name), cast(ith.getType(), initT.dimension(i), inits.get(i))));
                 // Add assertion for type constraints (if applicable)
-                Expr.Logical c = constructTypeConstraint(ith.getType(), VAR(name), heap, ith);
+                Expr.Logical c = constructTypeConstraint(ith.getType(), VAR(name), HEAP_VARNAME, ith);
                 if (c != null) {
                     stmts.add(ASSERT(c, ATTRIBUTE(stmt.getInitialiser()), ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
                 }
@@ -1503,8 +1490,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Stmt constructWhile(WyilFile.Stmt.While stmt, Expr condition, List invariant, Stmt body) {
-        String heap = determineHeapName(stmt);
-        //
         boolean needContinueLabel = containsContinueOrBreak(stmt, false);
         boolean needBreakLabel = containsContinueOrBreak(stmt, true);
         Tuple<WyilFile.Decl.Variable> modified = stmt.getModified();
@@ -1525,7 +1510,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         for(int i=0;i!=modified.size();++i) {
             WyilFile.Decl.Variable ith = modified.get(i);
             // Construct corresponding type constraint
-            Expr.Logical constraint = constructTypeConstraint(ith.getType(),VAR(toVariableName(ith)), heap, ith);
+            Expr.Logical constraint = constructTypeConstraint(ith.getType(),VAR(toVariableName(ith)), HEAP_VARNAME, ith);
             //
             if(constraint != null) {
                 invariant.add(constraint);
@@ -1942,11 +1927,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Expr constructIs(WyilFile.Expr.Is expr, Expr operand) {
-        boolean pure = WyilUtils.isPure(expr.getTestType());
-        // Determine enclosing heap name
-        String heap = pure ? null : determineHeapName(expr);
-        //
-        return constructTypeTest(expr.getTestType(), expr.getOperand().getType(), operand, heap, expr);
+        return constructTypeTest(expr.getTestType(), expr.getOperand().getType(), operand, HEAP_VARNAME, expr);
     }
 
     @Override
@@ -2041,6 +2022,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             arguments = cast(ft.getParameter(), expr.getOperands(), arguments);
             // Add template arguments
             arguments.addAll(0, templateArguments);
+            // Add heap argument
+            arguments.add(0,VAR(HEAP_VARNAME));
             //
             if (rt.shape() == 1) {
                 return cast(rt, ftrt, INVOKE(name, arguments, ATTRIBUTE(expr)));
@@ -2384,12 +2367,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             @Override
             public List<Stmt.Assert> constructCast(WyilFile.Expr.Cast expr, List<Stmt.Assert> operand) {
                 List<Stmt.Assert> result = new ArrayList<>(operand);
-                // Determine whether type is pure or not
-                boolean pure = WyilUtils.isPure(expr.getType());
                 // Translate source expression
                 Expr src = BoogieCompiler.this.visitExpression(expr.getOperand());
                 // Construct type invariant test
-                Expr.Logical test = constructTypeTest(expr.getType(), expr.getOperand().getType(), src, pure ? null : HEAP_VARNAME, expr);
+                Expr.Logical test = constructTypeTest(expr.getType(), expr.getOperand().getType(), src, HEAP_VARNAME, expr);
                 // Add check that source matches type invariant
                 result.add(ASSERT(test,ATTRIBUTE(expr.getOperand()),ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
                 // Done
@@ -2415,6 +2396,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     for (int i = 0; i != binding.size(); ++i) {
                         args.add(i,constructMetaType(binding.get(i), HEAP_VARNAME));
                     }
+                    // Add heap argument
+                    args.add(0, VAR(HEAP_VARNAME));
                     // Append the invocation
                     result.add(ASSERT(INVOKE(name + "#pre", args), ATTRIBUTE(expr), ATTRIBUTE(WyilFile.STATIC_PRECONDITION_FAILURE)));
                 }
@@ -2433,7 +2416,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                         WyilFile.Expr ith = args.get(i);
                         WyilFile.Type target = param.dimension(i);
                         Expr arg = BoogieCompiler.this.visitExpression(ith);
-                        Expr.Logical test = constructTypeTest(target, ith.getType(), arg, null, ith);
+                        Expr.Logical test = constructTypeTest(target, ith.getType(), arg, HEAP_VARNAME, ith);
                         result.add(ASSERT(test, ATTRIBUTE(ith), ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
                     }
                 }
@@ -2933,60 +2916,44 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         ArrayList<Decl> decls = new ArrayList<>();
         // Add useful comment
         decls.addAll(constructCommentSubheading("Meta Types"));
-        decls.add(FUNCTION("Type#is",TYPE,ANY,Type.Bool));
-        decls.add(FUNCTION("Type#his",REFMAP,TYPE,ANY,Type.Bool));
-        // Add axiom relating is and h(eap)is.
-        //decls.add(new Decl.Axiom(FORALL("H", REFMAP, "T", TYPE, "v", ANY, IMPLIES(INVOKE("Type#is", VAR("T"), VAR("v")), INVOKE("Type#his", VAR("H"), VAR("T"), VAR("v"))))));
+        decls.add(FUNCTION("Type#is",REFMAP,TYPE,ANY,Type.Bool));
         // Extract all types used in a meta-type position
         Set<WyilFile.Type> types = extractMetaTypes(f);
         //
         for (WyilFile.Type type : types) {
-            String heap = WyilUtils.isPure(type) ? null : HEAP_VARNAME;
             // Extract all holes
-            Tuple<WyilFile.Template.Variable> holes = WyilUtils.extractTemplate(type,meter);
+            Tuple<WyilFile.Template.Variable> holes = WyilUtils.extractTemplate(type, meter);
             // Act accordingly
-            if(type instanceof WyilFile.Type.Universal) {
+            if (type instanceof WyilFile.Type.Universal) {
                 // Always substituted directly
-            } else if(holes.size() == 0) {
+            } else if (holes.size() == 0) {
                 // Construct meta constant
                 String name = "Type#" + getMangle(type);
                 decls.add(new Decl.Constant(true, name, TYPE));
                 // Construct a suitable type test
-                Expr.Logical test = constructTypeTest(type, WyilFile.Type.Any, VAR("v"), heap, type);
+                Expr.Logical test = constructTypeTest(type, WyilFile.Type.Any, VAR("v"), HEAP_VARNAME, type);
                 ArrayList<Decl.Parameter> params = new ArrayList<>();
-                params.add(new Decl.Parameter("v",ANY));
-                if(heap == null) {
-                    // Assert relationship between constant and type test
-                    decls.add(new Decl.Axiom(FORALL(params, IFF(INVOKE("Type#is", VAR(name), VAR("v")), test))));
-                    // Configure heap
-                    heap = HEAP_VARNAME;
-                }
-                params.add(0,new Decl.Parameter(heap,REFMAP));
+                params.add(new Decl.Parameter("v", ANY));
+                params.add(0, new Decl.Parameter(HEAP_VARNAME, REFMAP));
                 // Assert relationship between constant and type test
-                decls.add(new Decl.Axiom(FORALL(params, IFF(INVOKE("Type#his", VAR(heap), VAR(name), VAR("v")), test))));
+                decls.add(new Decl.Axiom(FORALL(params, IFF(INVOKE("Type#is", VAR(HEAP_VARNAME), VAR(name), VAR("v")), test))));
             } else {
                 String name = "Type#" + getMangle(type);
                 ArrayList<Decl.Parameter> params = new ArrayList<>();
                 ArrayList<Expr> args = new ArrayList<>();
-                for(WyilFile.Template.Variable t : holes) {
+                for (WyilFile.Template.Variable t : holes) {
                     String n = t.getName().get();
-                    params.add(new Decl.Parameter(n,TYPE));
+                    params.add(new Decl.Parameter(n, TYPE));
                     args.add(VAR(n));
                 }
-                decls.add(FUNCTION(name,params,TYPE));
-                Expr ivk = INVOKE(name,args);
+                decls.add(FUNCTION(name, params, TYPE));
+                Expr ivk = INVOKE(name, args);
                 // Construct a suitable type test
-                Expr.Logical test = constructTypeTest(type, WyilFile.Type.Any, VAR("v"), heap, type);
-                params.add(new Decl.Variable("v",ANY));
+                Expr.Logical test = constructTypeTest(type, WyilFile.Type.Any, VAR("v"), HEAP_VARNAME, type);
+                params.add(new Decl.Variable("v", ANY));
                 // Assert relationship between constant and type test
-                if(heap == null) {
-                    // Assert relationship between constant and type test
-                    decls.add(new Decl.Axiom(FORALL(params, IFF(INVOKE("Type#is", ivk, VAR("v")), test))));
-                    // Configure heap
-                    heap = HEAP_VARNAME;
-                }
-                params.add(0,new Decl.Parameter(heap,REFMAP));
-                decls.add(new Decl.Axiom(FORALL(params, IFF(INVOKE("Type#his", VAR(heap), ivk, VAR("v")), test))));
+                params.add(0, new Decl.Parameter(HEAP_VARNAME, REFMAP));
+                decls.add(new Decl.Axiom(FORALL(params, IFF(INVOKE("Type#his", VAR(HEAP_VARNAME), ivk, VAR("v")), test))));
             }
         }
 
@@ -3238,8 +3205,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @return
      */
     private Expr.Logical constructNominalTypeTest(WyilFile.Type.Nominal to, WyilFile.Type from, Expr argument, String heap, SyntacticItem item) {
-        // Determine whether this type is pure or not
-        boolean pure = WyilUtils.isPure(to.getLink().getTarget().getType());
+        // FIXME: would be nice to get rid of this.
+        heap = (heap != null) ? heap : HEAP_VARNAME;
+        //
         ArrayList<Expr> arguments = new ArrayList<>();
         // Extract template binding
         Tuple<WyilFile.Type> binding = to.getParameters();
@@ -3252,21 +3220,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Add remaining parameters
         arguments.add(box(from, argument));
         // Add heap argument for impure type
-        if (!pure) {
-            // In a few situations we can get here with a null heap.  For example, when a reference type is used in a
-            // function.  For now, this is my solution (since this is not really an important case).
-            arguments.add(VAR((heap == null) ? "Ref#Empty" : heap));
-        }
+        arguments.add(VAR(heap));
         // Ensure argument is boxed!
         return INVOKE(name + "#is", arguments, ATTRIBUTE(item));
     }
 
     public Expr.Logical constructUniversalTypeTest(WyilFile.Type.Universal to, WyilFile.Type from, Expr argument, String heap, SyntacticItem item) {
-        if (heap != null) {
-            return INVOKE("Type#his", VAR(heap), VAR(to.getOperand().get()), argument, ATTRIBUTE(item));
-        } else {
-            return INVOKE("Type#is", VAR(to.getOperand().get()), argument, ATTRIBUTE(item));
-        }
+        return INVOKE("Type#is", VAR(heap), VAR(to.getOperand().get()), argument, ATTRIBUTE(item));
     }
 
     /**
@@ -3721,29 +3681,21 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     private Expr.Logical constructDynamicFrame(WyilFile.Type.Nominal type, Expr expr, Expr root, String heap) {
-        // Determine whether type is pure or not.
-        boolean pure = WyilUtils.isPure(type);
-        //
-        if(pure) {
-            // Pure type have no concept of "reachable"
-            return CONST(false);
-        } else {
-            ArrayList<Expr> arguments = new ArrayList<>();
-            // Extract template binding
-            Tuple<WyilFile.Type> binding = type.getParameters();
-            // Construct appropriate name mangle
-            String name = toMangledName(type.getLink().getTarget());
-            // Add template parameters (if applicable)
-            for (int i = 0; i != binding.size(); ++i) {
-                arguments.add(i,constructMetaType(binding.get(i), heap));
-            }
-            // Add remaining arguments
-            arguments.add(expr);
-            arguments.add(root);
-            arguments.add(VAR(heap));
-            // Ensure argument is boxed!
-            return INVOKE(name + "#frame", arguments, ATTRIBUTE(type));
+        ArrayList<Expr> arguments = new ArrayList<>();
+        // Extract template binding
+        Tuple<WyilFile.Type> binding = type.getParameters();
+        // Construct appropriate name mangle
+        String name = toMangledName(type.getLink().getTarget());
+        // Add template parameters (if applicable)
+        for (int i = 0; i != binding.size(); ++i) {
+            arguments.add(i,constructMetaType(binding.get(i), heap));
         }
+        // Add remaining arguments
+        arguments.add(expr);
+        arguments.add(root);
+        arguments.add(VAR(heap));
+        // Ensure argument is boxed!
+        return INVOKE(name + "#frame", arguments, ATTRIBUTE(type));
     }
 
     // ==============================================================================
@@ -3781,11 +3733,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         } else if(holes.size() == 0) {
             return VAR(name);
         } else {
-            boolean pure = WyilUtils.isPure(type);
             ArrayList<Expr> args = new ArrayList<>();
-            if(!pure) {
-                args.add(VAR(heap));
-            }
+            args.add(VAR(heap));
             for(WyilFile.Template.Variable hole : holes) {
                 args.add(VAR(hole.getName().get()));
             }
@@ -3804,21 +3753,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     private static String toVariableName(WyilFile.Decl.Variable v) {
         return v.getName().get() + "$" + v.getIndex();
     }
-
-    /**
-     * Determine the appropriate heap name to use in a given context. For example, in a pure functional context we
-     * always use the empty heap. In contrast, within a method we will use the heap parameter passed in .
-     *
-     * @param stmt
-     * @return
-     */
-    private static String determineHeapName(WyilFile.Stmt stmt) {
-        WyilFile.Decl.Method m = stmt.getAncestor(WyilFile.Decl.Method.class);
-        // NOTE: in a functional setting, there is no heap variable in play. Therefore,
-        // we provide an empty heap in its place.
-        return m != null ? HEAP_VARNAME : null;
-    }
-
 
     /**
      * Check whether a given (loop) statement contains a break or continue (which is not contained within another).
