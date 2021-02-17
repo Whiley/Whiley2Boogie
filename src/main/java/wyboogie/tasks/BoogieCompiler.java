@@ -830,6 +830,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             parameters.remove(declaredParameters.first().size());
         }
         List<Expr.Logical> requires = append(declaredParameters.second(),capturedParameters.second());
+        // Add Context Level Guarantee
+        requires.add(GT(VAR("Context#Level"), CONST(1)));
+        //
         List<Decl.Parameter> shadowParameters = new ArrayList<>(parameters);
         // Will contain convert return parameters
         Pair<List<Decl.Parameter>,List<Expr.Logical>> returns = constructAnonymousParameters("r", returnType, nheap);
