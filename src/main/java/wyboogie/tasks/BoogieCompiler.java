@@ -312,6 +312,28 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         return decls;
     }
 
+    /**
+     * Construct the "postcondition axiom" which relates a given function prototype to its postcondition. Without this,
+     * when an invocation is made to that prototype, Boogie will not be aware of what the postcondition implies.
+     *
+     * @param prototype
+     * @param parameters
+     * @return
+     */
+    public Decl.Axiom constructPostconditionAxiom(WyilFile.Decl.Function d, String name,
+                                                  List<Decl.Parameter> parameters, List<Decl.Parameter> returns) {
+        List<Expr> args = toArguments(parameters);
+        List<Expr> rets = toPostArguments(name, args, returns);
+        //
+        Expr.Logical axiom = INVOKE(name + "#post", append(args, rets));
+        //
+        if (parameters.size() > 0) {
+            // Quantifier required!
+            axiom = FORALL(parameters, IMPLIES(INVOKE(name + "#pre", args), axiom));
+        }
+        return new Decl.Axiom(IMPLIES(GT(VAR("Context#Level"), CONST(1)), axiom));
+    }
+
     private List<Decl> constructFunctionImplementation(WyilFile.Decl.Function d, List<Expr.Logical> precondition, List<Expr.Logical> postcondition,
                                                        Stmt body) {
         Tuple<WyilFile.Decl.Variable> d_parameters = d.getParameters();
@@ -743,59 +765,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     /**
-     * Construct the "postcondition axiom" which relates a given function prototype to its postcondition. Without this,
-     * when an invocation is made to that prototype, Boogie will not be aware of what the postcondition implies.
-     *
-     * @param prototype
-     * @param parameters
-     * @return
-     */
-    public Decl.Axiom constructPostconditionAxiom(WyilFile.Decl.FunctionOrMethod d, String name,
-                                                  List<Decl.Parameter> parameters, List<Decl.Parameter> returns) {
-        //
-        if (d instanceof WyilFile.Decl.Function && parameters.size() == 0) {
-            // Easy case, since we don't even need a quantifier.
-            if (returns.size() == 1) {
-                return new Decl.Axiom(INVOKE(name + "#post", INVOKE(name)));
-            } else {
-                ArrayList<Expr> args = new ArrayList<>();
-                // Functions with multiple returns require special handling
-                for (int i = 0; i != returns.size(); ++i) {
-                    args.add(INVOKE(name + "#" + i));
-                }
-                return new Decl.Axiom(INVOKE(name + "#post", args));
-            }
-        } else {
-            // A universal quantifier is required!
-            List<Expr> args = new ArrayList<>();
-            // Add heap variable (if applicable)
-            if (d instanceof WyilFile.Decl.Method) {
-                // Clone parameters list to prevent side-effects
-                parameters = new ArrayList<>(parameters);
-                // Insert new parameter at the beginning
-                parameters.add(0, new Decl.Variable(HEAP_VARNAME, REFMAP));
-            }
-            // Add remaining arguments
-            for (int i = 0; i != parameters.size(); ++i) {
-                args.add(VAR(parameters.get(i).getName()));
-            }
-            ArrayList<Expr> postArgs = new ArrayList<>(args);
-            //
-            if (returns.size() == 1) {
-                postArgs.add(INVOKE(name, args));
-            } else {
-                // Functions with multiple returns require special handling
-                for (int i = 0; i != returns.size(); ++i) {
-                    postArgs.add(INVOKE(name + "#" + i, args));
-                }
-            }
-            // Construct the axiom
-            return new Decl.Axiom(
-                    FORALL(parameters, IMPLIES(INVOKE(name + "#pre", args), INVOKE(name + "#post", postArgs))));
-        }
-    }
-
-    /**
      * Construct any lambda's which are used within a given declaration (e.g. for a function). These are translated as
      * separate functions. For example, consider this Whiely code:
      *
@@ -861,6 +830,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             parameters.remove(declaredParameters.first().size());
         }
         List<Expr.Logical> requires = append(declaredParameters.second(),capturedParameters.second());
+        // Add Context Level Guarantee
+        requires.add(GT(VAR("Context#Level"), CONST(1)));
+        //
         List<Decl.Parameter> shadowParameters = new ArrayList<>(parameters);
         // Will contain convert return parameters
         Pair<List<Decl.Parameter>,List<Expr.Logical>> returns = constructAnonymousParameters("r", returnType, nheap);
@@ -3777,6 +3749,28 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     // ==============================================================================
     // Misc
     // ==============================================================================
+
+    private static List<Expr> toArguments(List<Decl.Parameter> params) {
+        List<Expr> args = new ArrayList<>();
+        // Add remaining arguments
+        for (int i = 0; i != params.size(); ++i) {
+            args.add(VAR(params.get(i).getName()));
+        }
+        return args;
+    }
+
+    private static List<Expr> toPostArguments(String name, List<Expr> args, List<Decl.Parameter> returns) {
+        ArrayList<Expr> postArgs = new ArrayList<>();
+        if (returns.size() == 1) {
+            postArgs.add(INVOKE(name, args));
+        } else {
+            // Functions with multiple returns require special handling
+            for (int i = 0; i != returns.size(); ++i) {
+                postArgs.add(INVOKE(name + "#" + i, args));
+            }
+        }
+        return postArgs;
+    }
 
     private Expr constructMetaType(WyilFile.Type type, String heap) {
         String name = "Type#" + getMangle(type);
