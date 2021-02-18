@@ -771,7 +771,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Translate lambda body
         Expr body = visitExpression(l.getBody());
         // Add all preconditions arising. If there are any, they will likely fail!
-        stmts.addAll(constructAssertions(l.getBody()));
+        stmts.addAll(constructWellDefinednessChecks(l.getBody()));
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(l.getBody()));
         // Add return variable assignments
@@ -800,7 +800,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     public Stmt constructAssert(WyilFile.Stmt.Assert stmt, Expr condition) {
         ArrayList<Stmt> stmts = new ArrayList<>();
         // Add all preconditions arising.
-        stmts.addAll(constructAssertions(stmt.getCondition()));
+        stmts.addAll(constructWellDefinednessChecks(stmt.getCondition()));
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getCondition()));
         // Add assertion itself, along with relevant attributes for disambiguation
@@ -813,8 +813,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     public Stmt constructAssign(WyilFile.Stmt.Assign stmt, List<Expr> _unused, List<Expr> rhs) {
         ArrayList<Stmt> stmts = new ArrayList<>();
         // Add all preconditions arising.
-        stmts.addAll(constructAssertions(stmt.getLeftHandSide()));
-        stmts.addAll(constructAssertions(stmt.getRightHandSide()));
+        stmts.addAll(constructWellDefinednessChecks(stmt.getLeftHandSide()));
+        stmts.addAll(constructWellDefinednessChecks(stmt.getRightHandSide()));
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getRightHandSide()));
         // First, flatten left-hand and right-hand sides
@@ -1054,7 +1054,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     public Stmt constructAssume(WyilFile.Stmt.Assume stmt, Expr condition) {
         ArrayList<Stmt> stmts = new ArrayList<>();
         // Add all preconditions arising.
-        stmts.addAll(constructAssertions(stmt.getCondition()));
+        stmts.addAll(constructWellDefinednessChecks(stmt.getCondition()));
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getCondition()));
         //
@@ -1084,7 +1084,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     public Stmt constructDebug(WyilFile.Stmt.Debug stmt, Expr operand) {
         ArrayList<Stmt> stmts = new ArrayList<>();
         // Add all preconditions arising.
-        stmts.addAll(constructAssertions(stmt.getOperand()));
+        stmts.addAll(constructWellDefinednessChecks(stmt.getOperand()));
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getOperand()));
         //
@@ -1099,7 +1099,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         Tuple<WyilFile.Decl.Variable> modified = stmt.getModified();
         ArrayList<Stmt> stmts = new ArrayList<>();
         // Add all preconditions arising.
-        stmts.addAll(constructAssertions(stmt.getCondition()));
+        stmts.addAll(constructWellDefinednessChecks(stmt.getCondition()));
         // FIXME: handle preconditions and side-effects from the loop invariant(s).
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getCondition()));
@@ -1138,7 +1138,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         ArrayList<Stmt> stmts = new ArrayList<>();
         // Add all preconditions arising.
         // FIXME: handle preconditions and side-effects from the loop invariant(s).
-        stmts.addAll(constructAssertions(stmt.getVariable().getInitialiser()));
+        stmts.addAll(constructWellDefinednessChecks(stmt.getVariable().getInitialiser()));
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getVariable().getInitialiser()));
         // Extract loop contents so it can be appended later
@@ -1173,7 +1173,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     public Stmt constructIfElse(WyilFile.Stmt.IfElse stmt, Expr condition, Stmt trueBranch, Stmt falseBranch) {
         ArrayList<Stmt> stmts = new ArrayList<>();
         // Add all preconditions arising.
-        stmts.addAll(constructAssertions(stmt.getCondition()));
+        stmts.addAll(constructWellDefinednessChecks(stmt.getCondition()));
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getCondition()));
         // Add statement!
@@ -1191,7 +1191,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         } else {
             ArrayList<Stmt> stmts = new ArrayList<>();
             // Add all preconditions arising.
-            stmts.addAll(constructAssertions(stmt.getInitialiser()));
+            stmts.addAll(constructWellDefinednessChecks(stmt.getInitialiser()));
             // Apply any heap allocations arising.
             stmts.addAll(constructSideEffects(stmt.getInitialiser()));
             // Extract list of initialiser expressions
@@ -1219,7 +1219,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         ArrayList<Stmt> stmts = new ArrayList<>();
         WyilFile.Type.Callable ft = expr.getLink().getTarget().getType();
         // Add all preconditions arising. If there are any, they will likely fail!
-        stmts.addAll(constructAssertions(expr));
+        stmts.addAll(constructWellDefinednessChecks(expr));
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(expr.getOperands()));
         //
@@ -1266,7 +1266,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         ArrayList<Stmt> stmts = new ArrayList<>();
         WyilFile.Type.Callable ft = expr.getSource().getType().as(WyilFile.Type.Callable.class);
         // Add all preconditions arising. If there are any, they will likely fail!
-        stmts.addAll(constructAssertions(expr));
+        stmts.addAll(constructWellDefinednessChecks(expr));
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(expr.getSource()));
         stmts.addAll(constructSideEffects(expr.getArguments()));
@@ -1329,7 +1329,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             // Extract return values
             List<Expr> rvs = returns.size() == 1 ? Arrays.asList(ret) : ((FauxTuple) ret).getItems();
             // Add all preconditions arising.
-            stmts.addAll(constructAssertions(stmt.getReturn()));
+            stmts.addAll(constructWellDefinednessChecks(stmt.getReturn()));
             // Apply any heap allocations arising.
             stmts.addAll(constructSideEffects(stmt.getReturn()));
             //
@@ -1361,7 +1361,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     public Stmt constructSwitch(WyilFile.Stmt.Switch stmt, Expr condition, List<Pair<List<Expr>, Stmt>> cases) {
         ArrayList<Stmt> stmts = new ArrayList<>();
         // Add all preconditions arising.
-        stmts.addAll(constructAssertions(stmt.getCondition()));
+        stmts.addAll(constructWellDefinednessChecks(stmt.getCondition()));
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getCondition()));
         //
@@ -1420,7 +1420,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         ArrayList<Stmt> stmts = new ArrayList<>();
         // Add all preconditions arising.
         // FIXME: handle preconditions and side-effects from the loop invariant(s).
-        stmts.addAll(constructAssertions(stmt.getCondition()));
+        stmts.addAll(constructWellDefinednessChecks(stmt.getCondition()));
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getCondition()));
         // Add continue label (if necessary)
@@ -2105,7 +2105,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     // =========================================================================================
 
     /**
-     * Construct assertions to ensure all preconditions for a given expression are met.  For example, consider the
+     * Construct assertions to ensure all given expression is well defined.  For example, consider the
      * following statement:
      *
      * <pre>
@@ -2130,7 +2130,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @param condition
      * @return
      */
-    public List<Stmt.Assert> constructAssertions(WyilFile.Expr condition) {
+    public List<Stmt.Assert> constructWellDefinednessChecks(WyilFile.Expr condition) {
 
         List<Stmt.Assert> assertions = new AbstractExpressionProducer<List<Stmt.Assert>>() {
             @Override
@@ -2351,10 +2351,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         return assertions;
     }
 
-    public List<Stmt> constructAssertions(Tuple<? extends WyilFile.Expr> conditions) {
+    public List<Stmt> constructWellDefinednessChecks(Tuple<? extends WyilFile.Expr> conditions) {
         ArrayList<Stmt> assertions = new ArrayList<>();
         for(int i=0;i!=conditions.size();++i) {
-            assertions.addAll(constructAssertions(conditions.get(i)));
+            assertions.addAll(constructWellDefinednessChecks(conditions.get(i)));
         }
         return assertions;
     }
