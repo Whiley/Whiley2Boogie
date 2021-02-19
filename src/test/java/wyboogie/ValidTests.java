@@ -112,8 +112,6 @@ public class ValidTests {
 		IGNORED.put("ConstrainedList_Valid_14","#26");
 		IGNORED.put("ConstrainedList_Valid_18","#26");
 		IGNORED.put("Property_Valid_4","#26");
-		// Adding Implicit Information from Postconditions
-		//IGNORED.put("Assert_Valid_1","#28");
 		// Disconnect between Lambdas and their Applications
 		IGNORED.put("Lambda_Valid_13","#52");
 		// Another Problem with Existentials?

@@ -2,10 +2,11 @@ function f(int[] xs) -> (int r)
 requires xs[0] == 0:
     //
     int n = 0
-    while n < 10 where n >= 0 && xs[0] == 0:
-        assert |xs| > 0
+    do:
+        assert (n == 0) || (|xs| > 0)
         xs[0] = 0
         n = n + 1
+    while n < 10 where n >= 0 && xs[0] == 0        
     //
     return n
         

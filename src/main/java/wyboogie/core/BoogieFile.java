@@ -1443,7 +1443,6 @@ public class BoogieFile {
 	public static Expr.Logical AND(Expr.Logical operand1, Expr.Logical operand2, Attribute... attributes) {
 		return AND(Arrays.asList(operand1, operand2),attributes);
 	}
-
 	public static Expr.Logical AND(Expr.Logical operand1, Expr.Logical operand2, Expr.Logical operand3, Attribute... attributes) {
 		return AND(Arrays.asList(operand1, operand2, operand3),attributes);
 	}
