@@ -83,17 +83,9 @@ public class ValidTests {
 		// ===================================================
 		// Boogie problems
 		// ===================================================
-
 		// Timeouts.  These timeout after 10s.
-		IGNORED.put("Complex_Valid_4","#???");
-		IGNORED.put("Complex_Valid_10","#???");
-		IGNORED.put("ConstrainedList_Valid_23","#???");
-		IGNORED.put("ConstrainedRecord_Valid_9","#???");
-		IGNORED.put("RecursiveType_Valid_20","#???");
 		IGNORED.put("RecursiveType_Valid_7","#???");
-		IGNORED.put("Process_Valid_10","#???");
 		// Not verifiable yet!  These are incomplete in some way which means they could not be verified.
-		IGNORED.put("For_Valid_7","");
 		IGNORED.put("Lambda_Valid_3","");
 		IGNORED.put("Lambda_Valid_4","");
 		IGNORED.put("Property_Valid_14","");
@@ -101,25 +93,15 @@ public class ValidTests {
 		IGNORED.put("RecursiveType_Valid_28","#???");
 		IGNORED.put("While_Valid_2","");
 		IGNORED.put("While_Valid_71","");
-		IGNORED.put("ConstrainedRecord_Valid_9","#???");
-        IGNORED.put("Complex_Valid_11","#???");
-        IGNORED.put("Template_Valid_29","#???");
         IGNORED.put("Process_Valid_10","#???");
 		// Known issues.  These are known problems with issues raised on github.
-		// Loop Conditions with Preconditions and SideEffects
-		IGNORED.put("DoWhile_Valid_6","#3");
 		// Problem with Existential?
-		IGNORED.put("ConstrainedList_Valid_14","#26");
 		IGNORED.put("ConstrainedList_Valid_18","#26");
-		IGNORED.put("Property_Valid_4","#26");
 		// Disconnect between Lambdas and their Applications
 		IGNORED.put("Lambda_Valid_13","#52");
-		// Another Problem with Existentials?
-		IGNORED.put("Subtype_Valid_5","#54");
 		// Problem with Recursive Property?
 		IGNORED.put("Property_Valid_17","#55");
 		// Problem with Dereference in Postcondition
-		IGNORED.put("Process_Valid_9","#56");
 		IGNORED.put("Reference_Valid_6","#56");
 		// Problem with Lambda Unions
 		IGNORED.put("Lambda_Valid_24","#59");
@@ -129,12 +111,11 @@ public class ValidTests {
 		IGNORED.put("UnknownReference_Valid_3","#60");
 		// Problem with Cyclic Reference Type Invariants
 		IGNORED.put("Reference_Valid_11","#61");
-		// Passing Reference to Template Function
-		IGNORED.put("Template_Valid_18","#63");
 		// Lambda Type Invariant with Templates
 		IGNORED.put("Template_Valid_57","#66");
 		// Problem with recursive type
 		IGNORED.put("RecursiveType_Valie_19","#79");
+		IGNORED.put("RecursiveType_Valid_20","#79");
 	}
 
 	// ======================================================================

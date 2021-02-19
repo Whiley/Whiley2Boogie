@@ -1098,12 +1098,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         boolean needBreakLabel = containsContinueOrBreak(stmt, true);
         Tuple<WyilFile.Decl.Variable> modified = stmt.getModified();
         ArrayList<Stmt> stmts = new ArrayList<>();
+        // Add first iteration
+        stmts.add(body);
         // Add all preconditions arising.
         stmts.addAll(constructDefinednessAssertions(stmt.getCondition()));
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getCondition()));
-        // Add first iteration
-        stmts.add(body);
         // Add continue label (if necessary)
         if (needContinueLabel) {
             stmts.add(LABEL("CONTINUE_" + stmt.getIndex()));

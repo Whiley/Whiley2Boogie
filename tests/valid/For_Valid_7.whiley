@@ -6,7 +6,7 @@ public function filter(int[] items, pred_t fn) -> (int[] rs)
 ensures |rs| <= |items|:
     int n = 0
     // Determine how many
-    for i in 0..|items| where n <= i:
+    for i in 0..|items| where 0 <= n && n <= i:
         if fn(items[i]):
             n = n + 1
     // Allocate space
