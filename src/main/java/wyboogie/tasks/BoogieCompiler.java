@@ -2884,7 +2884,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 params.add(new Decl.Variable("v", ANY));
                 // Assert relationship between constant and type test
                 params.add(0, HEAP_PARAM);
-                decls.add(new Decl.Axiom(FORALL(params, IFF(INVOKE("Type#his", HEAP, ivk, VAR("v")), test))));
+                decls.add(new Decl.Axiom(FORALL(params, IFF(INVOKE("Type#is", HEAP, ivk, VAR("v")), test))));
             }
         }
 
@@ -3660,7 +3660,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             return VAR(name);
         } else {
             ArrayList<Expr> args = new ArrayList<>();
-            args.add(heap);
             for(WyilFile.Template.Variable hole : holes) {
                 args.add(VAR(hole.getName().get()));
             }

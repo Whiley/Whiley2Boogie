@@ -101,11 +101,19 @@ public class InvalidTests {
 				name); // name of test to compile
 
 		boolean r = p.first();
-		System.out.print(p.second());
-
 		if (r) {
 			fail("Test should have failed to compile / verify!");
 		}
+//		String output = p.second();
+//
+//		// Now, let's check the expected output against the file which
+//		// contains the sample output for this test
+//		String sampleOutputFile = WHILEY_SRC_DIR + File.separatorChar + name
+//				+ ".sysout";
+//		// Third, compare the output!
+//		if(!TestUtils.compare(output,sampleOutputFile)) {
+//			fail("Output does not match reference");
+//		}
 	}
 
  	/**

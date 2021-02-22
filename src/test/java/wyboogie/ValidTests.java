@@ -114,7 +114,7 @@ public class ValidTests {
 		// Lambda Type Invariant with Templates
 		IGNORED.put("Template_Valid_57","#66");
 		// Problem with recursive type
-		IGNORED.put("RecursiveType_Valie_19","#79");
+		IGNORED.put("RecursiveType_Valid_19","#79");
 		IGNORED.put("RecursiveType_Valid_20","#79");
 	}
 
