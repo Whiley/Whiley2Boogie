@@ -8,3 +8,6 @@ ensures (2 * r) == a:
     //
     int b = f(1)
     return 1
+
+public export method test():
+    assert f(2) == 1

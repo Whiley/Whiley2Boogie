@@ -1053,11 +1053,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     @Override
     public Stmt constructAssume(WyilFile.Stmt.Assume stmt, Expr condition) {
         ArrayList<Stmt> stmts = new ArrayList<>();
+        // Add all preconditions arising.
+        stmts.addAll(constructDefinednessAssertions(stmt.getCondition()));
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getCondition()));
         // Add well-definedness assumptions
-        condition = AND(append(constructDefinednessChecks(stmt.getCondition()), (Expr.Logical) condition));
-        //
         stmts.add(ASSUME((Expr.Logical) condition, ATTRIBUTE(stmt.getCondition()), ATTRIBUTE(WyilFile.STATIC_ASSUMPTION_FAILURE)));
         // Done
         return SEQUENCE(stmts);

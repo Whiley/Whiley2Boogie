@@ -16,5 +16,5 @@ ensures (2 * r) == a:
     int b = f(a)
     return b
 
-method test():
-    assert g(1) > 0
+public export method test():
+    assert g(2) == 1

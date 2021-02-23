@@ -9,3 +9,6 @@ ensures (2 * r) == a:
     //
     int b = f(a)
     return b
+
+public export method test():
+    assert f(2) == 1
