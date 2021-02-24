@@ -111,6 +111,7 @@ public class ValidTests {
 		// Preserving loop invariant HEAP locations
 		IGNORED.put("Process_Valid_6","#60");
 		IGNORED.put("UnknownReference_Valid_3","#60");
+		IGNORED.put("Reference_Valid_23","#60");
 		// Problem with Cyclic Reference Type Invariants
 		IGNORED.put("Reference_Valid_11","#61");
 		// Lambda Type Invariant with Templates
@@ -118,6 +119,8 @@ public class ValidTests {
 		// Problem with recursive type
 		IGNORED.put("RecursiveType_Valid_19","#79");
 		IGNORED.put("RecursiveType_Valid_20","#79");
+		// Problem with Templates and References
+		IGNORED.put("Reference_Valid_24","#89");
 	}
 
 	// ======================================================================
