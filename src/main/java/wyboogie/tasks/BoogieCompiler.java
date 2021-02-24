@@ -23,6 +23,7 @@ import java.util.Set;
 import java.util.function.Function;
 
 import static wyboogie.core.BoogieFile.*;
+//import static wyil.lang.WyilFile.*;
 
 import wyboogie.core.BoogieFile;
 import wyboogie.core.BoogieFile.Decl;
@@ -30,6 +31,7 @@ import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.Stmt;
 import wyboogie.core.BoogieFile.LVal;
 import wyboogie.util.AbstractExpressionProducer;
+import wybs.lang.Build;
 import wybs.lang.Build.Meter;
 import wybs.lang.SyntacticItem;
 import wybs.util.AbstractCompilationUnit.Tuple;
@@ -840,7 +842,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         for (int i = 0; i != lvals.size(); ++i) {
             WyilFile.LVal ith = lvals.get(i);
             stmts.add(constructAssign(ith, vals.get(i)));
-            Expr.Logical c = constructTypeConstraint(ith.getType(), visitExpression(ith), HEAP, ith);
+            // Extract the assigned variable
+            WyilFile.Decl.Variable v = extractVariable(ith, meter);
+            // Apply type constraint (if applicable)
+            Expr.Logical c = constructTypeConstraint(v.getType(), VAR(toVariableName(v)), HEAP, ith);
             if (c != null) {
                 stmts.add(ASSERT(c, ATTRIBUTE(rvals.get(i)), ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
             }
@@ -3838,6 +3843,41 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             visitor.visitUnit(unit);
         }
         return names;
+    }
+
+    /**
+     * Extract the variable on which a (flatterned) lval is operating.  For example, given <code>x.f[0] = 1</code>, the extracted
+     * variable would be <code>x</code>.
+     */
+    private static WyilFile.Decl.Variable extractVariable(WyilFile.LVal lval, Build.Meter meter) {
+        // FIXME: this should really be a query over e.g. lval.getDescendant().
+        switch (lval.getOpcode()) {
+            case WyilFile.EXPR_arrayaccess:
+            case WyilFile.EXPR_arrayborrow: {
+                WyilFile.Expr.ArrayAccess e = (WyilFile.Expr.ArrayAccess) lval;
+                return extractVariable((WyilFile.LVal) e.getFirstOperand(), meter);
+            }
+            case WyilFile.EXPR_fielddereference: {
+                WyilFile.Expr.FieldDereference e = (WyilFile.Expr.FieldDereference) lval;
+                return extractVariable((WyilFile.LVal) e.getOperand(), meter);
+            }
+            case WyilFile.EXPR_dereference: {
+                WyilFile.Expr.Dereference e = (WyilFile.Expr.Dereference) lval;
+                return extractVariable((WyilFile.LVal) e.getOperand(), meter);
+            }
+            case WyilFile.EXPR_recordaccess:
+            case WyilFile.EXPR_recordborrow: {
+                WyilFile.Expr.RecordAccess e = (WyilFile.Expr.RecordAccess) lval;
+                return extractVariable((WyilFile.LVal) e.getOperand(), meter);
+            }
+            case WyilFile.EXPR_variablecopy:
+            case WyilFile.EXPR_variablemove: {
+                WyilFile.Expr.VariableAccess e = (WyilFile.Expr.VariableAccess) lval;
+                return e.getVariableDeclaration();
+            }
+            default:
+                throw new IllegalArgumentException("invalid lval: " + lval);
+        }
     }
 
     /**

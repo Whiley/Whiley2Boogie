@@ -1,6 +1,6 @@
 function f(int[] xs) -> (int r)
 ensures r >= 0:
-    assume xs[0] >= 0
+    assume |xs| > 0 && xs[0] >= 0
     return xs[0]
 
 //
