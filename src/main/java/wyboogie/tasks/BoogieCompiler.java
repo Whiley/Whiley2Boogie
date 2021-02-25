@@ -1155,7 +1155,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Add variable increment for completeness
         loopBody.add(ASSIGN(var, ADD(var, CONST(1))));
         // UPdate the invariant
-        invariant.add(0, AND(LTEQ((Expr) range.first(), var), LTEQ(var, (Expr) range.second())));
+        invariant.add(0, AND(LTEQ((Expr) range.first(), var), LTEQ(var, (Expr) range.second()),ATTRIBUTE(stmt.getVariable().getInitialiser())));
         // Add continue label (if necessary)
         if (needContinueLabel) {
             stmts.add(LABEL("CONTINUE_" + stmt.getIndex()));
