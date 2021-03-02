@@ -1426,7 +1426,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         Tuple<WyilFile.Decl.Variable> modified = stmt.getModified();
         ArrayList<Stmt> stmts = new ArrayList<>();
         // Add all preconditions arising.
-        stmts.addAll(constructDefinednessAssertions(stmt.getCondition()));
+        // stmts.addAll(constructDefinednessAssertions(stmt.getCondition()));
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getCondition()));
         // Add continue label (if necessary)
@@ -2245,9 +2245,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 Expr src = BoogieCompiler.this.visitExpression(expr.getFirstOperand());
                 Expr i = BoogieCompiler.this.visitExpression(expr.getSecondOperand());
                 // Add check that index is not negative
-                result.add(ASSERT(LTEQ(CONST(0), i), ATTRIBUTE(expr.getSecondOperand()), ATTRIBUTE(WyilFile.STATIC_BELOWBOUNDS_INDEX_FAILURE)));
+                result.add(ASSERT(LTEQ(CONST(0), i, ATTRIBUTE(expr.getSecondOperand())), ATTRIBUTE(expr.getSecondOperand()), ATTRIBUTE(WyilFile.STATIC_BELOWBOUNDS_INDEX_FAILURE)));
                 // Add check that index below length
-                result.add(ASSERT(LT(i, INVOKE("Array#Length", src)), ATTRIBUTE(expr.getSecondOperand()), ATTRIBUTE(WyilFile.STATIC_ABOVEBOUNDS_INDEX_FAILURE)));
+                result.add(ASSERT(LT(i, INVOKE("Array#Length", src), ATTRIBUTE(expr.getSecondOperand())), ATTRIBUTE(expr.getSecondOperand()), ATTRIBUTE(WyilFile.STATIC_ABOVEBOUNDS_INDEX_FAILURE)));
                 // Done
                 return result;
             }
@@ -2258,7 +2258,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 // Translate right-hand side so can compare against 0
                 Expr r = BoogieCompiler.this.visitExpression(expr.getSecondOperand());
                 // Add length check
-                result.add(ASSERT(LTEQ(CONST(0), r), ATTRIBUTE(expr.getSecondOperand()), ATTRIBUTE(WyilFile.STATIC_NEGATIVE_LENGTH_FAILURE)));
+                result.add(ASSERT(LTEQ(CONST(0), r, ATTRIBUTE(expr.getSecondOperand())), ATTRIBUTE(expr.getSecondOperand()), ATTRIBUTE(WyilFile.STATIC_NEGATIVE_LENGTH_FAILURE)));
                 // Done
                 return result;
             }
@@ -2269,7 +2269,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 // Translate right-hand side so can compare against 0
                 Expr r = BoogieCompiler.this.visitExpression(expr.getSecondOperand());
                 // Add check that rhs is non-zero
-                result.add(ASSERT(NEQ(r, CONST(0)),ATTRIBUTE(expr.getSecondOperand()),ATTRIBUTE(WyilFile.STATIC_DIVIDEBYZERO_FAILURE)));
+                result.add(ASSERT(NEQ(r, CONST(0),ATTRIBUTE(expr.getSecondOperand())),ATTRIBUTE(expr.getSecondOperand()),ATTRIBUTE(WyilFile.STATIC_DIVIDEBYZERO_FAILURE)));
                 // Done
                 return result;
             }
@@ -2320,7 +2320,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     // Add heap argument
                     args.add(0, HEAP);
                     // Append the invocation
-                    result.add(ASSERT(INVOKE(name + "#pre", args), ATTRIBUTE(expr), ATTRIBUTE(WyilFile.STATIC_PRECONDITION_FAILURE)));
+                    result.add(ASSERT(INVOKE(name + "#pre", args, ATTRIBUTE(expr)), ATTRIBUTE(expr), ATTRIBUTE(WyilFile.STATIC_PRECONDITION_FAILURE)));
                 }
                 return result;
             }
@@ -2370,7 +2370,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             assertions.addAll(constructDefinednessAssertions(exprs.get(i)));
         }
         // Extract the condition from each
-        return map(assertions, a -> a.getCondition());
+        List<Expr.Logical> ls = map(assertions, a -> a.getCondition());
+        for(Expr l : ls) {
+            SyntacticItem item = l.getAttribute(SyntacticItem.class);
+            if(item == null) {
+                throw new IllegalArgumentException("CAUGHT IT (" + l.getClass().getName() + ")");
+            }
+        }
+        return ls;
     }
 
     // =========================================================================================
