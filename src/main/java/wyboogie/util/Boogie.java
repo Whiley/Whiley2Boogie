@@ -109,7 +109,6 @@ public class Boogie {
 			// ===================================================
 			ArrayList<String> command = new ArrayList<>();
 			command.add(boogieCmd);
-			command.add("/nologo");
 			// Add any registered command-line options
 			for(Map.Entry<String,String> e : options.entrySet()) {
 				String opt = e.getKey();

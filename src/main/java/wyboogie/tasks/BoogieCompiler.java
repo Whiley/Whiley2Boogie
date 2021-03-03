@@ -2370,14 +2370,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             assertions.addAll(constructDefinednessAssertions(exprs.get(i)));
         }
         // Extract the condition from each
-        List<Expr.Logical> ls = map(assertions, a -> a.getCondition());
-        for(Expr l : ls) {
-            SyntacticItem item = l.getAttribute(SyntacticItem.class);
-            if(item == null) {
-                throw new IllegalArgumentException("CAUGHT IT (" + l.getClass().getName() + ")");
-            }
-        }
-        return ls;
+        return map(assertions, a -> a.getCondition());
     }
 
     // =========================================================================================
