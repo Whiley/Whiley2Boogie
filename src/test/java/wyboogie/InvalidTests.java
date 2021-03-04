@@ -99,8 +99,8 @@ public class InvalidTests {
 		Pair<Boolean, String> p = compileWhiley2Boogie(
 				WHILEY_SRC_DIR, // location of source directory
 				name); // name of test to compile
-
 		boolean r = p.first();
+		System.out.println(p.second());
 		if (r) {
 			fail("Test should have failed to compile / verify!");
 		}
@@ -135,12 +135,12 @@ public class InvalidTests {
 		ByteArrayOutputStream syserr = new ByteArrayOutputStream();
 		ByteArrayOutputStream sysout = new ByteArrayOutputStream();
 		PrintStream psyserr = new PrintStream(syserr);
+		// Construct the project
+		DirectoryRoot root = new DirectoryRoot(whileydir, registry);
 		//
 		boolean result = true;
 		//
 		try {
-			// Construct the project
-			DirectoryRoot root = new DirectoryRoot(whileydir, registry);
 			//
 			SequentialBuildProject project = new SequentialBuildProject(root);
 			// Identify source files and target files
@@ -177,22 +177,20 @@ public class InvalidTests {
 			project.refresh();
 			// Actually force the project to build
 			result = project.build(ForkJoinPool.commonPool(), Build.NULL_METER).get();
-			// Flush any created resources (e.g. wyil files)
-			root.flush();
 			// Check whether any syntax error produced
 			result = !TestUtils.findSyntaxErrors(wyilTarget.read().getRootItem(), new BitSet());
 			// Print out any error messages
 			wycli.commands.Build.printSyntacticMarkers(psyserr, (List) sources, (Path.Entry) wyilTarget);
-			// Flush any created resources (e.g. wyil files)
-			root.flush();
 		} catch (SyntacticException e) {
 			// Print out the syntax error
 			e.outputSourceError(new PrintStream(syserr),false);
-			result = false;
+			result = true;
 		} catch (Exception e) {
 			// Print out the syntax error
 			e.printStackTrace(new PrintStream(syserr));
-			result = false;
+			result = true;
+		} finally {
+			root.flush();
 		}
 		// Convert bytes produced into resulting string.
 		byte[] errBytes = syserr.toByteArray();
