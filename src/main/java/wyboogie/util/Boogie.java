@@ -48,7 +48,7 @@ public class Boogie {
     /**
      * The following regex matches the error lines reported by Boogie.  The regex identifies the line number, column number and the message itself.
      */
-    private static final Pattern ERROR_MATCH = Pattern.compile("[a-zA-Z0-9/_.]+\\(([0-9]+),([0-9]+)\\): Error[ A-Z0-9]+: ([a-zA-Z. ]+)");
+    private static final Pattern ERROR_MATCH = Pattern.compile("[a-zA-Z0-9\\/_.]+\\(([0-9]+),([0-9]+)\\): Error[ A-Z0-9]*: ([a-zA-Z. ]+)");
 
     private final String boogieCmd;
 
@@ -272,7 +272,7 @@ public class Boogie {
                     // Construct Error object
                     BoogieFile.Item item = m.get(line, col);
                     errors[i] = new Error(line, col, message, item);
-                } 
+                }
             }
         }
 
