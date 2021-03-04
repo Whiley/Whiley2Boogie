@@ -93,7 +93,6 @@ public class ValidTests {
 		IGNORED.put("RecursiveType_Valid_28","#???");
 		IGNORED.put("While_Valid_2","");
 		IGNORED.put("While_Valid_71","");
-        IGNORED.put("Process_Valid_10","#???");
 		// Known issues.  These are known problems with issues raised on github.
 		// Problem with Existential?
 		IGNORED.put("ConstrainedList_Valid_18","#26");
@@ -112,8 +111,6 @@ public class ValidTests {
 		IGNORED.put("Process_Valid_6","#60");
 		IGNORED.put("UnknownReference_Valid_3","#60");
 		IGNORED.put("Reference_Valid_23","#60");
-		// Problem with Cyclic Reference Type Invariants
-		IGNORED.put("Reference_Valid_11","#61");
 		// Lambda Type Invariant with Templates
 		IGNORED.put("Template_Valid_57","#66");
 		// Problem with recursive type
