@@ -69,25 +69,11 @@ public class InvalidTests {
 			IGNORED.put("Parsing_Invalid_2", "608");
 			// Access Static Variable from Type Invariant
 			IGNORED.put("Type_Invalid_11", "793");
-			// Problems with counterexample generation?
-//			IGNORED.put("DoWhile_Invalid_6", "??");
-//			IGNORED.put("DoWhile_Invalid_8", "??");
-//			IGNORED.put("While_Invalid_18", "??");
-//			IGNORED.put("While_Invalid_20", "??");
-//			IGNORED.put("While_Invalid_21", "??");
-//			IGNORED.put("While_Invalid_22", "??");
-//			IGNORED.put("While_Invalid_23", "??");
-//			IGNORED.put("TupleAssign_Invalid_3", "??");
-//			IGNORED.put("TypeEquals_Invalid_5", "??");
-//		// #885 --- Contractive Types and isVoid()
+      		// #885 --- Contractive Types and isVoid()
 			IGNORED.put("Type_Invalid_5", "885");
 			IGNORED.put("Type_Invalid_8", "??");
 			IGNORED.put("Reference_Invalid_2", "unclassified");
-			IGNORED.put("Type_Invalid_14", "??");
-			IGNORED.put("Type_Invalid_15", "??");
-			IGNORED.put("While_Invalid_24", "??");
 			IGNORED.put("While_Invalid_25", "#956");
-			IGNORED.put("For_Invalid_9", "#982");
 			IGNORED.put("Reference_Invalid_5", "??");
 		}
 	// ======================================================================
