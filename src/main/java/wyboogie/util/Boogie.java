@@ -22,6 +22,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import wyboogie.core.BoogieFile;
 import wyboogie.io.BoogieFilePrinter;
@@ -42,6 +44,11 @@ public class Boogie {
     public static final int ERROR_POSTCONDITION_FAILURE = 5003;
     public static final int ERROR_ESTABLISH_LOOP_INVARIANT_FAILURE = 5004;
     public static final int ERROR_RESTORE_LOOP_INVARIANT_FAILURE = 5005;
+
+    /**
+     * The following regex matches the error lines reported by Boogie.  The regex identifies the line number, column number and the message itself.
+     */
+    private static final Pattern ERROR_MATCH = Pattern.compile("[a-zA-Z0-9/_.]+\\(([0-9]+),([0-9]+)\\): Error[ A-Z0-9]+: ([a-zA-Z. ]+)");
 
     private final String boogieCmd;
 
@@ -254,18 +261,18 @@ public class Boogie {
                 errors[i] = new FatalError();
                 break;
             } else {
-                int a = ith.indexOf('(');
-                int b = ith.indexOf(',');
-                int c = ith.indexOf(')');
-                int d = ith.indexOf(':');
-                int e = ith.indexOf("Error:");
-                if (a >= 0 && b >= 0 && c >= 0 && d >= 0 && e >= 0) {
-                    int line = Integer.parseInt(ith.substring(a + 1, b));
-                    int col = Integer.parseInt(ith.substring(b + 1, c));
-                    String message = ith.substring(e + 6);
+                Matcher matcher = ERROR_MATCH.matcher(ith);
+                if(matcher.matches()) {
+                    // Extract line number from error line
+                    int line = Integer.parseInt(matcher.group(1));
+                    // Extract column number from error line
+                    int col = Integer.parseInt(matcher.group(2));
+                    // Extract message from error line
+                    String message = matcher.group(3);
+                    // Construct Error object
                     BoogieFile.Item item = m.get(line, col);
                     errors[i] = new Error(line, col, message, item);
-                }
+                } 
             }
         }
 
