@@ -97,7 +97,6 @@ public class ValidTests {
 		// Problem with Existential?
 		IGNORED.put("ConstrainedList_Valid_18","#26");
 		IGNORED.put("Property_Valid_4","#26");
-		IGNORED.put("Subtype_Valid_5","#26");
 		// Disconnect between Lambdas and their Applications
 		IGNORED.put("Lambda_Valid_13","#52");
 		// Problem with Recursive Property?
