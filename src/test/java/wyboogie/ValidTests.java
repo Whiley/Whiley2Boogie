@@ -83,8 +83,7 @@ public class ValidTests {
 		// ===================================================
 		// Boogie problems
 		// ===================================================
-		// Timeouts.  These timeout after 10s.
-		IGNORED.put("RecursiveType_Valid_7","#???");
+
 		// Not verifiable yet!  These are incomplete in some way which means they could not be verified.
 		IGNORED.put("Property_Valid_14","");
 		IGNORED.put("Property_Valid_16","");
@@ -116,6 +115,8 @@ public class ValidTests {
 		// Reference Type Invariant not Preserved in Loop
 		IGNORED.put("Lambda_Valid_3","#97");
 		IGNORED.put("Lambda_Valid_4","#97");
+		// Problem with Large Static Initialiser
+		IGNORED.put("RecursiveType_Valid_7","#98");
 	}
 
 	// ======================================================================
