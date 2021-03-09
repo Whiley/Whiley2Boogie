@@ -48,7 +48,22 @@ public class Boogie {
     /**
      * The following regex matches the error lines reported by Boogie.  The regex identifies the line number, column number and the message itself.
      */
-    private static final Pattern ERROR_MATCH = Pattern.compile("[a-zA-Z0-9\\/_.]+\\(([0-9]+),([0-9]+)\\): Error[ A-Z0-9]*: ([a-zA-Z. ]+)");
+    private static final Pattern ERROR_MATCH = Pattern.compile("[a-zA-Z0-9\\/_.]+\\(([0-9]+),([0-9]+)\\): Error[ A-Z0-9]*: ([a-zA-Z. 0-9$#:\\(\\)]+)");
+
+    /**
+     * The following regex matches the start of an execution trace
+     */
+    private static final Pattern EXECUTION_TRACE_MATCH = Pattern.compile("Execution trace:");
+
+    /**
+     * The following regex matches the start of a related location
+     */
+    private static final Pattern RELATED_LOCATION_MATCH = Pattern.compile("[a-zA-Z0-9\\/_.]+\\(([0-9]+),([0-9]+)\\): Related location:([a-zA-Z. 0-9]+)");
+
+    /**
+     * The following regex matches the final line reported by Boogie indicating how many verification conditions were verified, and how many errors were detected.
+     */
+    private static final Pattern FINISHED_MATCH = Pattern.compile("Boogie program verifier finished with ([0-9]+) verified, ([0-9]+) error(s)?");
 
     private final String boogieCmd;
 
@@ -261,6 +276,8 @@ public class Boogie {
                 errors[i] = new FatalError();
                 break;
             } else {
+                // Attempt to match the error message.  This is necessary to ensure that all errors are caught and
+                // reported in a sensible fashion.  If we don't do this, then we can end up silently losing errors!
                 Matcher matcher = ERROR_MATCH.matcher(ith);
                 if(matcher.matches()) {
                     // Extract line number from error line
@@ -272,6 +289,18 @@ public class Boogie {
                     // Construct Error object
                     BoogieFile.Item item = m.get(line, col);
                     errors[i] = new Error(line, col, message, item);
+                } else if(EXECUTION_TRACE_MATCH.matcher(ith).matches()) {
+                    // Skip the execution trace
+                    i = i + 1;
+                    while(i < lines.length && lines[i].startsWith("    ")) {
+                        i = i + 1;
+                    }
+                } else if(RELATED_LOCATION_MATCH.matcher(ith).matches()) {
+                    // skip
+                } else if(FINISHED_MATCH.matcher(ith).matches()) {
+                    // Skip
+                } else if(!ith.equals("")){
+                    throw new IllegalArgumentException("unrecognised error: " + ith);
                 }
             }
         }
