@@ -117,6 +117,8 @@ public class ValidTests {
 		IGNORED.put("Lambda_Valid_4","#97");
 		// Problem with Large Static Initialiser
 		IGNORED.put("RecursiveType_Valid_7","#98");
+		// (Non-Atomic) Multiple Assignments
+		IGNORED.put("RecordAssign_Valid_17","#99");
 	}
 
 	// ======================================================================
