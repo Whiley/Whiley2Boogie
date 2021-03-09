@@ -86,8 +86,6 @@ public class ValidTests {
 		// Timeouts.  These timeout after 10s.
 		IGNORED.put("RecursiveType_Valid_7","#???");
 		// Not verifiable yet!  These are incomplete in some way which means they could not be verified.
-		IGNORED.put("Lambda_Valid_3","");
-		IGNORED.put("Lambda_Valid_4","");
 		IGNORED.put("Property_Valid_14","");
 		IGNORED.put("Property_Valid_16","");
 		IGNORED.put("While_Valid_71","");
@@ -115,6 +113,9 @@ public class ValidTests {
 		IGNORED.put("RecursiveType_Valid_20","#79");
 		// Problem with Templates and References
 		IGNORED.put("Reference_Valid_24","#89");
+		// Reference Type Invariant not Preserved in Loop
+		IGNORED.put("Lambda_Valid_3","#97");
+		IGNORED.put("Lambda_Valid_4","#97");
 	}
 
 	// ======================================================================
