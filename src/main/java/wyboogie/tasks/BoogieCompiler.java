@@ -1117,6 +1117,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         invariant = append(constructDefinednessChecks(stmt.getInvariant()), (List<Expr.Logical>) invariant);
         // Add type constraints arising from modified variables
         invariant.addAll(0, constructTypeConstraints(modified, HEAP));
+        // Add additional type constraints for modified references
+        invariant.addAll(0, constructTypeConstraints(extractModifiedReferences(stmt), HEAP));
         // Add the loop itself
         stmts.add(WHILE((Expr.Logical) condition, invariant, body));
         // Add break label (if necessary)
@@ -1164,6 +1166,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         invariant = append(constructDefinednessChecks(stmt.getInvariant()), (List<Expr.Logical>) invariant);
         // Add any type constraints arising
         invariant.addAll(0, constructTypeConstraints(modified, HEAP));
+        // Add additional type constraints for modified references
+        invariant.addAll(0, constructTypeConstraints(extractModifiedReferences(stmt), HEAP));
         // Construct the loop
         stmts.add(WHILE((Expr.Logical) condition, invariant, SEQUENCE(loopBody)));
         // Add break label (if necessary)
@@ -1437,6 +1441,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         invariant = append(constructDefinednessChecks(stmt.getInvariant()),(List<Expr.Logical>) invariant);
         // Add any type constraints arising (first)
         invariant.addAll(0, constructTypeConstraints(modified, HEAP));
+        // Add additional type constraints for modified references
+        invariant.addAll(0, constructTypeConstraints(extractModifiedReferences(stmt), HEAP));
         //
         stmts.add(WHILE((Expr.Logical) condition, invariant, body));
         // Add break label (if necessary)
@@ -3628,6 +3634,84 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Ensure argument is boxed!
         return INVOKE(name + "#frame", arguments, ATTRIBUTE(type));
     }
+
+    // ==============================================================================
+    // Loop Framing
+    // ==============================================================================
+
+    private Tuple<WyilFile.Decl.Variable> extractModifiedReferences(WyilFile.Stmt root) {
+        HashSet<WyilFile.Decl.Variable> lvals = new HashSet<>();
+        new AbstractVisitor(meter) {
+            @Override
+            public void visitLVals(Tuple<WyilFile.LVal> lvs) {
+                for(WyilFile.LVal lv : lvs) {
+                    addLVal(lv);
+                }
+            }
+            @Override
+            public void visitExpression(WyilFile.Expr e) {
+
+            }
+            @Override
+            public void visitType(WyilFile.Type t) {
+
+            }
+            private void addLVal(WyilFile.LVal lv) {
+               switch(lv.getOpcode()) {
+                   case WyilFile.EXPR_variablecopy:
+                   case WyilFile.EXPR_variablemove:
+                            break;
+                   case WyilFile.EXPR_arrayaccess: {
+                       WyilFile.Expr.ArrayAccess e = (WyilFile.Expr.ArrayAccess) lv;
+                       addLVal((WyilFile.LVal) e.getFirstOperand());
+                       break;
+                   }
+                   case WyilFile.EXPR_recordaccess: {
+                       WyilFile.Expr.RecordAccess e = (WyilFile.Expr.RecordAccess) lv;
+                       addLVal((WyilFile.LVal) e.getOperand());
+                       break;
+                   }
+                   case WyilFile.EXPR_dereference:
+                   case WyilFile.EXPR_fielddereference: {
+                       // Found a dereference, hence problem.
+                       lvals.add(extractDefinedVariable(lv));
+                   }
+               }
+            }
+        }.visitStatement(root);
+        //
+        return new Tuple<>(lvals);
+    }
+
+    private static WyilFile.Decl.Variable extractDefinedVariable(WyilFile.LVal lval) {
+		switch (lval.getOpcode()) {
+		case WyilFile.EXPR_arrayaccess:
+		case WyilFile.EXPR_arrayborrow: {
+			WyilFile.Expr.ArrayAccess e = (WyilFile.Expr.ArrayAccess) lval;
+			return extractDefinedVariable((WyilFile.LVal) e.getFirstOperand());
+		}
+		case WyilFile.EXPR_fielddereference: {
+            WyilFile.Expr.FieldDereference e = (WyilFile.Expr.FieldDereference) lval;
+            return extractDefinedVariable((WyilFile.LVal) e.getOperand());
+        }
+		case WyilFile.EXPR_dereference: {
+            WyilFile.Expr.Dereference e = (WyilFile.Expr.Dereference) lval;
+			return extractDefinedVariable((WyilFile.LVal) e.getOperand());
+		}
+		case WyilFile.EXPR_recordaccess:
+		case WyilFile.EXPR_recordborrow: {
+			WyilFile.Expr.RecordAccess e = (WyilFile.Expr.RecordAccess) lval;
+			return extractDefinedVariable((WyilFile.LVal) e.getOperand());
+		}
+		case WyilFile.EXPR_variablecopy:
+		case WyilFile.EXPR_variablemove: {
+			WyilFile.Expr.VariableAccess e = (WyilFile.Expr.VariableAccess) lval;
+			return e.getVariableDeclaration();
+		}
+		default:
+			throw new IllegalArgumentException("invalid lval: " + lval);
+		}
+	}
 
     // ==============================================================================
     // Misc
