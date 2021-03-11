@@ -46,9 +46,14 @@ public class Boogie {
     public static final int ERROR_RESTORE_LOOP_INVARIANT_FAILURE = 5005;
 
     /**
+     * The following regex matches the initial file path (Windows or Linux) in error lines reported by Boogie.
+     */
+    private static final Pattern FILE_MATCH = Pattern.compile("[a-zA-Z0-9/\\\\_.:]+");
+
+    /**
      * The following regex matches the error lines reported by Boogie.  The regex identifies the line number, column number and the message itself.
      */
-    private static final Pattern ERROR_MATCH = Pattern.compile("[a-zA-Z0-9\\/_.]+\\(([0-9]+),([0-9]+)\\): Error[ A-Z0-9]*: ([a-zA-Z. 0-9$#:\\(\\)]+)");
+    private static final Pattern ERROR_MATCH = Pattern.compile(FILE_MATCH + "\\(([0-9]+),([0-9]+)\\): Error[ A-Z0-9]*: ([a-zA-Z. 0-9$#:\\(\\)]+)");
 
     /**
      * The following regex matches the start of an execution trace
@@ -58,7 +63,7 @@ public class Boogie {
     /**
      * The following regex matches the start of a related location
      */
-    private static final Pattern RELATED_LOCATION_MATCH = Pattern.compile("[a-zA-Z0-9\\/_.]+\\(([0-9]+),([0-9]+)\\): Related location:([a-zA-Z. 0-9]+)");
+    private static final Pattern RELATED_LOCATION_MATCH = Pattern.compile(FILE_MATCH + "\\(([0-9]+),([0-9]+)\\): Related location:([a-zA-Z. 0-9]+)");
 
     /**
      * The following regex matches the final line reported by Boogie indicating how many verification conditions were verified, and how many errors were detected.
