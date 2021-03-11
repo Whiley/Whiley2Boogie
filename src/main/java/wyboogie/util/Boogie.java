@@ -271,7 +271,7 @@ public class Boogie {
         Message[] errors = new Message[lines.length];
         for (int i = 0; i != lines.length; ++i) {
             // Decode boogie error line
-            String ith = lines[i];
+            String ith = lines[i].trim();  // discards carriage returns
             if (ith.startsWith("Fatal Error:")) {
                 errors[i] = new FatalError();
                 break;
@@ -300,7 +300,7 @@ public class Boogie {
                 } else if(FINISHED_MATCH.matcher(ith).matches()) {
                     // Skip
                 } else if(!ith.equals("")){
-                    throw new IllegalArgumentException("unrecognised error: " + ith);
+                    throw new IllegalArgumentException("unrecognised error: '" + ith + "'");
                 }
             }
         }
