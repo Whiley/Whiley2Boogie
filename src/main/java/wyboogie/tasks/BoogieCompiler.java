@@ -2737,7 +2737,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         List<Expr.Logical> requires = new ArrayList<>();
         List<Expr.Logical> ensures = new ArrayList<>();
         // Heap location at ref equals val
-        ensures.add(EQ(GET(HEAP, ref), val));
+        ensures.add(EQ(GET(NHEAP, ref), val));
         // Heap location not previously allocated!
         ensures.add(EQ(GET(HEAP, ref), VAR("Void")));
         // All allocated locations remain as before
