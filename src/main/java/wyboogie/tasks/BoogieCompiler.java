@@ -360,7 +360,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         String name = toMangledName(d);
         // Determine concrete instantiations of this function
         Pair<List<Decl.Parameter>, List<Expr.Logical>> parametersAndConstraints = constructParameters(d.getTemplate(), d.getParameters(), HEAP);
-        Pair<List<Decl.Parameter>, List<Expr.Logical>> returnsAndConstraints = constructParameters(null, d.getReturns(), HEAP);
+        Pair<List<Decl.Parameter>, List<Expr.Logical>> returnsAndConstraints = constructParameters(null, d.getReturns(), NHEAP);
         // Extract parameter and returns
         List<Decl.Parameter> params = append(HEAP_PARAM, parametersAndConstraints.first());
         List<Decl.Parameter> returns = append(NHEAP_PARAM, returnsAndConstraints.first());
