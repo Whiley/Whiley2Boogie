@@ -88,6 +88,10 @@ public class ValidTests {
 		IGNORED.put("Property_Valid_14","");
 		IGNORED.put("Property_Valid_16","");
 		IGNORED.put("While_Valid_71","");
+		IGNORED.put("Reference_Valid_25",""); // needs old syntax
+		IGNORED.put("Reference_Valid_26",""); // needs old syntax
+		IGNORED.put("Reference_Valid_30",""); // needs old syntax
+		IGNORED.put("Reference_Valid_31",""); // needs old syntax
 		// Known issues.  These are known problems with issues raised on github.
 		// Problem with Existential?
 		IGNORED.put("ConstrainedList_Valid_18","#26");
@@ -98,6 +102,8 @@ public class ValidTests {
 		IGNORED.put("Property_Valid_17","#55");
 		// Problem with Dereference in Postcondition
 		IGNORED.put("Reference_Valid_6","#56");
+		IGNORED.put("Process_Valid_10","#56");
+		IGNORED.put("Process_Valid_9","#56");
 		// Problem with Lambda Unions
 		IGNORED.put("Lambda_Valid_24","#59");
 		IGNORED.put("Lambda_Valid_25","#59");
@@ -105,6 +111,10 @@ public class ValidTests {
 		IGNORED.put("Process_Valid_6","#60");
 		IGNORED.put("UnknownReference_Valid_3","#60");
 		IGNORED.put("Reference_Valid_23","#60");
+		IGNORED.put("Reference_Valid_32","#60");
+		IGNORED.put("Reference_Valid_29","#60");
+		// Problem with Cyclic Reference Type Invariants
+		IGNORED.put("Reference_Valid_11","#61");
 		// Lambda Type Invariant with Templates
 		IGNORED.put("Template_Valid_57","#66");
 		// Problem with recursive type
@@ -119,6 +129,7 @@ public class ValidTests {
 		IGNORED.put("RecursiveType_Valid_7","#98");
 		// (Non-Atomic) Multiple Assignments
 		IGNORED.put("RecordAssign_Valid_17","#99");
+		//
 	}
 
 	// ======================================================================

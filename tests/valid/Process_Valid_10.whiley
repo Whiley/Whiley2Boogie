@@ -7,7 +7,8 @@ requires _this->length > 0:
     return _this->items[_this->length]
 
 method put(&Queue _this, int item)
-requires _this->length < |_this->items|:
+requires _this->length < |_this->items|
+ensures _this->length > 0:
     _this->items[_this->length] = item
     _this->length = _this->length + 1
 
