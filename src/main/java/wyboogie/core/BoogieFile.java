@@ -1508,9 +1508,14 @@ public class BoogieFile {
 		}
 	}
 
-	public static Expr.LogicalNot NOT(Expr.Logical lhs, Attribute... attributes) {
-		// FIXME: could apply some simplification here.
-		return new Expr.LogicalNot(lhs, attributes);
+	public static Expr.Logical NOT(Expr.Logical lhs, Attribute... attributes) {
+		if(lhs.isFalse()) {
+			return new Expr.Boolean(true,attributes);
+		} else if(lhs.isTrue()) {
+			return new Expr.Boolean(false,attributes);
+		} else {
+			return new Expr.LogicalNot(lhs, attributes);
+		}
 	}
 
 	public static Expr.Logical OR(List<Expr.Logical> operands, Attribute... attributes) {
@@ -1539,6 +1544,14 @@ public class BoogieFile {
 
 	public static Expr.Logical OR(Expr.Logical operand1, Expr.Logical operand2, Expr.Logical operand3, Attribute... attributes) {
 		return OR(new Expr.Logical[]{operand1, operand2, operand3}, attributes);
+	}
+
+	public static Expr.Logical OR(Expr.Logical operand1, Expr.Logical operand2, Expr.Logical operand3,  Expr.Logical operand4, Attribute... attributes) {
+		return OR(new Expr.Logical[]{operand1, operand2, operand3, operand4}, attributes);
+	}
+
+	public static Expr.Logical OR(Expr.Logical operand1, Expr.Logical operand2, Expr.Logical operand3,  Expr.Logical operand4,  Expr.Logical operand5, Attribute... attributes) {
+		return OR(new Expr.Logical[]{operand1, operand2, operand3, operand4, operand5}, attributes);
 	}
 
 	public static Expr.Logical OR(Expr.Logical[] operands, Attribute... attributes) {

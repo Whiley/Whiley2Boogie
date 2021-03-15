@@ -109,10 +109,12 @@ public class ValidTests {
 		IGNORED.put("Lambda_Valid_25","#59");
 		// Preserving loop invariant HEAP locations
 		IGNORED.put("Process_Valid_6","#60");
-		IGNORED.put("UnknownReference_Valid_3","#60");
 		IGNORED.put("Reference_Valid_23","#60");
-		IGNORED.put("Reference_Valid_32","#60");
 		IGNORED.put("Reference_Valid_29","#60");
+		IGNORED.put("Reference_Valid_33","#60");
+		IGNORED.put("MethodRef_Valid_6","#60");
+		IGNORED.put("RecordAccess_Valid_1","#60");
+		IGNORED.put("UnknownReference_Valid_3","#60");
 		// Problem with Cyclic Reference Type Invariants
 		IGNORED.put("Reference_Valid_11","#61");
 		// Lambda Type Invariant with Templates
