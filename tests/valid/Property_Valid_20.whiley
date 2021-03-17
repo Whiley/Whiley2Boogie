@@ -22,11 +22,11 @@ function len(List l) -> (int r):
 
 public export method test():
     // List of length 1
-    List l1 = {data: 0, next: null}
+    List l1 = {next: null}
     // List of length 2
-    List l2 = {data: 0, next: l1}
+    List l2 = {next: l1}
     // List of length 3
-    List l3 = {data: 0, next: l2}
+    List l3 = {next: l2}
     //
     assume len(null) == 0
     //

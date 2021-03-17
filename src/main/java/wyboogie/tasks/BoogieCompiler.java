@@ -142,38 +142,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         test = AND(test, INVOKE(name + "#inv", arguments));
         parameters.set(template.size(), new Decl.Parameter(varName, ANY));
         decls.add(FUNCTION(name + "#is", parameters, Type.Bool, test));
-        // Add frame condition (if applicable)
-        decls.add(constructConcreteTypeFrameCondition(decl,instantiation));
         // Done
         return decls;
-    }
-
-    private Decl constructConcreteTypeFrameCondition(WyilFile.Decl.Type decl, WyilFile.Type instantiation) {
-        WyilFile.Decl.Variable var = decl.getVariableDeclaration();
-        // Convert the Whiley type into a Boogie type
-        Type type = constructType(var.getType());
-        // Determine the (mangled) variable name
-        String varName = toVariableName(var);
-        // Determine mangled name for type declaration
-        String name = toMangledName(decl, instantiation);
-        // Extract template
-        Tuple<WyilFile.Template.Variable> template = decl.getTemplate();
-        // Construct parameters
-        ArrayList<Decl.Parameter> parameters = new ArrayList<>();
-        for (int i = 0; i != template.size(); ++i) {
-            WyilFile.Template.Variable T = template.get(i);
-            parameters.add(new Decl.Parameter(T.getName().get(), TYPE));
-        }
-        // Add source expression
-        parameters.add(new Decl.Parameter(varName, type));
-        // Add reference being compared
-        parameters.add(new Decl.Parameter("r", REF));
-        // Add heap variable
-        parameters.add(HEAP_PARAM);
-        // Generate frame condition for the type itself
-        Expr.Logical frame = constructDynamicFrame(instantiation, VAR(varName), VAR("r"), HEAP);
-        // Done
-        return FUNCTION(name + "#frame", parameters, Type.Bool, frame);
     }
 
     @Override
@@ -389,46 +359,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Add Context Level Guarantee
         requires.add(GT(VAR("Context#Level"), CONST(1)));
         // Add type invariant preservation guarantee
-        ensures.addAll(constructFrameAxioms(d));
+        ensures.addAll(constructMethodFrame(d));
         // Construct procedure prototype
         decls.add(new Decl.Procedure(name, params, returns, requires, ensures, Collections.EMPTY_LIST));
         //
         return decls;
-    }
-
-    private List<Expr.Logical> constructFrameAxioms(WyilFile.Decl.Method m) {
-        Tuple<WyilFile.Decl.Variable> params = m.getParameters();
-        Tuple<WyilFile.Decl.Variable> rets = m.getReturns();
-        return constructFrameAxioms(m.getType(), i -> toVariableName(params.get(i)), i -> toVariableName(rets.get(i)), m);
-    }
-
-    private List<Expr.Logical> constructFrameAxioms(WyilFile.Type.Callable ct, Function<Integer,String> parameters, Function<Integer,String> returns, SyntacticItem item) {
-        ArrayList<Expr.Logical> ensures = new ArrayList<Expr.Logical>();
-        WyilFile.Type param = ct.getParameter();
-        WyilFile.Type ret = ct.getReturn();
-        Expr r = VAR("r");
-        // Extract the set of locations reachable from parameter types to this method
-        Expr.Logical preFrame = constructDynamicFrame(param, parameters, r, HEAP, item);
-        Expr.Logical postFrame = constructDynamicFrame(ret, returns, r, NHEAP, item);
-        // Ensure type invariants guaranteed
-        ArrayList<Expr.Logical> inclusions = new ArrayList<>();
-        //
-        for(int i=0;i!=param.shape();++i) {
-            inclusions.add(constructTypeTest(param.dimension(i), VAR(parameters.apply(i)), NHEAP, item));
-        }
-        for(int i=0;i!=ret.shape();++i) {
-            inclusions.add(constructTypeTest(ret.dimension(i), VAR(returns.apply(i)), NHEAP, item));
-        }
-        // Add type tests for parameters and returns
-        ensures.add(AND(inclusions));
-        // For any reference not in the preframe, either it was unnallocated or its contents are unchanged.
-        ensures.add(FORALL("r", REF, OR(preFrame, EQ(GET(HEAP, r), VAR("Void")), EQ(GET(HEAP, r), GET(NHEAP, r)))));
-        if(!preFrame.isTrue() && !postFrame.isFalse()) {
-            // For any reference in the postframe, either it exists in the preframe or it was unallocated.
-            ensures.add(FORALL("r", REF, IMPLIES(postFrame, OR(EQ(GET(HEAP, r), VAR("Void")), preFrame))));
-        }
-        //
-        return ensures;
     }
 
     public List<Decl> constructMethodImplementation(WyilFile.Decl.Method d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, List<Expr.Logical> requires, List<Expr.Logical> ensures, Stmt body) {
@@ -617,6 +552,32 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 String name = toVariableName(v);
                 Type type = constructType(v.getType());
                 decls.add(new Decl.Variable(name, type));
+                //
+                if(!isPure(stmt)) {
+                    // Loop modifies heap in some way.  Hence, need to store a copy of HEAP at beginning of loop which
+                    // can be used as the reference point.
+                    decls.add(new Decl.Variable("HEAP$" + stmt.getIndex(), REFMAP));
+                }
+            }
+
+            @Override
+            public void visitWhile(WyilFile.Stmt.While stmt) {
+                super.visitWhile(stmt);
+                if(!isPure(stmt)) {
+                    // Loop modifies heap in some way.  Hence, need to store a copy of HEAP at beginning of loop which
+                    // can be used as the reference point.
+                    decls.add(new Decl.Variable("HEAP$" + stmt.getIndex(), REFMAP));
+                }
+            }
+
+            @Override
+            public void visitDoWhile(WyilFile.Stmt.DoWhile stmt) {
+                super.visitDoWhile(stmt);
+                if(!isPure(stmt)) {
+                    // Loop modifies heap in some way.  Hence, need to store a copy of HEAP at beginning of loop which
+                    // can be used as the reference point.
+                    decls.add(new Decl.Variable("HEAP$" + stmt.getIndex(), REFMAP));
+                }
             }
 
             @Override
@@ -1101,6 +1062,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     public Stmt constructDoWhile(WyilFile.Stmt.DoWhile stmt, Stmt body, Expr condition, List invariant) {
         boolean needContinueLabel = containsContinueOrBreak(stmt, false);
         boolean needBreakLabel = containsContinueOrBreak(stmt, true);
+        boolean pure = isPure(stmt);
+        Expr.VariableAccess OHEAP = BoogieFile.VAR("HEAP$" + stmt.getIndex());
         Tuple<WyilFile.Decl.Variable> modified = stmt.getModified();
         ArrayList<Stmt> stmts = new ArrayList<>();
         // Add first iteration
@@ -1109,16 +1072,20 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         stmts.addAll(constructDefinednessAssertions(stmt.getCondition()));
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getCondition()));
-        // Add continue label (if necessary)
-        if (needContinueLabel) {
-            stmts.add(LABEL("CONTINUE_" + stmt.getIndex()));
-        }
         // Add definedness checks for invariants
         invariant = append(constructDefinednessChecks(stmt.getInvariant()), (List<Expr.Logical>) invariant);
         // Add type constraints arising from modified variables
         invariant.addAll(0, constructTypeConstraints(modified, HEAP));
-        // Add additional type constraints for modified references
-        invariant.addAll(0, constructTypeConstraints(extractModifiedReferences(stmt), HEAP));
+        if(!pure) {
+            // Save OLD heap
+            stmts.add(BoogieFile.ASSIGN(OHEAP,HEAP));
+            // Add necessary loop frame
+            invariant.addAll(constructLoopFrame(stmt,OHEAP,HEAP));
+        }
+        // Add continue label (if necessary)
+        if (needContinueLabel) {
+            stmts.add(LABEL("CONTINUE_" + stmt.getIndex()));
+        }
         // Add the loop itself
         stmts.add(WHILE((Expr.Logical) condition, invariant, body));
         // Add break label (if necessary)
@@ -1138,6 +1105,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     public Stmt constructFor(WyilFile.Stmt.For stmt, Pair range, List invariant, Stmt body) {
         boolean needContinueLabel = containsContinueOrBreak(stmt, false);
         boolean needBreakLabel = containsContinueOrBreak(stmt, true);
+        boolean pure = isPure(stmt);
+        Expr.VariableAccess OHEAP = BoogieFile.VAR("HEAP$" + stmt.getIndex());
         Tuple<WyilFile.Decl.Variable> modified = stmt.getModified();
         // Determine name of loop variable
         String name = toVariableName(stmt.getVariable());
@@ -1158,16 +1127,20 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         loopBody.add(ASSIGN(var, ADD(var, CONST(1))));
         // UPdate the invariant
         invariant.add(0, AND(LTEQ((Expr) range.first(), var), LTEQ(var, (Expr) range.second()),ATTRIBUTE(stmt.getVariable().getInitialiser())));
-        // Add continue label (if necessary)
-        if (needContinueLabel) {
-            stmts.add(LABEL("CONTINUE_" + stmt.getIndex()));
-        }
         // Add definedness checks for invariant
         invariant = append(constructDefinednessChecks(stmt.getInvariant()), (List<Expr.Logical>) invariant);
         // Add any type constraints arising
         invariant.addAll(0, constructTypeConstraints(modified, HEAP));
-        // Add additional type constraints for modified references
-        invariant.addAll(0, constructTypeConstraints(extractModifiedReferences(stmt), HEAP));
+        if(!pure) {
+            // Save OLD heap
+            stmts.add(BoogieFile.ASSIGN(OHEAP,HEAP));
+            // Add necessary loop frame
+            invariant.addAll(constructLoopFrame(stmt,OHEAP,HEAP));
+        }
+        // Add continue label (if necessary)
+        if (needContinueLabel) {
+            stmts.add(LABEL("CONTINUE_" + stmt.getIndex()));
+        }
         // Construct the loop
         stmts.add(WHILE((Expr.Logical) condition, invariant, SEQUENCE(loopBody)));
         // Add break label (if necessary)
@@ -1427,22 +1400,28 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     public Stmt constructWhile(WyilFile.Stmt.While stmt, Expr condition, List invariant, Stmt body) {
         boolean needContinueLabel = containsContinueOrBreak(stmt, false);
         boolean needBreakLabel = containsContinueOrBreak(stmt, true);
+        boolean pure = isPure(stmt);
+        Expr.VariableAccess OHEAP = BoogieFile.VAR("HEAP$" + stmt.getIndex());
         Tuple<WyilFile.Decl.Variable> modified = stmt.getModified();
         ArrayList<Stmt> stmts = new ArrayList<>();
         // Add all preconditions arising.
         stmts.addAll(constructDefinednessAssertions(stmt.getCondition()));
         // Apply any heap allocations arising.
         stmts.addAll(constructSideEffects(stmt.getCondition()));
-        // Add continue label (if necessary)
-        if (needContinueLabel) {
-            stmts.add(LABEL("CONTINUE_" + stmt.getIndex()));
-        }
         // Preprepend the necessary definedness checks
         invariant = append(constructDefinednessChecks(stmt.getInvariant()),(List<Expr.Logical>) invariant);
         // Add any type constraints arising (first)
         invariant.addAll(0, constructTypeConstraints(modified, HEAP));
-        // Add additional type constraints for modified references
-        invariant.addAll(0, constructTypeConstraints(extractModifiedReferences(stmt), HEAP));
+        if(!pure) {
+            // Save OLD heap
+            stmts.add(BoogieFile.ASSIGN(OHEAP,HEAP));
+            // Add necessary loop frame
+            invariant.addAll(constructLoopFrame(stmt,OHEAP,HEAP));
+        }
+        // Add continue label (if necessary)
+        if (needContinueLabel) {
+            stmts.add(LABEL("CONTINUE_" + stmt.getIndex()));
+        }
         //
         stmts.add(WHILE((Expr.Logical) condition, invariant, body));
         // Add break label (if necessary)
@@ -2494,10 +2473,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         decls.addAll(constructCommentHeading("Preamble"));
         // Define the context-level
         decls.add(new Decl.Constant("Context#Level", Type.Int));
-        // Define the top-level Whiley value which contains all others.
-        decls.add(new Decl.TypeSynonym("Any", null));
         // Define the top-level Whiley type which contains all others.
         decls.add(new Decl.TypeSynonym("Type", null));
+        decls.addAll(constructAnyAxioms(wf));
         // Add all void axioms
         decls.addAll(constructVoidAxioms(wf));
         // Add all null axioms
@@ -2523,7 +2501,20 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Done
         return decls;
     }
-
+    private List<Decl> constructAnyAxioms(WyilFile wf) {
+        ArrayList<Decl> decls = new ArrayList<>();
+        decls.addAll(constructCommentSubheading("Any"));
+        // Define the top-level Whiley value which contains all others.
+        decls.add(new Decl.TypeSynonym("Any", null));
+        //
+        List<Decl.Parameter> parameters = Arrays.asList(HEAP_PARAM, new Decl.Parameter("p", REF), new Decl.Parameter("q", ANY));
+        Expr.Logical refs = AND(INVOKE("Ref#is",VAR("q")),INVOKE("Ref#within",HEAP,VAR("p"),INVOKE("Ref#unbox",VAR("q"))));
+        Expr.Logical arrs = AND(INVOKE("Array#is",VAR("q")),INVOKE("Array#within",HEAP,VAR("p"),INVOKE("Array#unbox",VAR("q"))));
+        Expr.Logical recs = AND(INVOKE("Record#is",VAR("q")),INVOKE("Record#within",HEAP,VAR("p"),INVOKE("Record#unbox",VAR("q"))));
+        decls.add(FUNCTION("Any#within", parameters, Type.Bool, OR(refs, arrs, recs)));
+        //
+        return decls;
+    }
     private List<Decl> constructVoidAxioms(WyilFile wf) {
         ArrayList<Decl> decls = new ArrayList<>();
         decls.addAll(constructCommentSubheading("Void"));
@@ -2664,6 +2655,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Relate updated array with its length
         decls.add(new Decl.Axiom(FORALL("a", INTMAP, "i", Type.Int, "v", ANY,
                 EQ(INVOKE("Array#Length", VAR("a")), INVOKE("Array#Length", PUT(VAR("a"), VAR("i"), VAR("v")))))));
+        // is p within this array
+        List<Decl.Parameter> parameters = Arrays.asList(HEAP_PARAM, new Decl.Parameter("p", REF), new Decl.Parameter("q", INTMAP));
+        decls.add(FUNCTION("Array#within", parameters, Type.Bool, EXISTS("i", Type.Int, INVOKE("Any#within", HEAP, VAR("p"), GET(VAR("q"), VAR("i"))))));
         // Done
         return decls;
     }
@@ -2700,6 +2694,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // constructed).
         decls.add(new Decl.Constant(true, "Record#Empty", FIELDMAP));
         decls.add(new Decl.Axiom(FORALL("f", FIELD, EQ(GET(VAR("Record#Empty"), VAR("f")), VAR("Void")))));
+        // is p within this record
+        List<Decl.Parameter> parameters = Arrays.asList(HEAP_PARAM, new Decl.Parameter("p", REF), new Decl.Parameter("q", FIELDMAP));
+        decls.add(FUNCTION("Record#within", parameters, Type.Bool, EXISTS("f", FIELD, INVOKE("Any#within", HEAP, VAR("p"), GET(VAR("q"), VAR("f"))))));
         // Done
         return decls;
     }
@@ -2744,6 +2741,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         ensures.add(FORALL("r", REF, OR(EQ(ref, VAR("r")), EQ(GET(HEAP, VAR("r")), GET(NHEAP, VAR("r"))))));
         //
         decls.add(new Decl.Procedure("Ref#new", parameters, returns, requires, ensures, Collections.EMPTY_LIST));
+        // is p within this reference?
+        parameters = Arrays.asList(HEAP_PARAM, new Decl.Parameter("p", REF), new Decl.Parameter("q", REF));
+        decls.add(FUNCTION("Ref#within", parameters, Type.Bool, OR(EQ(VAR("p"), VAR("q")), INVOKE("Any#within", HEAP, VAR("p"), GET(HEAP, VAR("q"))))));
         // Done
         return decls;
     }
@@ -2828,7 +2828,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             postcondition.add(EQ(box(returnType.dimension(i), VAR("r#" + i)), INVOKE("Lambda#return", VAR("l"), CONST(i))));
         }
         // Add frame axioms
-        postcondition.addAll(constructFrameAxioms(mt, i -> ("p#" + i), i -> ("r#" + i), mt));
+        postcondition.addAll(constructMethodFrame(mt, i -> ("p#" + i), i -> ("r#" + i), mt));
         // Add heap for method invocations
         decls.add(PROCEDURE(name, parameters, returns, precondition, postcondition));
         //
@@ -3512,7 +3512,74 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     // ==============================================================================
-    // Frames
+    // Framing
+    // ==============================================================================
+
+    /**
+     * Construct a logical test to see whether a given reference (<code>p</code>) is within the "cone" of another
+     * variable (<code>q</code>).  For example, consider this:
+     * <pre>
+     * type List is null | &{ List next, int data }
+     *
+     * method reverse(List l) -> (List r):
+     *    ...
+     * </pre>
+     *
+     * In this case, the cone of <code>l</code> is all those nodes which are reachable from it.  They key to framing,
+     * for example, that nodes outside of this cone are unaffected by this method.
+     *
+     * @param type
+     * @param p
+     * @param q
+     * @param heap
+     * @param item
+     * @return
+     */
+    private Expr.Logical within(WyilFile.Type type, Expr p, Expr q, Expr heap, SyntacticItem item) {
+        if(WyilUtils.isPure(type)) {
+            // handle general case
+            return CONST(false, ATTRIBUTE(type));
+        } else {
+            switch (type.getOpcode()) {
+                case WyilFile.TYPE_method:
+                    return CONST(false, ATTRIBUTE(type));
+                case WyilFile.TYPE_reference:
+                    return INVOKE("Ref#within", heap, p, q, ATTRIBUTE(item));
+                case WyilFile.TYPE_array:
+                    return INVOKE("Array#within", heap, p, q, ATTRIBUTE(item));
+                case WyilFile.TYPE_record:
+                    return INVOKE("Record#within", heap, p, q, ATTRIBUTE(item));
+                case WyilFile.TYPE_union:
+                    return INVOKE("Any#within", heap, p, q, ATTRIBUTE(item));
+                case WyilFile.TYPE_nominal: {
+                    WyilFile.Type.Nominal t = (WyilFile.Type.Nominal) type;
+                    return within(t.getConcreteType(), p, q, heap, item);
+                }
+                default:
+                    throw new IllegalArgumentException("unknown type encoutnered (" + type.getClass().getName() + ")");
+            }
+        }
+    }
+
+    private Expr.Logical within(Expr r, Tuple<WyilFile.Decl.Variable> variables, Expr heap, SyntacticItem item) {
+        ArrayList<Expr.Logical> clauses = new ArrayList();
+        for(int i=0;i!=variables.size();++i) {
+            WyilFile.Decl.Variable ith = variables.get(i);
+            clauses.add(within(ith.getType(), r, VAR(toVariableName(ith)), heap, item));
+        }
+        return OR(clauses);
+    }
+
+    private Expr.Logical within(WyilFile.Type type, Expr r, Function<Integer,String> parameters, Expr heap, SyntacticItem item) {
+        ArrayList<Expr.Logical> clauses = new ArrayList();
+        for(int i=0;i!=type.shape();++i) {
+            clauses.add(within(type.dimension(i), r, VAR(parameters.apply(i)), heap, item));
+        }
+        return OR(clauses);
+    }
+
+    // ==============================================================================
+    // Method Framing
     // ==============================================================================
 
     /**
@@ -3529,190 +3596,159 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @param variables
      * @return
      */
-    private Expr.Logical constructDynamicFrame(Tuple<WyilFile.Decl.Variable> variables, Expr root, Expr heap, SyntacticItem item) {
-        ArrayList<Expr.Logical> clauses = new ArrayList<>();
-        for(int i=0;i!=variables.size();++i) {
-            WyilFile.Decl.Variable ith = variables.get(i);
-            clauses.add(constructDynamicFrame(ith.getType(), VAR(toVariableName(ith)), root, heap));
-        }
-        return OR(clauses, ATTRIBUTE(item));
+    private List<Expr.Logical> constructMethodFrame(WyilFile.Decl.Method m) {
+        Tuple<WyilFile.Decl.Variable> params = m.getParameters();
+        Tuple<WyilFile.Decl.Variable> rets = m.getReturns();
+        return constructMethodFrame(m.getType(), i -> toVariableName(params.get(i)), i -> toVariableName(rets.get(i)), m);
     }
 
-    private Expr.Logical constructDynamicFrame(WyilFile.Type type, Function<Integer, String> parameters, Expr root, Expr heap, SyntacticItem item) {
-        ArrayList<Expr.Logical> clauses = new ArrayList<>();
-        for (int i = 0; i != type.shape(); ++i) {
-            clauses.add(constructDynamicFrame(type.dimension(i), VAR(parameters.apply(i)), root, heap));
+    private List<Expr.Logical> constructMethodFrame(WyilFile.Type.Callable ct, Function<Integer,String> parameters, Function<Integer,String> returns, SyntacticItem item) {
+        ArrayList<Expr.Logical> ensures = new ArrayList<Expr.Logical>();
+        WyilFile.Type param = ct.getParameter();
+        WyilFile.Type ret = ct.getReturn();
+        Expr p = VAR("p");
+        Expr q = VAR("q");
+        // Extract the set of locations reachable from parameter types to this method
+        Expr.Logical preParamFrame_p = within(param, p, parameters, HEAP, item);
+        Expr.Logical preParamFrame_q = within(param, q, parameters, HEAP, item);
+        Expr.Logical postRetFrame_p = within(ret, p, returns, NHEAP, item);
+        Expr.Logical postFrame_p = OR(within(param, p, parameters, NHEAP, item),postRetFrame_p);
+        // Ensure type invariants guaranteed
+        ArrayList<Expr.Logical> inclusions = new ArrayList<>();
+        //
+        for(int i=0;i!=param.shape();++i) {
+            inclusions.add(constructTypeTest(param.dimension(i), VAR(parameters.apply(i)), NHEAP, item));
         }
-        return OR(clauses, ATTRIBUTE(item));
-    }
-
-    private Expr.Logical constructDynamicFrame(WyilFile.Type type, Expr expr, Expr root, Expr heap) {
-        if(WyilUtils.isPure(type)) {
-            // handle general case
-            return CONST(false, ATTRIBUTE(type));
-        } else {
-            switch (type.getOpcode()) {
-                case WyilFile.TYPE_method:
-                    return CONST(false, ATTRIBUTE(type));
-                case WyilFile.TYPE_reference:
-                    return constructDynamicFrame((WyilFile.Type.Reference) type, expr, root, heap);
-                case WyilFile.TYPE_array:
-                    return constructDynamicFrame((WyilFile.Type.Array) type, expr, root, heap);
-                case WyilFile.TYPE_record:
-                    return constructDynamicFrame((WyilFile.Type.Record) type, expr, root, heap);
-                case WyilFile.TYPE_union:
-                    return constructDynamicFrame((WyilFile.Type.Union) type, expr, root, heap);
-                case WyilFile.TYPE_nominal:
-                    return constructDynamicFrame((WyilFile.Type.Nominal) type, expr, root, heap);
-                default:
-                    throw new IllegalArgumentException("unknown type encoutnered (" + type.getClass().getName() + ")");
+        for(int i=0;i!=ret.shape();++i) {
+            inclusions.add(constructTypeTest(ret.dimension(i), VAR(returns.apply(i)), NHEAP, item));
+        }
+        // Add type tests for parameters and returns
+        ensures.add(AND(inclusions));
+        // NOTE: guards against bits being true/false are necessary to prevent infinite loops it seems.
+        if(!preParamFrame_p.isTrue()) {
+            // For any reference not in the preframe, either it was unnallocated or its contents are unchanged.
+            ensures.add(FORALL("p", REF, OR(preParamFrame_p, EQ(GET(HEAP, p), VAR("Void")), EQ(GET(HEAP, p), GET(NHEAP, p)))));
+            if(!postRetFrame_p.isFalse()) {
+                // For any reference in the (returned) postframe, either it existed in the preframe or it was unallocated.
+                ensures.add(FORALL("p", REF, OR(NOT(postRetFrame_p), EQ(GET(HEAP, p), VAR("Void")), preParamFrame_p)));
             }
         }
-    }
-
-    private Expr.Logical constructDynamicFrame(WyilFile.Type.Reference type, Expr expr, Expr root, Expr heap) {
-        // Recursively construct frame for element
-        Expr.Logical valid = constructDynamicFrame(type.getElement(), unbox(type.getElement(), GET(HEAP, expr)), root, heap);
-        // Done
-        return OR(EQ(expr, root), valid, ATTRIBUTE(type));
-    }
-
-    private Expr.Logical constructDynamicFrame(WyilFile.Type.Array type, Expr expr, Expr root, Expr heap) {
-        Expr.VariableAccess i = VAR(TEMP("i"));
-        // Recursively construct frame for element
-        Expr.Logical valid = constructDynamicFrame(type.getElement(), unbox(type.getElement(), GET(expr, i)), root, heap);
+        if(!preParamFrame_p.isTrue() && !postFrame_p.isFalse()) {
+            // Everything was either reachable from the preframe or is unreachable from the postframe (or was unallocated)
+            ensures.add(FORALL("p", REF, OR(EQ(GET(HEAP, p), VAR("Void")), preParamFrame_p, NOT(postFrame_p))));
+        }
         //
-        if(valid.isFalse()) {
-            return valid;
-        } else {
-            // Construct bounds check for index variable
-            Expr.Logical inbounds = AND(LTEQ(CONST(0), i), LT(i, INVOKE("Array#Length", expr)));
-            // Construct (out of) bounds check for index variable
-            Expr.Logical outbounds = OR(LT(i, CONST(0)), LTEQ(INVOKE("Array#Length", expr), i));
-            // Construct concrete test
-            return FORALL(i.getVariable(), Type.Int, IMPLIES(inbounds, valid), ATTRIBUTE(type));
-        }
-    }
-
-    private Expr.Logical constructDynamicFrame(WyilFile.Type.Record type, Expr expr, Expr root, Expr heap) {
-        Tuple<WyilFile.Type.Field> fields = type.getFields();
-        ArrayList<Expr.Logical> clauses = new ArrayList<>();
-        for(int i=0;i!=fields.size();++i) {
-            WyilFile.Type.Field ith = fields.get(i);
-            Expr field = VAR("$" + ith.getName().get());
-            Expr e = unbox(ith.getType(), GET(expr, field));
-            clauses.add(constructDynamicFrame(ith.getType(), e, root, heap));
-        }
-        return OR(clauses, ATTRIBUTE(type));
-    }
-
-    private Expr.Logical constructDynamicFrame(WyilFile.Type.Union type, Expr expr, Expr root, Expr heap) {
-        ArrayList<Expr.Logical> clauses = new ArrayList<>();
-        for(int i=0;i!=type.size();++i) {
-            WyilFile.Type ith = type.get(i);
-            Expr.Logical test = constructTypeTest(ith, type, expr, heap, type);
-            Expr.Logical condition = constructDynamicFrame(ith, cast(ith, type, expr), root, heap);
-            clauses.add(AND(test,condition));
-        }
-        return OR(clauses, ATTRIBUTE(type));
-    }
-
-    private Expr.Logical constructDynamicFrame(WyilFile.Type.Nominal type, Expr expr, Expr root, Expr heap) {
-        ArrayList<Expr> arguments = new ArrayList<>();
-        // Extract template binding
-        Tuple<WyilFile.Type> binding = type.getParameters();
-        // Construct appropriate name mangle
-        String name = toMangledName(type.getLink().getTarget());
-        // Add template parameters (if applicable)
-        for (int i = 0; i != binding.size(); ++i) {
-            arguments.add(i,constructMetaType(binding.get(i), heap));
-        }
-        // Add remaining arguments
-        arguments.add(expr);
-        arguments.add(root);
-        arguments.add(heap);
-        // Ensure argument is boxed!
-        return INVOKE(name + "#frame", arguments, ATTRIBUTE(type));
+        return ensures;
     }
 
     // ==============================================================================
     // Loop Framing
     // ==============================================================================
 
-    private Tuple<WyilFile.Decl.Variable> extractModifiedReferences(WyilFile.Stmt root) {
-        HashSet<WyilFile.Decl.Variable> lvals = new HashSet<>();
+    /**
+     * Construct a loop frame for a given loop assume a heap which holds before the loop begins, and a current heap.
+     *
+     * @param stmt
+     * @param OHEAP Heap which holds before loop
+     * @param HEAP  Heap which currently holds
+     * @return
+     */
+    private List<Expr.Logical> constructLoopFrame(WyilFile.Stmt.Loop stmt, Expr.VariableAccess OHEAP, Expr.VariableAccess HEAP) {
+        ArrayList<Expr.Logical> frame = new ArrayList<>();
+        // Determine set of used variables within loop body
+        Tuple<WyilFile.Decl.Variable> fvs = extractUsedReferences(stmt.getBody());
+        Expr r = VAR("r");
+        // Extract the set of locations reachable from parameter types to this method
+        //Expr.Logical used = constructDynamicFrame(fvs, r, OHEAP, stmt);
+        Expr.Logical used = within(r, fvs, OHEAP, stmt);
+        // For any reference not used in the loop, either it was unnallocated or its contents are unchanged.
+        frame.add(FORALL("r", REF, OR(used, EQ(GET(OHEAP, r), VAR("Void")), EQ(GET(OHEAP, r), GET(HEAP, r)))));
+        // Add additional type constraints for modified references
+        frame.addAll(0, constructTypeConstraints(fvs, HEAP));
+        // Done
+        return frame;
+    }
+
+    private Tuple<WyilFile.Decl.Variable> extractUsedReferences(WyilFile.Stmt root) {
+        HashSet<WyilFile.Decl.Variable> used = new HashSet<>();
+        HashSet<WyilFile.Decl.Variable> declared = new HashSet<>();
+        //
         new AbstractVisitor(meter) {
             @Override
-            public void visitLVals(Tuple<WyilFile.LVal> lvs) {
-                for(WyilFile.LVal lv : lvs) {
-                    addLVal(lv);
+            public void visitVariable(WyilFile.Decl.Variable e) {
+                declared.add(e);
+            }
+            public void visitVariableAccess(WyilFile.Expr.VariableAccess e) {
+                WyilFile.Decl.Variable v = e.getVariableDeclaration();
+                if(!declared.contains(v) && !WyilUtils.isPure(v.getType())) {
+                    used.add(v);
                 }
             }
-            @Override
-            public void visitExpression(WyilFile.Expr e) {
 
+            public void visitLVals(Tuple<WyilFile.LVal> lvs) {
+                for(WyilFile.LVal lv : lvs) {
+                    visitLVal(lv);
+                }
             }
-            @Override
-            public void visitType(WyilFile.Type t) {
 
-            }
-            private void addLVal(WyilFile.LVal lv) {
-               switch(lv.getOpcode()) {
-                   case WyilFile.EXPR_variablecopy:
-                   case WyilFile.EXPR_variablemove:
-                            break;
-                   case WyilFile.EXPR_arrayaccess: {
-                       WyilFile.Expr.ArrayAccess e = (WyilFile.Expr.ArrayAccess) lv;
-                       addLVal((WyilFile.LVal) e.getFirstOperand());
-                       break;
-                   }
-                   case WyilFile.EXPR_recordaccess: {
-                       WyilFile.Expr.RecordAccess e = (WyilFile.Expr.RecordAccess) lv;
-                       addLVal((WyilFile.LVal) e.getOperand());
-                       break;
-                   }
-                   case WyilFile.EXPR_dereference:
-                   case WyilFile.EXPR_fielddereference: {
-                       // Found a dereference, hence problem.
-                       lvals.add(extractDefinedVariable(lv));
-                   }
-               }
+            private void visitLVal(WyilFile.LVal lv) {
+                switch(lv.getOpcode()) {
+                    case WyilFile.EXPR_variablecopy:
+                    case WyilFile.EXPR_variablemove:
+                        // Do nothing
+                        break;
+                    case WyilFile.EXPR_arrayaccess: {
+                        WyilFile.Expr.ArrayAccess e = (WyilFile.Expr.ArrayAccess) lv;
+                        visitLVal((WyilFile.LVal) e.getFirstOperand());
+                        visitExpression(e.getSecondOperand());
+                        break;
+                    }
+                    case WyilFile.EXPR_recordaccess: {
+                        WyilFile.Expr.RecordAccess e = (WyilFile.Expr.RecordAccess) lv;
+                        visitLVal((WyilFile.LVal) e.getOperand());
+                        break;
+                    }
+                    case WyilFile.EXPR_dereference:
+                    case WyilFile.EXPR_fielddereference: {
+                        visitExpression(lv);
+                        break;
+                    }
+                }
             }
         }.visitStatement(root);
         //
-        return new Tuple<>(lvals);
+        return new Tuple<>(used);
     }
 
     private static WyilFile.Decl.Variable extractDefinedVariable(WyilFile.LVal lval) {
-		switch (lval.getOpcode()) {
-		case WyilFile.EXPR_arrayaccess:
-		case WyilFile.EXPR_arrayborrow: {
-			WyilFile.Expr.ArrayAccess e = (WyilFile.Expr.ArrayAccess) lval;
-			return extractDefinedVariable((WyilFile.LVal) e.getFirstOperand());
-		}
-		case WyilFile.EXPR_fielddereference: {
-            WyilFile.Expr.FieldDereference e = (WyilFile.Expr.FieldDereference) lval;
-            return extractDefinedVariable((WyilFile.LVal) e.getOperand());
+        switch (lval.getOpcode()) {
+            case WyilFile.EXPR_arrayaccess:
+            case WyilFile.EXPR_arrayborrow: {
+                WyilFile.Expr.ArrayAccess e = (WyilFile.Expr.ArrayAccess) lval;
+                return extractDefinedVariable((WyilFile.LVal) e.getFirstOperand());
+            }
+            case WyilFile.EXPR_fielddereference: {
+                WyilFile.Expr.FieldDereference e = (WyilFile.Expr.FieldDereference) lval;
+                return extractDefinedVariable((WyilFile.LVal) e.getOperand());
+            }
+            case WyilFile.EXPR_dereference: {
+                WyilFile.Expr.Dereference e = (WyilFile.Expr.Dereference) lval;
+                return extractDefinedVariable((WyilFile.LVal) e.getOperand());
+            }
+            case WyilFile.EXPR_recordaccess:
+            case WyilFile.EXPR_recordborrow: {
+                WyilFile.Expr.RecordAccess e = (WyilFile.Expr.RecordAccess) lval;
+                return extractDefinedVariable((WyilFile.LVal) e.getOperand());
+            }
+            case WyilFile.EXPR_variablecopy:
+            case WyilFile.EXPR_variablemove: {
+                WyilFile.Expr.VariableAccess e = (WyilFile.Expr.VariableAccess) lval;
+                return e.getVariableDeclaration();
+            }
+            default:
+                throw new IllegalArgumentException("invalid lval: " + lval);
         }
-		case WyilFile.EXPR_dereference: {
-            WyilFile.Expr.Dereference e = (WyilFile.Expr.Dereference) lval;
-			return extractDefinedVariable((WyilFile.LVal) e.getOperand());
-		}
-		case WyilFile.EXPR_recordaccess:
-		case WyilFile.EXPR_recordborrow: {
-			WyilFile.Expr.RecordAccess e = (WyilFile.Expr.RecordAccess) lval;
-			return extractDefinedVariable((WyilFile.LVal) e.getOperand());
-		}
-		case WyilFile.EXPR_variablecopy:
-		case WyilFile.EXPR_variablemove: {
-			WyilFile.Expr.VariableAccess e = (WyilFile.Expr.VariableAccess) lval;
-			return e.getVariableDeclaration();
-		}
-		default:
-			throw new IllegalArgumentException("invalid lval: " + lval);
-		}
-	}
-
+    }
     // ==============================================================================
     // Misc
     // ==============================================================================
@@ -3962,6 +3998,80 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             default:
                 throw new IllegalArgumentException("invalid lval: " + lval);
         }
+    }
+
+    /**
+     * Determine whether a given statement "is pure" in some sense.  Specifically, whether or not it allocates memory or
+     * writes to the heap.
+     *
+     * @param s
+     * @return
+     */
+    private boolean isPure(WyilFile.Stmt s) {
+        // Check for writes to the heap
+        boolean pure = new AbstractVisitor(meter) {
+            boolean result = true;
+
+            @Override
+            public void visitNew(WyilFile.Expr.New e) {
+                result = false;
+            }
+
+            @Override
+            public void visitInvoke(WyilFile.Expr.Invoke e) {
+                super.visitInvoke(e);
+                if(e.getLink().getTarget() instanceof WyilFile.Decl.Method) {
+                    // Method calls affect the heap!
+                    result = false;
+                }
+            }
+
+            @Override
+            public void visitIndirectInvoke(WyilFile.Expr.IndirectInvoke e) {
+                super.visitIndirectInvoke(e);
+                if(e.getSource().getType() instanceof WyilFile.Type.Method) {
+                    // Method calls affect the heap!
+                    result = false;
+                }
+            }
+
+            public void visitLVals(Tuple<WyilFile.LVal> lvs) {
+                for(WyilFile.LVal lv : lvs) {
+                    visitLVal(lv);
+                }
+            }
+
+            private void visitLVal(WyilFile.LVal lv) {
+                switch(lv.getOpcode()) {
+                    case WyilFile.EXPR_variablecopy:
+                    case WyilFile.EXPR_variablemove:
+                        break;
+                    case WyilFile.EXPR_arrayaccess: {
+                        WyilFile.Expr.ArrayAccess e = (WyilFile.Expr.ArrayAccess) lv;
+                        visitLVal((WyilFile.LVal) e.getFirstOperand());
+                        break;
+                    }
+                    case WyilFile.EXPR_recordaccess: {
+                        WyilFile.Expr.RecordAccess e = (WyilFile.Expr.RecordAccess) lv;
+                        visitLVal((WyilFile.LVal) e.getOperand());
+                        break;
+                    }
+                    case WyilFile.EXPR_dereference:
+                    case WyilFile.EXPR_fielddereference: {
+                        WyilFile.Decl.Variable v = extractDefinedVariable(lv);
+                        // Found a dereference on a free variable, hence problem.
+                        result = false;
+                    }
+                }
+            }
+
+            public boolean test() {
+                visitStatement(s);
+                return result;
+            }
+        }.test();
+        // Done
+        return pure;
     }
 
     /**
