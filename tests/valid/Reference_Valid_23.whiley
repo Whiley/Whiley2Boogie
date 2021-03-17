@@ -14,7 +14,7 @@ ensures all { k in 0..|refs| | *(refs[k]) == vals[k] }:
     //
     for i in 0..|vs|
     where |vs| == |refs|
-    where all { k in 0..|vs| | *(refs[k]) == vs[k] }:
+    where all { k in 0..i | *(refs[k]) == vs[k] }:
         vs[i] = *(refs[i])
     //
     return vs
