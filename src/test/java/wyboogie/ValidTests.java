@@ -93,45 +93,30 @@ public class ValidTests {
 		IGNORED.put("Reference_Valid_30",""); // needs old syntax
 		IGNORED.put("Reference_Valid_31",""); // needs old syntax
 		// Known issues.  These are known problems with issues raised on github.
-		// Problem with Existential?
 		IGNORED.put("ConstrainedList_Valid_18","#26");
-		IGNORED.put("Property_Valid_4","#26");
-		// Disconnect between Lambdas and their Applications
-		IGNORED.put("Lambda_Valid_13","#52");
-		// Problem with Recursive Property?
-		IGNORED.put("Property_Valid_17","#55");
-		// Problem with Dereference in Postcondition
-		IGNORED.put("Reference_Valid_6","#56");
-		IGNORED.put("Process_Valid_10","#56");
-		IGNORED.put("Process_Valid_9","#56");
-		// Problem with Lambda Unions
-		IGNORED.put("Lambda_Valid_24","#59");
-		IGNORED.put("Lambda_Valid_25","#59");
-		// Preserving loop invariant HEAP locations
-		IGNORED.put("Process_Valid_6","#60");
-		IGNORED.put("Reference_Valid_23","#60");
-		IGNORED.put("Reference_Valid_29","#60");
-		IGNORED.put("Reference_Valid_33","#60");
-		IGNORED.put("MethodRef_Valid_6","#60");
-		IGNORED.put("RecordAccess_Valid_1","#60");
-		IGNORED.put("UnknownReference_Valid_3","#60");
-		// Problem with Cyclic Reference Type Invariants
-		IGNORED.put("Reference_Valid_11","#61");
-		// Lambda Type Invariant with Templates
-		IGNORED.put("Template_Valid_57","#66");
-		// Problem with recursive type
-		IGNORED.put("RecursiveType_Valid_19","#79");
-		IGNORED.put("RecursiveType_Valid_20","#79");
-		// Problem with Templates and References
-		IGNORED.put("Reference_Valid_24","#89");
-		// Reference Type Invariant not Preserved in Loop
 		IGNORED.put("Lambda_Valid_3","#97");
 		IGNORED.put("Lambda_Valid_4","#97");
-		// Problem with Large Static Initialiser
-		IGNORED.put("RecursiveType_Valid_7","#98");
-		// (Non-Atomic) Multiple Assignments
+		IGNORED.put("Lambda_Valid_13","#52");
+		IGNORED.put("Lambda_Valid_24","#59");
+		IGNORED.put("Lambda_Valid_25","#59");
+		IGNORED.put("MethodRef_Valid_6","#60");
+		IGNORED.put("Process_Valid_6","#60");
+		IGNORED.put("Process_Valid_9","#56");
+		IGNORED.put("Process_Valid_10","#56");
+		IGNORED.put("Property_Valid_17","#55");
+		IGNORED.put("RecordAccess_Valid_1","#60");
 		IGNORED.put("RecordAssign_Valid_17","#99");
-		//
+		IGNORED.put("RecursiveType_Valid_7","#98");
+		IGNORED.put("RecursiveType_Valid_19","#79");
+		IGNORED.put("RecursiveType_Valid_20","#79");
+		IGNORED.put("Reference_Valid_6","#56");
+		IGNORED.put("Reference_Valid_11","#61");
+		IGNORED.put("Reference_Valid_23","#60");
+		IGNORED.put("Reference_Valid_24","#89");
+		IGNORED.put("Reference_Valid_29","#60");
+		IGNORED.put("Reference_Valid_33","#60");
+		IGNORED.put("Template_Valid_57","#66");
+		IGNORED.put("UnknownReference_Valid_3","#60");
 	}
 
 	// ======================================================================

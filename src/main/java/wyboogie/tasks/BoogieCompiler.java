@@ -2653,8 +2653,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 OR(NEQ(INVOKE("Array#Generator", VAR("v"), VAR("l")), VAR("a")),
                         EQ(INVOKE("Array#Length", VAR("a")), VAR("l"))))));
         // Relate updated array with its length
+        // original form
         decls.add(new Decl.Axiom(FORALL("a", INTMAP, "i", Type.Int, "v", ANY,
                 EQ(INVOKE("Array#Length", VAR("a")), INVOKE("Array#Length", PUT(VAR("a"), VAR("i"), VAR("v")))))));
+        // Possible update for this axiom
+//        decls.add(new Decl.Axiom(FORALL("a", INTMAP, "i", Type.Int, "v", ANY,
+//                OR(EQ(VAR("v"), VAR("Void")), EQ(INVOKE("Array#Length", VAR("a")), INVOKE("Array#Length", PUT(VAR("a"), VAR("i"), VAR("v"))))))));
         // is p within this array
         List<Decl.Parameter> parameters = Arrays.asList(HEAP_PARAM, new Decl.Parameter("p", REF), new Decl.Parameter("q", INTMAP));
         decls.add(FUNCTION("Array#within", parameters, Type.Bool, EXISTS("i", Type.Int, INVOKE("Any#within", HEAP, VAR("p"), GET(VAR("q"), VAR("i"))))));
