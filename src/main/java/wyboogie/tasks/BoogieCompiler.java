@@ -2615,6 +2615,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @return
      */
     private List<Decl> constructArrayAxioms(WyilFile wf) {
+        // set all these flags to false to get the original Boogie output.
+        boolean guard_with_is = true; // true means guard several axioms with Array#is(a) ==> ...
+        boolean guard_update = true; // true means guard length update axiom with 0<=i<len && v!=Void.
+        boolean guard_length = true; // true means guard the empty & generator length axioms with 0<=l (and v!=Void).
+
         // NOTE: we could reduce the amount of boxing / unboxing necessary by generating
         // custom array types for each different array type encountered.
         ArrayList<Decl> decls = new ArrayList<>();
@@ -2624,9 +2629,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         decls.add(FUNCTION("Array#is", new Decl.Parameter("v", ANY), Type.Bool,
                 EXISTS("a", INTMAP, EQ(INVOKE("Array#box", VAR("a")), VAR("v")))));
         // Establish connection between tbox and unbox
-        decls.add(new Decl.Axiom(FORALL("i", INTMAP, EQ(INVOKE("Array#unbox", INVOKE("Array#box", VAR("i"))), VAR("i")))));
+        Expr.Invoke boxa = INVOKE("Array#box", VAR("a"));
+        Expr.Invoke isa = INVOKE("Array#is", boxa);
+        Expr.Equals eq = EQ(INVOKE("Array#unbox", boxa), VAR("a"));
+        Expr.Logical notVoid = NEQ(boxa, VAR("Void"));
+        decls.add(new Decl.Axiom(FORALL("a", INTMAP, guard_with_is ? IMPLIES(isa, eq) : eq)));
         // Establish no connection between arrays and Void
-        decls.add(new Decl.Axiom(FORALL("a", INTMAP, NEQ(INVOKE("Array#box", VAR("a")), VAR("Void")))));
+        decls.add(new Decl.Axiom(FORALL("a", INTMAP, guard_with_is ? IMPLIES(isa, notVoid) : notVoid)));
         // Array length function
         decls.add(FUNCTION("Array#Length", INTMAP, Type.Int));
         // Enforce array length is non-negative
@@ -2639,8 +2648,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 FORALL("l", Type.Int, "i", Type.Int, OR(AND(LTEQ(CONST(0), VAR("i")), LT(VAR("i"), VAR("l"))),
                         EQ(GET(INVOKE("Array#Empty", VAR("l")), VAR("i")), VAR("Void"))))));
         // Relate empty array with its length
-        decls.add(new Decl.Axiom(FORALL("a", INTMAP, "l", Type.Int,
+        if (guard_length) {
+            decls.add(new Decl.Axiom(FORALL("a", INTMAP, "l", Type.Int,
+                    IMPLIES(AND(LTEQ(CONST(0), VAR("l")),
+                                EQ(INVOKE("Array#Empty", VAR("l")), VAR("a"))),
+                            EQ(INVOKE("Array#Length", VAR("a")), VAR("l"))))));
+        } else {
+            decls.add(new Decl.Axiom(FORALL("a", INTMAP, "l", Type.Int,
                 OR(NEQ(INVOKE("Array#Empty", VAR("l")), VAR("a")), EQ(INVOKE("Array#Length", VAR("a")), VAR("l"))))));
+        }
         // Ensure that all elements inside generator length are void
         decls.add(new Decl.Axiom(FORALL("v", ANY, "l", Type.Int, "i", Type.Int, OR(LT(VAR("i"), CONST(0)),
                 LTEQ(VAR("l"), VAR("i")), EQ(GET(INVOKE("Array#Generator", VAR("v"), VAR("l")), VAR("i")), VAR("v"))))));
@@ -2649,16 +2665,32 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 OR(AND(LTEQ(CONST(0), VAR("i")), LT(VAR("i"), VAR("l"))),
                         EQ(GET(INVOKE("Array#Generator", VAR("v"), VAR("l")), VAR("i")), VAR("Void"))))));
         // Relate array generator with its length
-        decls.add(new Decl.Axiom(FORALL("a", INTMAP, "v", ANY, "l", Type.Int,
-                OR(NEQ(INVOKE("Array#Generator", VAR("v"), VAR("l")), VAR("a")),
-                        EQ(INVOKE("Array#Length", VAR("a")), VAR("l"))))));
+        if (guard_length) {
+            decls.add(new Decl.Axiom(FORALL("a", INTMAP, "v", ANY, "l", Type.Int,
+                    IMPLIES(AND(LTEQ(CONST(0), VAR("l")),
+                            AND(NEQ(VAR("v"), VAR("Void")),
+                                    EQ(INVOKE("Array#Generator", VAR("v"), VAR("l")), VAR("a")))),
+                            EQ(INVOKE("Array#Length", VAR("a")), VAR("l"))))));
+        } else {
+            decls.add(new Decl.Axiom(FORALL("a", INTMAP, "v", ANY, "l", Type.Int,
+                    OR(NEQ(INVOKE("Array#Generator", VAR("v"), VAR("l")), VAR("a")),
+                            EQ(INVOKE("Array#Length", VAR("a")), VAR("l"))))));
+        }
         // Relate updated array with its length
         // original form
-        decls.add(new Decl.Axiom(FORALL("a", INTMAP, "i", Type.Int, "v", ANY,
-                EQ(INVOKE("Array#Length", VAR("a")), INVOKE("Array#Length", PUT(VAR("a"), VAR("i"), VAR("v")))))));
-        // Possible update for this axiom
-//        decls.add(new Decl.Axiom(FORALL("a", INTMAP, "i", Type.Int, "v", ANY,
-//                OR(EQ(VAR("v"), VAR("Void")), EQ(INVOKE("Array#Length", VAR("a")), INVOKE("Array#Length", PUT(VAR("a"), VAR("i"), VAR("v"))))))));
+        if (!guard_update) {
+            decls.add(new Decl.Axiom(FORALL("a", INTMAP, "i", Type.Int, "v", ANY,
+                    EQ(INVOKE("Array#Length", VAR("a")), INVOKE("Array#Length", PUT(VAR("a"), VAR("i"), VAR("v")))))));
+        } else {
+            // Guarded axiom: 0 <= i && i < len && v != Void ==> ...
+            Expr.Invoke aLen = INVOKE("Array#Length", VAR("a"));
+            Expr.Logical i0 = LTEQ(CONST(0), VAR("i"));
+            Expr.Logical iLen = LT(VAR("i"), aLen);
+            Expr.Logical vNotVoid = NEQ(VAR("v"), VAR("Void"));
+            Expr.Logical guard = AND(i0, AND(iLen, vNotVoid));
+            decls.add(new Decl.Axiom(FORALL("a", INTMAP, "i", Type.Int, "v", ANY,
+                    IMPLIES(guard, EQ(aLen, INVOKE("Array#Length", PUT(VAR("a"), VAR("i"), VAR("v"))))))));
+        }
         // is p within this array
         List<Decl.Parameter> parameters = Arrays.asList(HEAP_PARAM, new Decl.Parameter("p", REF), new Decl.Parameter("q", INTMAP));
         decls.add(FUNCTION("Array#within", parameters, Type.Bool, EXISTS("i", Type.Int, INVOKE("Any#within", HEAP, VAR("p"), GET(VAR("q"), VAR("i"))))));
