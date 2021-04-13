@@ -2651,22 +2651,26 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         decls.add(new Decl.Axiom(
                 FORALL("l", Type.Int, "i", Type.Int, OR(AND(LTEQ(CONST(0), i), LT(i, l)),
                         EQ(GET(INVOKE("Array#Empty", l), i), VOID)))));
+        // Ensure that all elements inside array length are not void
+        decls.add(new Decl.Axiom(
+                FORALL("l", Type.Int, "i", Type.Int, IMPLIES(AND(LTEQ(CONST(0), i), LT(i, l)),
+                        NEQ(GET(INVOKE("Array#Empty", l), i), VOID)))));
         // Relate empty array with its length
         decls.add(new Decl.Axiom(FORALL("a", INTMAP, "l", Type.Int,
-                OR(NEQ(INVOKE("Array#Empty", l), a), EQ(INVOKE("Array#Length", a), l)))));
+                IMPLIES(AND(LTEQ(CONST(0),l),EQ(INVOKE("Array#Empty", l), a)), EQ(INVOKE("Array#Length", a), l)))));
         // Array generators
         decls.add(new Decl.LineComment("Array Generators"));
         decls.add(FUNCTION("Array#Generator", ANY, Type.Int, INTMAP));
         // Ensure that all elements inside generator length are void
-        decls.add(new Decl.Axiom(FORALL("v", ANY, "l", Type.Int, "i", Type.Int, OR(LT(i, CONST(0)),
-                LTEQ(l, i), EQ(v, VOID), EQ(GET(INVOKE("Array#Generator", v, l), i), v)))));
+        decls.add(new Decl.Axiom(FORALL("v", ANY, "l", Type.Int, "i", Type.Int, IMPLIES(AND(LTEQ(CONST(0),i),
+                LT(i, l), NEQ(v, VOID)), EQ(GET(INVOKE("Array#Generator", v, l), i), v)))));
         // Ensure that all elements outside generator length are void
         decls.add(new Decl.Axiom(FORALL("v", ANY, "l", Type.Int, "i", Type.Int,
                 OR(AND(LTEQ(CONST(0), i), LT(i, l)),
                         EQ(GET(INVOKE("Array#Generator", v, l), i), VOID)))));
         // Relate array generator with its length
         decls.add(new Decl.Axiom(FORALL("a", INTMAP, "v", ANY, "l", Type.Int,
-                OR(LT(l, CONST(0)), NEQ(INVOKE("Array#Generator", v, l), a),
+                IMPLIES(AND(LTEQ(CONST(0),l), EQ(INVOKE("Array#Generator", v, l), a)),
                         EQ(INVOKE("Array#Length", a), l)))));
         // Possible update for this axiom
 //        decls.add(new Decl.Axiom(FORALL("a", INTMAP, "i", Type.Int, "v", ANY,
