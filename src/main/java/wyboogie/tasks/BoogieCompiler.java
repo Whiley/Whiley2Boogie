@@ -2623,6 +2623,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         decls.add(FUNCTION("Array#unbox", ANY, INTMAP));
         decls.add(FUNCTION("Array#is", new Decl.Parameter("v", ANY), Type.Bool,
                 EXISTS("a", INTMAP, EQ(INVOKE("Array#box", VAR("a")), VAR("v")))));
+        // Array index is in bounds
+        List<Decl.Parameter> parameters = Arrays.asList(new Decl.Parameter("a", INTMAP), new Decl.Parameter("i", Type.Int));
+        decls.add(FUNCTION("Array#in", parameters, Type.Bool,
+                AND(GTEQ(VAR("i"),CONST(0)),LT(VAR("i"),INVOKE("Array#Length", VAR("a"))))));
         // Establish connection between tbox and unbox
         decls.add(new Decl.Axiom(FORALL("i", INTMAP, EQ(INVOKE("Array#unbox", INVOKE("Array#box", VAR("i"))), VAR("i")))));
         // Establish no connection between arrays and Void
@@ -2660,7 +2664,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 //        decls.add(new Decl.Axiom(FORALL("a", INTMAP, "i", Type.Int, "v", ANY,
 //                OR(EQ(VAR("v"), VAR("Void")), EQ(INVOKE("Array#Length", VAR("a")), INVOKE("Array#Length", PUT(VAR("a"), VAR("i"), VAR("v"))))))));
         // is p within this array
-        List<Decl.Parameter> parameters = Arrays.asList(HEAP_PARAM, new Decl.Parameter("p", REF), new Decl.Parameter("q", INTMAP));
+        parameters = Arrays.asList(HEAP_PARAM, new Decl.Parameter("p", REF), new Decl.Parameter("q", INTMAP));
         decls.add(FUNCTION("Array#within", parameters, Type.Bool, EXISTS("i", Type.Int, INVOKE("Any#within", HEAP, VAR("p"), GET(VAR("q"), VAR("i"))))));
         // Done
         return decls;
@@ -3246,9 +3250,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Cast argument to (unboxed) array type
         Expr nArgument = cast(to, from, argument);
         // Construct bounds check for index variable
-        Expr.Logical inbounds = AND(LTEQ(CONST(0), i), LT(i, INVOKE("Array#Length", nArgument)));
+        Expr.Logical inbounds = INVOKE("Array#in", nArgument, i);
         // Construct (out of) bounds check for index variable
-        Expr.Logical outbounds = OR(LT(i, CONST(0)), LTEQ(INVOKE("Array#Length", nArgument), i));
+        Expr.Logical outbounds = NOT(inbounds);
         // Recursively construct type test for element
         Expr.Logical valid = constructTypeTest(to.getElement(), WyilFile.Type.Any, GET(nArgument, i), heap, item);
         // Elements outside range equal void
