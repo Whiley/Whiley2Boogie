@@ -3185,7 +3185,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     public Expr.Logical constructUniversalTypeTest(WyilFile.Type.Universal to, WyilFile.Type from, Expr argument, Expr heap, SyntacticItem item) {
-        return INVOKE("Type#is", heap, VAR(to.getOperand().get()), argument, ATTRIBUTE(item));
+        return AND(NEQ(argument, VOID),
+                INVOKE("Type#is", heap, VAR(to.getOperand().get()), argument, ATTRIBUTE(item)));
     }
 
     /**
