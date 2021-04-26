@@ -2520,7 +2520,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         decls.addAll(constructCommentSubheading("Void"));
         // Add null constant
         decls.add(new Decl.Constant(true, "Void", ANY));
-        decls.add(FUNCTION("Void#is", new Decl.Parameter("v", ANY), Type.Bool, EQ(VAR("v"), VAR("Void"))));
+        decls.add(FUNCTION("Void#is", new Decl.Parameter("v", ANY), Type.Bool, EQ(VAR("v"), VOID)));
         //
         return decls;
     }
@@ -2551,7 +2551,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Establish connection between box and unbox
         decls.add(new Decl.Axiom(FORALL("b", Type.Bool, EQ(INVOKE("Bool#unbox", INVOKE("Bool#box", VAR("b"))), VAR("b")))));
         // Establish no connection between bools and Void
-        decls.add(new Decl.Axiom(FORALL("b", Type.Bool, NEQ(INVOKE("Bool#box", VAR("b")), VAR("Void")))));
+        decls.add(new Decl.Axiom(FORALL("b", Type.Bool, NEQ(INVOKE("Bool#box", VAR("b")), VOID))));
         // Done
         return decls;
     }
@@ -2573,7 +2573,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         decls.add(new Decl.Axiom(
                 FORALL("i", Type.Int, EQ(INVOKE("Int#unbox", INVOKE("Int#box", VAR("i"))), VAR("i")))));
         // Establish no connection between ints and Void
-        decls.add(new Decl.Axiom(FORALL("i", Type.Int, NEQ(INVOKE("Int#box", VAR("i")), VAR("Void")))));
+        decls.add(new Decl.Axiom(FORALL("i", Type.Int, NEQ(INVOKE("Int#box", VAR("i")), VOID))));
         // Done
         return decls;
     }
@@ -2604,7 +2604,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         decls.add(new Decl.Axiom(
                 FORALL("b", Type.BitVector8, EQ(INVOKE("Byte#unbox", INVOKE("Byte#box", VAR("b"))), VAR("b")))));
         // Establish no connection between bytes and Void
-        decls.add(new Decl.Axiom(FORALL("b", Type.BitVector8, NEQ(INVOKE("Byte#box", VAR("b")), VAR("Void")))));
+        decls.add(new Decl.Axiom(FORALL("b", Type.BitVector8, NEQ(INVOKE("Byte#box", VAR("b")), VOID))));
         // Done
         return decls;
     }
@@ -2615,6 +2615,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @return
      */
     private List<Decl> constructArrayAxioms(WyilFile wf) {
+        // A few helpers
+        final Expr i = VAR("i");
+        final Expr v = VAR("v");
+        final Expr a = VAR("a");
+        final Expr l = VAR("l");
         // NOTE: we could reduce the amount of boxing / unboxing necessary by generating
         // custom array types for each different array type encountered.
         ArrayList<Decl> decls = new ArrayList<>();
@@ -2622,50 +2627,57 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         decls.add(FUNCTION("Array#box", INTMAP, ANY));
         decls.add(FUNCTION("Array#unbox", ANY, INTMAP));
         decls.add(FUNCTION("Array#is", new Decl.Parameter("v", ANY), Type.Bool,
-                EXISTS("a", INTMAP, EQ(INVOKE("Array#box", VAR("a")), VAR("v")))));
+                EXISTS("a", INTMAP, EQ(INVOKE("Array#box", a), v))));
         // Array index is in bounds
         List<Decl.Parameter> parameters = Arrays.asList(new Decl.Parameter("a", INTMAP), new Decl.Parameter("i", Type.Int));
         decls.add(FUNCTION("Array#in", parameters, Type.Bool,
-                AND(GTEQ(VAR("i"),CONST(0)),LT(VAR("i"),INVOKE("Array#Length", VAR("a"))))));
+                AND(GTEQ(VAR("i"), CONST(0)), LT(i, INVOKE("Array#Length", a)))));
         // Establish connection between tbox and unbox
-        decls.add(new Decl.Axiom(FORALL("i", INTMAP, EQ(INVOKE("Array#unbox", INVOKE("Array#box", VAR("i"))), VAR("i")))));
+        decls.add(new Decl.Axiom(FORALL("i", INTMAP, EQ(INVOKE("Array#unbox", INVOKE("Array#box", i)), i))));
         // Establish no connection between arrays and Void
-        decls.add(new Decl.Axiom(FORALL("a", INTMAP, NEQ(INVOKE("Array#box", VAR("a")), VAR("Void")))));
+        decls.add(new Decl.Axiom(FORALL("a", INTMAP, NEQ(INVOKE("Array#box", a), VOID))));
         // Array length function
         decls.add(FUNCTION("Array#Length", INTMAP, Type.Int));
         // Enforce array length is non-negative
-        decls.add(new Decl.Axiom(FORALL("a", INTMAP, LTEQ(CONST(0), INVOKE("Array#Length", VAR("a"))))));
+        decls.add(new Decl.Axiom(FORALL("a", INTMAP, LTEQ(CONST(0), INVOKE("Array#Length", a)))));
+        // Relate updated array with its length
+        decls.add(new Decl.Axiom(FORALL("a", INTMAP, "i", Type.Int, "v", ANY,
+                IMPLIES(AND(NEQ(v, VOID), INVOKE("Array#in", a, i)),
+                        EQ(INVOKE("Array#Length", a), INVOKE("Array#Length", PUT(a, i, v)))))));
         // Empty arrays
+        decls.add(new Decl.LineComment("Array Initialisers"));
         decls.add(FUNCTION("Array#Empty", Type.Int, INTMAP));
-        decls.add(FUNCTION("Array#Generator", ANY, Type.Int, INTMAP));
         // Ensure that all elements outside array length are void
         decls.add(new Decl.Axiom(
-                FORALL("l", Type.Int, "i", Type.Int, OR(AND(LTEQ(CONST(0), VAR("i")), LT(VAR("i"), VAR("l"))),
-                        EQ(GET(INVOKE("Array#Empty", VAR("l")), VAR("i")), VAR("Void"))))));
+                FORALL("l", Type.Int, "i", Type.Int, OR(AND(LTEQ(CONST(0), i), LT(i, l)),
+                        EQ(GET(INVOKE("Array#Empty", l), i), VOID)))));
+        // Ensure that all elements inside array length are not void
+        decls.add(new Decl.Axiom(
+                FORALL("l", Type.Int, "i", Type.Int, IMPLIES(AND(LTEQ(CONST(0), i), LT(i, l)),
+                        NEQ(GET(INVOKE("Array#Empty", l), i), VOID)))));
         // Relate empty array with its length
         decls.add(new Decl.Axiom(FORALL("a", INTMAP, "l", Type.Int,
-                OR(NEQ(INVOKE("Array#Empty", VAR("l")), VAR("a")), EQ(INVOKE("Array#Length", VAR("a")), VAR("l"))))));
+                IMPLIES(AND(LTEQ(CONST(0),l),EQ(INVOKE("Array#Empty", l), a)), EQ(INVOKE("Array#Length", a), l)))));
+        // Array generators
+        decls.add(new Decl.LineComment("Array Generators"));
+        decls.add(FUNCTION("Array#Generator", ANY, Type.Int, INTMAP));
         // Ensure that all elements inside generator length are void
-        decls.add(new Decl.Axiom(FORALL("v", ANY, "l", Type.Int, "i", Type.Int, OR(LT(VAR("i"), CONST(0)),
-                LTEQ(VAR("l"), VAR("i")), EQ(GET(INVOKE("Array#Generator", VAR("v"), VAR("l")), VAR("i")), VAR("v"))))));
+        decls.add(new Decl.Axiom(FORALL("v", ANY, "l", Type.Int, "i", Type.Int, IMPLIES(AND(LTEQ(CONST(0),i),
+                LT(i, l), NEQ(v, VOID)), EQ(GET(INVOKE("Array#Generator", v, l), i), v)))));
         // Ensure that all elements outside generator length are void
         decls.add(new Decl.Axiom(FORALL("v", ANY, "l", Type.Int, "i", Type.Int,
-                OR(AND(LTEQ(CONST(0), VAR("i")), LT(VAR("i"), VAR("l"))),
-                        EQ(GET(INVOKE("Array#Generator", VAR("v"), VAR("l")), VAR("i")), VAR("Void"))))));
+                OR(AND(LTEQ(CONST(0), i), LT(i, l)),
+                        EQ(GET(INVOKE("Array#Generator", v, l), i), VOID)))));
         // Relate array generator with its length
         decls.add(new Decl.Axiom(FORALL("a", INTMAP, "v", ANY, "l", Type.Int,
-                OR(NEQ(INVOKE("Array#Generator", VAR("v"), VAR("l")), VAR("a")),
-                        EQ(INVOKE("Array#Length", VAR("a")), VAR("l"))))));
-        // Relate updated array with its length
-        // original form
-        decls.add(new Decl.Axiom(FORALL("a", INTMAP, "i", Type.Int, "v", ANY,
-                EQ(INVOKE("Array#Length", VAR("a")), INVOKE("Array#Length", PUT(VAR("a"), VAR("i"), VAR("v")))))));
+                IMPLIES(AND(LTEQ(CONST(0),l), EQ(INVOKE("Array#Generator", v, l), a)),
+                        EQ(INVOKE("Array#Length", a), l)))));
         // Possible update for this axiom
 //        decls.add(new Decl.Axiom(FORALL("a", INTMAP, "i", Type.Int, "v", ANY,
-//                OR(EQ(VAR("v"), VAR("Void")), EQ(INVOKE("Array#Length", VAR("a")), INVOKE("Array#Length", PUT(VAR("a"), VAR("i"), VAR("v"))))))));
+//                OR(EQ(v, VOID), EQ(INVOKE("Array#Length", a), INVOKE("Array#Length", PUT(a, i, v)))))));
         // is p within this array
         parameters = Arrays.asList(HEAP_PARAM, new Decl.Parameter("p", REF), new Decl.Parameter("q", INTMAP));
-        decls.add(FUNCTION("Array#within", parameters, Type.Bool, EXISTS("i", Type.Int, INVOKE("Any#within", HEAP, VAR("p"), GET(VAR("q"), VAR("i"))))));
+        decls.add(FUNCTION("Array#within", parameters, Type.Bool, EXISTS("i", Type.Int, INVOKE("Any#within", HEAP, VAR("p"), GET(VAR("q"), i)))));
         // Done
         return decls;
     }
@@ -2697,11 +2709,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         decls.add(new Decl.Axiom(
                 FORALL("i", FIELDMAP, EQ(INVOKE("Record#unbox", INVOKE("Record#box", VAR("i"))), VAR("i")))));
         // Establish no connection between records and Void
-        decls.add(new Decl.Axiom(FORALL("r", FIELDMAP, NEQ(INVOKE("Record#box", VAR("r")), VAR("Void")))));
+        decls.add(new Decl.Axiom(FORALL("r", FIELDMAP, NEQ(INVOKE("Record#box", VAR("r")), VOID))));
         // Defines the empty record (i.e. the base from which all other records are
         // constructed).
         decls.add(new Decl.Constant(true, "Record#Empty", FIELDMAP));
-        decls.add(new Decl.Axiom(FORALL("f", FIELD, EQ(GET(VAR("Record#Empty"), VAR("f")), VAR("Void")))));
+        decls.add(new Decl.Axiom(FORALL("f", FIELD, EQ(GET(VAR("Record#Empty"), VAR("f")), VOID))));
         // is p within this record
         List<Decl.Parameter> parameters = Arrays.asList(HEAP_PARAM, new Decl.Parameter("p", REF), new Decl.Parameter("q", FIELDMAP));
         decls.add(FUNCTION("Record#within", parameters, Type.Bool, EXISTS("f", FIELD, INVOKE("Any#within", HEAP, VAR("p"), GET(VAR("q"), VAR("f"))))));
@@ -2728,7 +2740,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         decls.add(new Decl.Axiom(
                 FORALL("r", REF, EQ(INVOKE("Ref#unbox", INVOKE("Ref#box", VAR("r"))), VAR("r")))));
         // Establish no connection between references and Void
-        decls.add(new Decl.Axiom(FORALL("r", REF, NEQ(INVOKE("Ref#box", VAR("r")), VAR("Void")))));
+        decls.add(new Decl.Axiom(FORALL("r", REF, NEQ(INVOKE("Ref#box", VAR("r")), VOID))));
         // Construct the allocation procedure
         Expr.VariableAccess val = VAR("val");
         Expr.VariableAccess ref = VAR("ref");
@@ -2744,7 +2756,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Heap location at ref equals val
         ensures.add(EQ(GET(NHEAP, ref), val));
         // Heap location not previously allocated!
-        ensures.add(EQ(GET(HEAP, ref), VAR("Void")));
+        ensures.add(EQ(GET(HEAP, ref), VOID));
         // All allocated locations remain as before
         ensures.add(FORALL("r", REF, OR(EQ(ref, VAR("r")), EQ(GET(HEAP, VAR("r")), GET(NHEAP, VAR("r"))))));
         //
@@ -2769,7 +2781,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         decls.add(new Decl.Axiom(
                 FORALL("l", LAMBDA, EQ(INVOKE("Lambda#unbox", INVOKE("Lambda#box", VAR("l"))), VAR("l")))));
         // Establish no connection between lambdas and Void
-        decls.add(new Decl.Axiom(FORALL("l", LAMBDA, NEQ(INVOKE("Lambda#box", VAR("l")), VAR("Void")))));
+        decls.add(new Decl.Axiom(FORALL("l", LAMBDA, NEQ(INVOKE("Lambda#box", VAR("l")), VOID))));
         //
         // Extract all lambda types used anyway
         Set<WyilFile.Type.Callable> types = extractLambdaTypes(wf);
@@ -3073,7 +3085,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     private Expr.Logical constructTypeTest(WyilFile.Type to, WyilFile.Type from, Expr argument, Expr heap, SyntacticItem item) {
         switch (to.getOpcode()) {
             case WyilFile.TYPE_any:
-                return NEQ(box(from, argument), VAR("Void"), ATTRIBUTE(item));
+                return NEQ(box(from, argument), VOID, ATTRIBUTE(item));
             case WyilFile.TYPE_void:
                 return INVOKE("Void#is", box(from, argument), ATTRIBUTE(item));
             case WyilFile.TYPE_null:
@@ -3173,7 +3185,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     public Expr.Logical constructUniversalTypeTest(WyilFile.Type.Universal to, WyilFile.Type from, Expr argument, Expr heap, SyntacticItem item) {
-        return INVOKE("Type#is", heap, VAR(to.getOperand().get()), argument, ATTRIBUTE(item));
+        return AND(NEQ(argument, VOID),
+                INVOKE("Type#is", heap, VAR(to.getOperand().get()), argument, ATTRIBUTE(item)));
     }
 
     /**
@@ -3217,7 +3230,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         Expr.Logical test = AND(inclauses, ATTRIBUTE(item));
         // Construct type test (when necessary)
         Expr.Logical inbound = argument != nArgument ? AND(INVOKE("Record#is", argument), test, ATTRIBUTE(item)) : test;
-        Expr.Logical outbound = FORALL(v.getVariable(), FIELD, IMPLIES(AND(outclauses), EQ(GET(nArgument, v), VAR("Void"))));
+        Expr.Logical outbound = FORALL(v.getVariable(), FIELD, IMPLIES(AND(outclauses), EQ(GET(nArgument, v), VOID)));
         // Finally, apply outbounds to closed records only since these are the ones whose fields we actually know about.
         return to.isOpen() ?  inbound : AND(inbound, outbound, ATTRIBUTE(item));
     }
@@ -3256,7 +3269,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Recursively construct type test for element
         Expr.Logical valid = constructTypeTest(to.getElement(), WyilFile.Type.Any, GET(nArgument, i), heap, item);
         // Elements outside range equal void
-        Expr.Logical invalid = EQ(GET(nArgument,i),VAR("Void"));
+        Expr.Logical invalid = EQ(GET(nArgument,i),VOID);
         // Construct concrete test
         Expr.Logical test = FORALL(i.getVariable(), Type.Int, AND(IMPLIES(inbounds, valid), IMPLIES(outbounds, invalid)), ATTRIBUTE(item));
         // Construct type test (when necessary)
@@ -3635,15 +3648,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // NOTE: guards against bits being true/false are necessary to prevent infinite loops it seems.
         if(!preParamFrame_p.isTrue()) {
             // For any reference not in the preframe, either it was unnallocated or its contents are unchanged.
-            ensures.add(FORALL("p", REF, OR(preParamFrame_p, EQ(GET(HEAP, p), VAR("Void")), EQ(GET(HEAP, p), GET(NHEAP, p)))));
+            ensures.add(FORALL("p", REF, OR(preParamFrame_p, EQ(GET(HEAP, p), VOID), EQ(GET(HEAP, p), GET(NHEAP, p)))));
             if(!postRetFrame_p.isFalse()) {
                 // For any reference in the (returned) postframe, either it existed in the preframe or it was unallocated.
-                ensures.add(FORALL("p", REF, OR(NOT(postRetFrame_p), EQ(GET(HEAP, p), VAR("Void")), preParamFrame_p)));
+                ensures.add(FORALL("p", REF, OR(NOT(postRetFrame_p), EQ(GET(HEAP, p), VOID), preParamFrame_p)));
             }
         }
         if(!preParamFrame_p.isTrue() && !postFrame_p.isFalse()) {
             // Everything was either reachable from the preframe or is unreachable from the postframe (or was unallocated)
-            ensures.add(FORALL("p", REF, OR(EQ(GET(HEAP, p), VAR("Void")), preParamFrame_p, NOT(postFrame_p))));
+            ensures.add(FORALL("p", REF, OR(EQ(GET(HEAP, p), VOID), preParamFrame_p, NOT(postFrame_p))));
         }
         //
         return ensures;
@@ -3670,7 +3683,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         //Expr.Logical used = constructDynamicFrame(fvs, r, OHEAP, stmt);
         Expr.Logical used = within(r, fvs, OHEAP, stmt);
         // For any reference not used in the loop, either it was unnallocated or its contents are unchanged.
-        frame.add(FORALL("r", REF, OR(used, EQ(GET(OHEAP, r), VAR("Void")), EQ(GET(OHEAP, r), GET(HEAP, r)))));
+        frame.add(FORALL("r", REF, OR(used, EQ(GET(OHEAP, r), VOID), EQ(GET(OHEAP, r), GET(HEAP, r)))));
         // Add additional type constraints for modified references
         frame.addAll(0, constructTypeConstraints(fvs, HEAP));
         // Done
@@ -4278,4 +4291,5 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     private static Expr.VariableAccess SHADOW_HEAP = VAR("HEAP#");
     private static Decl.Variable HEAP_PARAM = new Decl.Variable("HEAP",REFMAP);
     private static Decl.Parameter NHEAP_PARAM = new Decl.Parameter("#HEAP",REFMAP);
+    private static Expr.VariableAccess VOID = VAR("Void");
 }
