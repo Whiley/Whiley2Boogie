@@ -57,9 +57,23 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     private final BoogieFile boogieFile;
 
+    /**
+     * Flag to signal whether or not to apply mangling.  By default this is enabled.
+     */
+    private boolean mangling;
+
     public BoogieCompiler(Meter meter, BoogieFile target) {
         super(meter, subtyping);
         this.boogieFile = target;
+        this.mangling = true;
+    }
+
+    /**
+     * Enable or disable name mangling.  For example, it is useful to disable mangling when debugging.
+     * @param flag
+     */
+    public void setMangling(boolean flag) {
+        this.mangling = flag;
     }
 
     public void visitModule(WyilFile wf) {
@@ -3821,8 +3835,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         }
     }
 
-    private static String toVariableName(WyilFile.Decl.Variable v) {
-        return v.getName().get() + "$" + v.getIndex();
+    private String toVariableName(WyilFile.Decl.Variable v) {
+        if (mangling) {
+            return v.getName().get() + "$" + v.getIndex();
+        } else {
+            return v.getName().get();
+        }
     }
 
     /**
@@ -4134,10 +4152,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     private String toMangledName(WyilFile.Decl.Named<?> decl, WyilFile.Type type) {
         // Determine whether this is an exported symbol or not
         boolean exported = decl.getModifiers().match(WyilFile.Modifier.Export.class) != null;
-        // Construct base name
-        String name = decl.getQualifiedName().toString().replace("::", "$");
-        // Add type mangles for non-exported symbols only
-        return exported ? name : (name + "$" + mangler.getMangle(type));
+        // Check whether mangling applies
+        if(mangling) {
+            // Construct base name
+            String name = decl.getQualifiedName().toString().replace("::", "$");
+            // Add type mangles for non-exported symbols only
+            return exported ? name : (name + "$" + mangler.getMangle(type));
+        } else {
+            return decl.getName().toString();
+        }
     }
 
     /**

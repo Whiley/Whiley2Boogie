@@ -42,6 +42,10 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 	 */
 	private boolean verbose = true;
 	/**
+	 * Specify debugging mode (this disables mangling, etc)
+	 */
+	private boolean debug = true;
+	/**
 	 * Boogie process timeout (in seconds)
 	 */
 	private int timeout = 10;
@@ -61,6 +65,11 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 	public void setVerbose(boolean flag) {
 		this.verbose = flag;
 	}
+
+	public void setDebug(boolean flag) {
+		this.debug = flag;
+	}
+
 
 	public void setTimeout(int timeout) {
 		this.timeout = timeout;
@@ -90,7 +99,11 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 	public boolean execute(Build.Meter meter, BoogieFile target, WyilFile source) {
 		meter = meter.fork("BoogieCompiler");
 		//
-		new BoogieCompiler(meter,target).visitModule(source);
+		BoogieCompiler bc = new BoogieCompiler(meter,target);
+		// Configure debug mode (if applicable)
+		bc.setMangling(!debug);
+		// Run the translation!
+		bc.visitModule(source);
 		//
 		meter.done();
 		//

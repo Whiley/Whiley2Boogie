@@ -57,9 +57,14 @@ import wyil.lang.WyilFile;
  */
 @RunWith(Parameterized.class)
 public class ValidTests {
-	// Timeout to use for Boogie (in seconds)
+	/**
+	 * Configure Timeout to use for Boogie (in seconds)
+	 */
 	public final static int TIMEOUT = 60;
-
+	/**
+	 * Configure debug mode which (when enabled) produces easier to read Boogie output.  This should not be enabled by default.
+	 */
+	private final static boolean DEBUG = false;
 	/**
 	 * The directory containing the source files for each test case. Every test
 	 * corresponds to a file in this directory.
@@ -190,6 +195,8 @@ public class ValidTests {
 					BoogieCompileTask task = new BoogieCompileTask(project, bgTarget, wyilTarget);
 					// Set longer timeout
 					task.setTimeout(TIMEOUT);
+					// Set debug mode
+					task.setDebug(DEBUG);
 					// Enable verification!
 					task.setVerification(true);
 					// Submit the task for execution
