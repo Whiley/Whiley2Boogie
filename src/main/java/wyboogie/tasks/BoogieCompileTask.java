@@ -44,7 +44,7 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 	/**
 	 * Specify debugging mode (this disables mangling, etc)
 	 */
-	private boolean debug = true;
+	private boolean debug = false;
 	/**
 	 * Boogie process timeout (in seconds)
 	 */
