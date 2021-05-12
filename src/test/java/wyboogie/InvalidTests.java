@@ -59,7 +59,10 @@ public class InvalidTests {
 	 * corresponds to a file in this directory.
 	 */
 	public final static String WHILEY_SRC_DIR = "tests/invalid".replace('/', File.separatorChar);
-
+	/**
+	 * Configure debug mode which (when enabled) produces easier to read Boogie output.  This should not be enabled by default.
+	 */
+	private final static boolean DEBUG = false;
 	/**
 	 * Ignored tests and a reason why we ignore them.
 	 */
@@ -74,7 +77,6 @@ public class InvalidTests {
 			IGNORED.put("Type_Invalid_8", "??");
 			IGNORED.put("Reference_Invalid_2", "unclassified");
 			IGNORED.put("While_Invalid_25", "#956");
-			IGNORED.put("Reference_Invalid_5", "??");
 		}
 	// ======================================================================
 	// Test Harness
@@ -156,6 +158,8 @@ public class InvalidTests {
 					BoogieCompileTask task = new BoogieCompileTask(project, bgTarget, wyilTarget);
 					// Enable verification!
 					task.setVerification(true);
+					// Configure debugging
+					task.setDebug(DEBUG);
 					// Submit the task for execution
 					tasks.add(task);
 				}
