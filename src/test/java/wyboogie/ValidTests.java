@@ -120,6 +120,7 @@ public class ValidTests {
 		IGNORED.put("Reference_Valid_24","#89");
 		IGNORED.put("Reference_Valid_29","#60");
 		IGNORED.put("Reference_Valid_33","#60");
+		IGNORED.put("Reference_Valid_39","#115");
 		IGNORED.put("Template_Valid_57","#66");
 		IGNORED.put("UnknownReference_Valid_3","#60");
 	}
