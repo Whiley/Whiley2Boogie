@@ -286,6 +286,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 }
             }
         }
+        // Construct well-definedness check
+        // decls.addAll(constructFunctionCheck(d, name, params, returns, requires, ensures));
         // Add "lambda" value axioms
         decls.addAll(constructCommentSubheading("Lambda Reference & Axiom"));
         decls.addAll(constructLambdaAxioms(d, instantiation));
@@ -313,6 +315,20 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             axiom = FORALL(parameters, IMPLIES(INVOKE(name + "#pre", args), axiom));
         }
         return new Decl.Axiom(IMPLIES(GT(VAR("Context#Level"), CONST(1)), axiom));
+    }
+
+
+    private List<Decl> constructFunctionCheck(WyilFile.Decl.Function d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, List<Expr.Logical> requires, List<Expr.Logical> ensures) {
+        ArrayList<Decl> decls = new ArrayList<>();
+        List<Stmt> stmts = new ArrayList<Stmt>();
+        decls.addAll(constructCommentSubheading("Well-definedness Check"));
+        for (Expr.Logical e : ensures) {
+            Expr.Logical qe = EXISTS(returns, e);
+            stmts.add(ASSERT(qe, ATTRIBUTE(d), ATTRIBUTE(WyilFile.STATIC_ASSERTION_FAILURE)));
+        }
+
+        decls.add(new Decl.Procedure(name + "#check", params, Collections.EMPTY_LIST, requires, Collections.EMPTY_LIST, Collections.EMPTY_LIST, Collections.EMPTY_LIST, SEQUENCE(stmts)));
+        return decls;
     }
 
     private List<Decl> constructFunctionImplementation(WyilFile.Decl.Function d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, List<Expr.Logical> requires, List<Expr.Logical> ensures,
