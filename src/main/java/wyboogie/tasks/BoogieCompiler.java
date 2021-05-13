@@ -824,10 +824,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 vals.set(i, VAR(TEMP(stmt, i)));
             }
         }
-        // Finally, action assignments and type tests
+        // Next, action assignments
         for (int i = 0; i != lvals.size(); ++i) {
             WyilFile.LVal ith = lvals.get(i);
             stmts.add(constructAssign(ith, vals.get(i)));
+        }
+        // Finally, action type tests
+        for (int i = 0; i != lvals.size(); ++i) {
+            WyilFile.LVal ith = lvals.get(i);
             // Extract the assigned variable
             WyilFile.Decl.Variable v = extractVariable(ith, meter);
             // Apply type constraint (if applicable)

@@ -110,7 +110,6 @@ public class ValidTests {
 		IGNORED.put("Process_Valid_10","#56");
 		IGNORED.put("Property_Valid_17","#55");
 		IGNORED.put("RecordAccess_Valid_1","#60");
-		IGNORED.put("RecordAssign_Valid_17","#99");
 		IGNORED.put("RecursiveType_Valid_7","#98");
 		IGNORED.put("RecursiveType_Valid_19","#79");
 		IGNORED.put("RecursiveType_Valid_20","#79");
