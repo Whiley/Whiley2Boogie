@@ -238,7 +238,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Add implementation (if one exists)
         if(d.getBody().size() > 0) {
             // Yes, this is not an external symbol
-            decls.addAll(constructFunctionImplementation(d, name, params, returns, requires, ensures, body));
+            decls.addAll(constructFunctionImplementation(d, name, params, returns, body));
         }
         // Done
         return new Decl.Sequence(decls);
@@ -331,9 +331,16 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         return decls;
     }
 
-    private List<Decl> constructFunctionImplementation(WyilFile.Decl.Function d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, List<Expr.Logical> requires, List<Expr.Logical> ensures,
+    private List<Decl> constructFunctionImplementation(WyilFile.Decl.Function d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns,
                                                        Stmt body) {
         ArrayList<Decl> decls = new ArrayList<>();
+        ArrayList<Expr.Logical> requires = new ArrayList<>();
+        ArrayList<Expr.Logical> ensures = new ArrayList<>();
+        List<Expr> args = toArguments(params);
+        List<Expr> rets = toPostArguments(name, args, returns);
+        //
+        requires.add(INVOKE(name + "#pre", args));
+        ensures.add(INVOKE(name + "#post", append(args, rets)));
         // Construct (shadow) parameters
         List<Decl.Parameter> shadows = map(params, p -> new Decl.Parameter(p.getName() + "#", p.getType()));
         // Determine local variables
