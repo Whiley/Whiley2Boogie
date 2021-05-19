@@ -1911,7 +1911,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             clauses.add(LTEQ(ith.first(), VAR(name)));
             clauses.add(LT(VAR(name), ith.second()));
         }
-        return FORALL(ps, IMPLIES(AND(clauses), (Expr.Logical) body, ATTRIBUTE(expr)));
+        return FORALL(ps, IMPLIES(AND(clauses), (Expr.Logical) body), ATTRIBUTE(expr));
     }
 
     @Override
