@@ -77,6 +77,12 @@ public class InvalidTests {
 			IGNORED.put("Type_Invalid_8", "??");
 			IGNORED.put("Reference_Invalid_2", "unclassified");
 			IGNORED.put("While_Invalid_25", "#956");
+			//
+			// Boogie problems
+			IGNORED.put("Ensures_Invalid_1", "#21");
+			IGNORED.put("Infeasible_Function_1", "#21");
+			IGNORED.put("Property_Invalid_2", "#21");
+			IGNORED.put("While_Invalid_19", "#21");
 		}
 	// ======================================================================
 	// Test Harness

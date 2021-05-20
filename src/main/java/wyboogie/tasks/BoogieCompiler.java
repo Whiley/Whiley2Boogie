@@ -320,7 +320,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     private List<Decl> constructFunctionCheck(WyilFile.Decl.Function d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, List<Expr.Logical> requires, List<Expr.Logical> ensures) {
         ArrayList<Decl> decls = new ArrayList<>();
-        List<Stmt> stmts = new ArrayList<Stmt>();
+        List<Stmt> stmts = new ArrayList<>();
         decls.addAll(constructCommentSubheading("Well-definedness Check"));
         for (Expr.Logical e : ensures) {
             Expr.Logical qe = EXISTS(returns, e);
@@ -337,7 +337,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         ArrayList<Expr.Logical> requires = new ArrayList<>();
         ArrayList<Expr.Logical> ensures = new ArrayList<>();
         List<Expr> args = toArguments(params);
-        List<Expr> rets = toPostArguments(name, args, returns);
+        List<Expr> rets = toArguments(returns);
         //
         requires.add(INVOKE(name + "#pre", args));
         ensures.add(INVOKE(name + "#post", append(args, rets)));
@@ -3646,7 +3646,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     private List<Expr.Logical> constructMethodFrame(WyilFile.Type.Callable ct, Function<Integer,String> parameters, Function<Integer,String> returns, SyntacticItem item) {
-        ArrayList<Expr.Logical> ensures = new ArrayList<Expr.Logical>();
+        ArrayList<Expr.Logical> ensures = new ArrayList<>();
         WyilFile.Type param = ct.getParameter();
         WyilFile.Type ret = ct.getReturn();
         Expr p = VAR("p");
@@ -3721,14 +3721,16 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             public void visitVariable(WyilFile.Decl.Variable e) {
                 declared.add(e);
             }
-            public void visitVariableAccess(WyilFile.Expr.VariableAccess e) {
+            @Override
+			public void visitVariableAccess(WyilFile.Expr.VariableAccess e) {
                 WyilFile.Decl.Variable v = e.getVariableDeclaration();
                 if(!declared.contains(v) && !WyilUtils.isPure(v.getType())) {
                     used.add(v);
                 }
             }
 
-            public void visitLVals(Tuple<WyilFile.LVal> lvs) {
+            @Override
+			public void visitLVals(Tuple<WyilFile.LVal> lvs) {
                 for(WyilFile.LVal lv : lvs) {
                     visitLVal(lv);
                 }
@@ -4082,7 +4084,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 }
             }
 
-            public void visitLVals(Tuple<WyilFile.LVal> lvs) {
+            @Override
+			public void visitLVals(Tuple<WyilFile.LVal> lvs) {
                 for(WyilFile.LVal lv : lvs) {
                     visitLVal(lv);
                 }
