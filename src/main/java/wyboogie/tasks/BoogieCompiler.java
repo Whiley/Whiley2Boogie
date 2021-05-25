@@ -23,7 +23,6 @@ import java.util.Set;
 import java.util.function.Function;
 
 import static wyboogie.core.BoogieFile.*;
-//import static wyil.lang.WyilFile.*;
 
 import wyboogie.core.BoogieFile;
 import wyboogie.core.BoogieFile.Decl;
@@ -215,7 +214,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     @Override
-    public Decl constructFunction(WyilFile.Decl.Function d, List precondition, List postcondition,
+    public Decl constructFunction(WyilFile.Decl.Function d, List<Expr> precondition, List<Expr> postcondition,
                                   Stmt body) {
         ArrayList<Decl> decls = new ArrayList<>();
         // Apply name mangling
@@ -227,8 +226,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         List<Decl.Parameter> params = append(HEAP_PARAM, parametersAndConstraints.first());
         List<Decl.Parameter> returns = returnsAndConstraints.first();
         // Merge preconditions / postconditions
-        List<Expr.Logical> requires = append(parametersAndConstraints.second(), constructDefinednessChecks(d.getRequires()),(List<Expr.Logical>) precondition);
-        List<Expr.Logical> ensures = append(returnsAndConstraints.second(), constructDefinednessChecks(d.getEnsures()), (List<Expr.Logical>) postcondition);
+        List<Expr.Logical> requires = append(parametersAndConstraints.second(), flatternAsLogical(precondition));
+        List<Expr.Logical> ensures = append(returnsAndConstraints.second(), flatternAsLogical(postcondition));
         // Add useful comment
         decls.addAll(constructCommentHeading("FUNCTION: " + d.getQualifiedName() + " : " + d.getType()));
         // Construct prototype which can be called from expressions.
@@ -264,9 +263,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Construct function representation postcondition
         decls.addAll(constructCommentSubheading("Postcondition Check"));
         decls.add(FUNCTION(name + "#post", append(params,returns), Type.Bool, AND(ensures)));
-        decls.addAll(constructCommentSubheading("Postcondition Axiom"));
-        // Construct axiom linking post-condition with prototype.
-        decls.add(constructPostconditionAxiom(d, name, params, returns));
         decls.addAll(constructCommentSubheading("Prototype"));
         // Construct prototype which can be called from an expression.
         switch(d.getReturns().size()) {
@@ -292,42 +288,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         decls.addAll(constructCommentSubheading("Lambda Reference & Axiom"));
         decls.addAll(constructLambdaAxioms(d, instantiation));
         // Done
-        return decls;
-    }
-
-    /**
-     * Construct the "postcondition axiom" which relates a given function prototype to its postcondition. Without this,
-     * when an invocation is made to that prototype, Boogie will not be aware of what the postcondition implies.
-     *
-     * @param prototype
-     * @param parameters
-     * @return
-     */
-    public Decl.Axiom constructPostconditionAxiom(WyilFile.Decl.Function d, String name,
-                                                  List<Decl.Parameter> parameters, List<Decl.Parameter> returns) {
-        List<Expr> args = toArguments(parameters);
-        List<Expr> rets = toPostArguments(name, args, returns);
-        //
-        Expr.Logical axiom = INVOKE(name + "#post", append(args, rets));
-        //
-        if (parameters.size() > 0) {
-            // Quantifier required!
-            axiom = FORALL(parameters, IMPLIES(INVOKE(name + "#pre", args), axiom));
-        }
-        return new Decl.Axiom(IMPLIES(GT(VAR("Context#Level"), CONST(1)), axiom));
-    }
-
-
-    private List<Decl> constructFunctionCheck(WyilFile.Decl.Function d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, List<Expr.Logical> requires, List<Expr.Logical> ensures) {
-        ArrayList<Decl> decls = new ArrayList<>();
-        List<Stmt> stmts = new ArrayList<>();
-        decls.addAll(constructCommentSubheading("Well-definedness Check"));
-        for (Expr.Logical e : ensures) {
-            Expr.Logical qe = EXISTS(returns, e);
-            stmts.add(ASSERT(qe, ATTRIBUTE(d), ATTRIBUTE(WyilFile.STATIC_ASSERTION_FAILURE)));
-        }
-
-        decls.add(new Decl.Procedure(name + "#check", params, Collections.EMPTY_LIST, requires, Collections.EMPTY_LIST, Collections.EMPTY_LIST, Collections.EMPTY_LIST, SEQUENCE(stmts)));
         return decls;
     }
 
@@ -372,8 +332,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         List<Decl.Parameter> params = parametersAndConstraints.first();
         List<Decl.Parameter> returns = returnsAndConstraints.first();
         // Merge preconditions / postconditions
-        List<Expr.Logical> requires = append(parametersAndConstraints.second(), constructDefinednessChecks(d.getRequires()), (List<Expr.Logical>) precondition);
-        List<Expr.Logical> ensures = append(returnsAndConstraints.second(), constructDefinednessChecks(d.getEnsures()), (List<Expr.Logical>) postcondition);
+        List<Expr.Logical> requires = append(parametersAndConstraints.second(), flatternAsLogical(precondition));
+        List<Expr.Logical> ensures = append(returnsAndConstraints.second(), flatternAsLogical(postcondition));
         // Add useful comment
         decls.addAll(constructCommentHeading("METHOD: " + d.getQualifiedName() + " : " + d.getType()));
         // Add method prototype
@@ -769,18 +729,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Translate lambda body
         Expr body = visitExpression(l.getBody());
         // Add all preconditions arising. If there are any, they will likely fail!
-        stmts.addAll(constructDefinednessAssertions(l.getBody()));
-        // Apply any heap allocations arising.
-        stmts.addAll(constructSideEffects(l.getBody()));
+        Pair<List<Stmt>,List<Expr>> f = flatternMultiWithSideEffects(body);
+        stmts.addAll(f.first());
         // Add return variable assignments
-        if(returnType.shape() == 1) {
-            stmts.add(ASSIGN(VAR("r#0"), body));
-        } else {
-            // Handle multiple returns
-            List<Expr> tuple = ((FauxTuple) body).getItems();
-            for(int i=0;i!=returnType.shape();++i) {
-                stmts.add(ASSIGN(VAR("r#" + i), tuple.get(i)));
-            }
+        List<Expr> tuple = f.second();
+        for(int i=0;i!=returnType.shape();++i) {
+            stmts.add(ASSIGN(VAR("r#" + i), tuple.get(i)));
         }
         return new Decl.Implementation(name, shadows, returns, locals, SEQUENCE(stmts));
     }
@@ -793,25 +747,26 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Stmt constructAssert(WyilFile.Stmt.Assert stmt, Expr condition) {
-        ArrayList<Stmt> stmts = new ArrayList<>();
-        // Add all preconditions arising.
-        stmts.addAll(constructDefinednessAssertions(stmt.getCondition()));
-        // Apply any heap allocations arising.
-        stmts.addAll(constructSideEffects(stmt.getCondition()));
+        // Flattern (potentially impure) condition
+        Pair<List<Stmt>, Expr> f = flatternWithSideEffects(condition);
+        // Add side effects
+        ArrayList<Stmt> stmts = new ArrayList<>(f.first());
         // Add assertion itself, along with relevant attributes for disambiguation
-        stmts.add(ASSERT((Expr.Logical) condition, ATTRIBUTE(stmt.getCondition()), ATTRIBUTE(WyilFile.STATIC_ASSERTION_FAILURE)));
+        stmts.add(ASSERT((Expr.Logical) f.second(), ATTRIBUTE(stmt.getCondition()), ATTRIBUTE(WyilFile.STATIC_ASSERTION_FAILURE)));
         // DONE
         return SEQUENCE(stmts);
     }
 
     @Override
-    public Stmt constructAssign(WyilFile.Stmt.Assign stmt, List<Expr> _unused, List<Expr> rhs) {
-        ArrayList<Stmt> stmts = new ArrayList<>();
+    public Stmt constructAssign(WyilFile.Stmt.Assign stmt, List<Expr> _unused, List<Expr> _rhs) {
+
         // Add all preconditions arising.
-        stmts.addAll(constructDefinednessAssertions(stmt.getLeftHandSide()));
-        stmts.addAll(constructDefinednessAssertions(stmt.getRightHandSide()));
-        // Apply any heap allocations arising.
-        stmts.addAll(constructSideEffects(stmt.getRightHandSide()));
+        Pair<List<Stmt>,List<Expr>> f = flatternWithSideEffects(_rhs);
+        ArrayList<Stmt> stmts = new ArrayList<>(f.first());
+        List<Expr> rhs = f.second();
+
+        // FIXME: add assertions for left-hand side!
+
         // First, flatten left-hand and right-hand sides
         List<WyilFile.LVal> lvals = flatternAssignmentLeftHandSide(stmt.getLeftHandSide());
         List<WyilFile.Expr> rvals = flatternAssignmentRightHandSide(stmt.getRightHandSide());
@@ -1054,13 +1009,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Stmt constructAssume(WyilFile.Stmt.Assume stmt, Expr condition) {
-        ArrayList<Stmt> stmts = new ArrayList<>();
-        // Add all preconditions arising.
-        stmts.addAll(constructDefinednessAssertions(stmt.getCondition()));
-        // Apply any heap allocations arising.
-        stmts.addAll(constructSideEffects(stmt.getCondition()));
-        // Add well-definedness assumptions
-        stmts.add(ASSUME((Expr.Logical) condition, ATTRIBUTE(stmt.getCondition()), ATTRIBUTE(WyilFile.STATIC_ASSUMPTION_FAILURE)));
+        // Flattern (potentially impure) condition
+        Pair<List<Stmt>, Expr> f = flatternWithSideEffects(condition);
+        // Add side effects
+        ArrayList<Stmt> stmts = new ArrayList<>(f.first());
+        //
+        stmts.add(ASSUME((Expr.Logical) f.second(), ATTRIBUTE(stmt.getCondition()), ATTRIBUTE(WyilFile.STATIC_ASSUMPTION_FAILURE)));
         // Done
         return SEQUENCE(stmts);
     }
@@ -1084,11 +1038,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Stmt constructDebug(WyilFile.Stmt.Debug stmt, Expr operand) {
-        ArrayList<Stmt> stmts = new ArrayList<>();
-        // Add all preconditions arising.
-        stmts.addAll(constructDefinednessAssertions(stmt.getOperand()));
-        // Apply any heap allocations arising.
-        stmts.addAll(constructSideEffects(stmt.getOperand()));
+        // Flattern (potentially impure) expression
+        Pair<List<Stmt>,Expr> f = flatternWithSideEffects(operand);
+        // Add all side-effects and assertions
+        ArrayList<Stmt> stmts = new ArrayList<>(f.first());
         //
         stmts.add(ASSERT(CONST(true)));
         return SEQUENCE(stmts);
@@ -1104,12 +1057,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         ArrayList<Stmt> stmts = new ArrayList<>();
         // Add first iteration
         stmts.add(body);
-        // Add all preconditions arising.
-        stmts.addAll(constructDefinednessAssertions(stmt.getCondition()));
-        // Apply any heap allocations arising.
-        stmts.addAll(constructSideEffects(stmt.getCondition()));
-        // Add definedness checks for invariants
-        invariant = append(constructDefinednessChecks(stmt.getInvariant()), (List<Expr.Logical>) invariant);
+        // Flattern (potentiall impure) condition
+        Pair<List<Stmt>,Expr> f = flatternWithSideEffects(condition);
+        //
+        if (!f.first().isEmpty()) {
+            throw new IllegalArgumentException("loop with side effects");
+        }
         // Add type constraints arising from modified variables
         invariant.addAll(0, constructTypeConstraints(modified, HEAP));
         if(!pure) {
@@ -1123,7 +1076,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             stmts.add(LABEL("CONTINUE_" + stmt.getIndex()));
         }
         // Add the loop itself
-        stmts.add(WHILE((Expr.Logical) condition, invariant, body));
+        stmts.add(WHILE((Expr.Logical) f.second(), invariant, body));
         // Add break label (if necessary)
         if (needBreakLabel) {
             stmts.add(LABEL("BREAK_" + stmt.getIndex()));
@@ -1138,7 +1091,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     @Override
-    public Stmt constructFor(WyilFile.Stmt.For stmt, Pair range, List invariant, Stmt body) {
+    public Stmt constructFor(WyilFile.Stmt.For stmt, Pair<Expr,Expr> range, List<Expr> _invariant, Stmt body) {
+        List<Expr.Logical> invariant = flatternAsLogical(_invariant);
         boolean needContinueLabel = containsContinueOrBreak(stmt, false);
         boolean needBreakLabel = containsContinueOrBreak(stmt, true);
         boolean pure = isPure(stmt);
@@ -1150,21 +1104,23 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         ArrayList<Stmt> stmts = new ArrayList<>();
         // Add all preconditions arising.
         // FIXME: handle preconditions and side-effects from the loop invariant(s).
-        stmts.addAll(constructDefinednessAssertions(stmt.getVariable().getInitialiser()));
-        // Apply any heap allocations arising.
-        stmts.addAll(constructSideEffects(stmt.getVariable().getInitialiser()));
+        // Flattern (potentiall impure) condition
+        Pair<List<Stmt>,Expr> lhs = flatternWithSideEffects(range.first());
+        Pair<List<Stmt>,Expr> rhs = flatternWithSideEffects(range.second());
+        // Add all assertions and side effects
+        stmts.addAll(lhs.first());
+        stmts.addAll(rhs.first());
         // Extract loop contents so it can be appended later
         ArrayList<Stmt> loopBody = new ArrayList<>();
         loopBody.add(body);
         // Initialise index variable with first value from range
-        stmts.add(ASSIGN(var, (Expr) range.first()));
-        Expr condition = LT(var, (Expr) range.second());
+        stmts.add(ASSIGN(var, lhs.second()));
+        Expr condition = LT(var, rhs.second());
         // Add variable increment for completeness
         loopBody.add(ASSIGN(var, ADD(var, CONST(1))));
-        // UPdate the invariant
-        invariant.add(0, AND(LTEQ((Expr) range.first(), var), LTEQ(var, (Expr) range.second()),ATTRIBUTE(stmt.getVariable().getInitialiser())));
-        // Add definedness checks for invariant
-        invariant = append(constructDefinednessChecks(stmt.getInvariant()), (List<Expr.Logical>) invariant);
+        // FIXME: need to reassert side-effects and assertions?
+        // Update invariant
+        invariant.add(0, AND(LTEQ(lhs.second(), var), LTEQ(var, rhs.second()),ATTRIBUTE(stmt.getVariable().getInitialiser())));
         // Add any type constraints arising
         invariant.addAll(0, constructTypeConstraints(modified, HEAP));
         if(!pure) {
@@ -1191,13 +1147,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Stmt constructIfElse(WyilFile.Stmt.IfElse stmt, Expr condition, Stmt trueBranch, Stmt falseBranch) {
-        ArrayList<Stmt> stmts = new ArrayList<>();
-        // Add all preconditions arising.
-        stmts.addAll(constructDefinednessAssertions(stmt.getCondition()));
-        // Apply any heap allocations arising.
-        stmts.addAll(constructSideEffects(stmt.getCondition()));
+        // Flattern (potentially impure) condition
+        Pair<List<Stmt>, Expr> f = flatternWithSideEffects(condition);
+        // Add side effects
+        ArrayList<Stmt> stmts = new ArrayList<>(f.first());
         // Add statement!
-        stmts.add(IFELSE((Expr.Logical) condition, trueBranch, falseBranch));
+        stmts.add(IFELSE((Expr.Logical) f.second(), trueBranch, falseBranch));
         // Done
         return SEQUENCE(stmts);
     }
@@ -1209,13 +1164,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         if (init == null) {
             return SEQUENCE();
         } else {
-            ArrayList<Stmt> stmts = new ArrayList<>();
+            // Flattern (potentially impure) expression
+            Pair<List<Stmt>, List<Expr>> f = flatternMultiWithSideEffects(init);
             // Add all preconditions arising.
-            stmts.addAll(constructDefinednessAssertions(stmt.getInitialiser()));
-            // Apply any heap allocations arising.
-            stmts.addAll(constructSideEffects(stmt.getInitialiser()));
+            ArrayList<Stmt> stmts = new ArrayList<>(f.first());
             // Extract list of initialiser expressions
-            List<Expr> inits = (init instanceof FauxTuple) ? ((FauxTuple) init).getItems() : Arrays.asList(init);
+            List<Expr> inits = f.second();
             // Determine type of initialiser expression
             WyilFile.Type initT = stmt.getInitialiser().getType();
             // Assign to each variable and check constraints
@@ -1236,15 +1190,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Stmt constructInvokeStmt(WyilFile.Expr.Invoke expr, List<Expr> args) {
-        ArrayList<Stmt> stmts = new ArrayList<>();
         WyilFile.Type.Callable ft = expr.getLink().getTarget().getType();
         // Add all preconditions arising. If there are any, they will likely fail!
-        stmts.addAll(constructDefinednessAssertions(expr));
-        // Apply any heap allocations arising.
-        stmts.addAll(constructSideEffects(expr.getOperands()));
+        Pair<List<Stmt>, List<Expr>> f = flatternWithSideEffects(args);
+        ArrayList<Stmt> stmts = new ArrayList<>(f.first());
         //
         if (ft instanceof WyilFile.Type.Method) {
-            WyilFile.Type.Method mt = (WyilFile.Type.Method) ft;
+            WyilFile.Type.Callable mt = (WyilFile.Type.Method) ft;
             // Extract template arguments
             Tuple<WyilFile.Type> binding = expr.getBinding().getArguments();
             // Extract declared return type
@@ -1280,13 +1232,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Stmt constructIndirectInvokeStmt(WyilFile.Expr.IndirectInvoke expr, Expr source, List<Expr> args) {
-        ArrayList<Stmt> stmts = new ArrayList<>();
         WyilFile.Type.Callable ft = expr.getSource().getType().as(WyilFile.Type.Callable.class);
-        // Add all preconditions arising. If there are any, they will likely fail!
-        stmts.addAll(constructDefinednessAssertions(expr));
-        // Apply any heap allocations arising.
-        stmts.addAll(constructSideEffects(expr.getSource()));
-        stmts.addAll(constructSideEffects(expr.getArguments()));
+        // Flattern (potentially impure) expressions
+        Pair<List<Stmt>, Expr> f1 = flatternWithSideEffects(source);
+        Pair<List<Stmt>, List<Expr>> f2 = flatternWithSideEffects(args);
+        // Add side effects
+        ArrayList<Stmt> stmts = new ArrayList<>(f1.first());
+        stmts.addAll(f2.first());
         //
         if (ft instanceof WyilFile.Type.Method) {
             // Extract declared return type
@@ -1304,7 +1256,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 }
             }
             // Add method pointer
-            args.add(0, source);
+            args.add(0, f1.second());
             // Add meta types arguments (if any)
             int i = 2;
             for(WyilFile.Template.Variable hole : holes) {
@@ -1313,7 +1265,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             // Determine the methods name
             String name = "apply$" + getMangle(ft);
             // Done
-            stmts.add(CALL(name, lvals, args, ATTRIBUTE(expr)));
+            stmts.add(CALL(name, lvals, f2.second(), ATTRIBUTE(expr)));
         } else {
             // NOTE: this case arises when for a function invocation which discards the
             // return value. That doesn't really make sense, and for now we just treat as a
@@ -1340,12 +1292,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         if (ret != null) {
             WyilFile.Tuple<WyilFile.Decl.Variable> returns = enclosing.getReturns();
             WyilFile.Type type = stmt.getReturn().getType();
+            // Flattern (potentially impure) expression
+            Pair<List<Stmt>, List<Expr>> f = flatternMultiWithSideEffects(ret);
+            // Add all preconditions / side effects arising.
+            stmts.addAll(f.first());
             // Extract return values
-            List<Expr> rvs = returns.size() == 1 ? Arrays.asList(ret) : ((FauxTuple) ret).getItems();
-            // Add all preconditions arising.
-            stmts.addAll(constructDefinednessAssertions(stmt.getReturn()));
-            // Apply any heap allocations arising.
-            stmts.addAll(constructSideEffects(stmt.getReturn()));
+            List<Expr> rvs = f.second();
             //
             for (int i = 0; i != rvs.size(); ++i) {
                 WyilFile.Decl.Variable ith = returns.get(i);
@@ -1369,11 +1321,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Stmt constructSwitch(WyilFile.Stmt.Switch stmt, Expr condition, List<Pair<List<Expr>, Stmt>> cases) {
-        ArrayList<Stmt> stmts = new ArrayList<>();
-        // Add all preconditions arising.
-        stmts.addAll(constructDefinednessAssertions(stmt.getCondition()));
-        // Apply any heap allocations arising.
-        stmts.addAll(constructSideEffects(stmt.getCondition()));
+        // Flattern (potentially impure) condition
+        Pair<List<Stmt>, Expr> f = flatternWithSideEffects(condition);
+        // Add side effects
+        ArrayList<Stmt> stmts = new ArrayList<>(f.first());
         //
         String breakLabel = "SWITCH_" + stmt.getIndex() + "_BREAK";
         String defaultLabel = "SWITCH_" + stmt.getIndex() + "_DEFAULT";
@@ -1397,8 +1348,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             List<Expr> ith_first = ith.first();
             ArrayList<Expr.Logical> cs = new ArrayList<>();
             for (int j = 0; j != ith_first.size(); ++j) {
-                cs.add(EQ(condition, ith_first.get(j)));
-                defaultCases.add(NEQ(condition, ith_first.get(j)));
+                cs.add(EQ(f.second(), ith_first.get(j)));
+                defaultCases.add(NEQ(f.second(), ith_first.get(j)));
             }
             if (cs.isEmpty()) {
                 defaultCase = ith.second();
@@ -1430,12 +1381,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         Expr.VariableAccess OHEAP = BoogieFile.VAR("HEAP$" + stmt.getIndex());
         Tuple<WyilFile.Decl.Variable> modified = stmt.getModified();
         ArrayList<Stmt> stmts = new ArrayList<>();
-        // Add all preconditions arising.
-        stmts.addAll(constructDefinednessAssertions(stmt.getCondition()));
-        // Apply any heap allocations arising.
-        stmts.addAll(constructSideEffects(stmt.getCondition()));
-        // Preprepend the necessary definedness checks
-        invariant = append(constructDefinednessChecks(stmt.getInvariant()),(List<Expr.Logical>) invariant);
+        // Flattern (potentiall impure) condition
+        Pair<List<Stmt>,Expr> f = flatternWithSideEffects(condition);
+        //
+        if (!f.first().isEmpty()) {
+            throw new IllegalArgumentException("loop with side effects");
+        }
         // Add any type constraints arising (first)
         invariant.addAll(0, constructTypeConstraints(modified, HEAP));
         if(!pure) {
@@ -1449,150 +1400,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             stmts.add(LABEL("CONTINUE_" + stmt.getIndex()));
         }
         //
-        stmts.add(WHILE((Expr.Logical) condition, invariant, body));
+        stmts.add(WHILE((Expr.Logical) f.second(), invariant, body));
         // Add break label (if necessary)
         if (needBreakLabel) {
             stmts.add(LABEL("BREAK_" + stmt.getIndex()));
         }
         return SEQUENCE(stmts);
-    }
-
-    /**
-     * Extract all heap-related side effects (e.g. heap allocations, method calls, etc). For example, consider the
-     * following statement in Whiley:
-     *
-     * <pre>
-     * ...
-     * &int p = new 1
-     * </pre>
-     * <p>
-     * This is translated into:
-     *
-     * <pre>
-     * var p : Ref;
-     * var l#0 : Ref;
-     * ...
-     * l#0 = new(1);
-     * p = l#0;
-     * </pre>
-     * <p>
-     * This is necessary for several reasons. Firstly, <code>new</code> is a procedure and call only be called by the
-     * Boogie "call" expression.
-     *
-     * @param expr
-     * @return
-     */
-    private List<Stmt> constructSideEffects(WyilFile.Expr expr) {
-        ArrayList<Stmt> allocations = new ArrayList<>();
-        // Handle local variables
-        new AbstractVisitor(meter) {
-
-            @Override
-            public void visitLambda(WyilFile.Decl.Lambda decl) {
-                // NOTE: we don't extract side-effects from lambda declarations. That's because
-                // they are effectively encompassed in their own methods.
-            }
-
-            @Override
-            public void visitNew(WyilFile.Expr.New expr) {
-                super.visitNew(expr);
-                String name = "l#" + expr.getIndex();
-                // Translate operand
-                Expr operand = BoogieCompiler.this.visitExpression(expr.getOperand());
-                // Box operand (as necessary)
-                operand = box(expr.getOperand().getType(), operand);
-                // Construct lvals
-                List<LVal> lvals = Arrays.asList(VAR(name));
-                // Done
-                allocations.add(CALL("Ref#new", lvals, operand, ATTRIBUTE(expr)));
-            }
-
-            @Override
-            public void visitInvoke(WyilFile.Expr.Invoke expr) {
-                super.visitInvoke(expr);
-                // Extract template arguments
-                Tuple<WyilFile.Type> binding = expr.getBinding().getArguments();
-                // Extract target declaration
-                WyilFile.Decl.Callable ft = expr.getLink().getTarget();
-                // Translate method invocations into Boogie procedure calls.
-                if (ft instanceof WyilFile.Decl.Method) {
-                    WyilFile.Decl.Method mt = (WyilFile.Decl.Method) ft;
-                    WyilFile.Type type = expr.getType();
-                    // Construct temporary variable(s)
-                    List<LVal> lvals = new ArrayList<>();
-                    if (type.shape() == 1) {
-                        lvals.add(VAR("m#" + expr.getIndex()));
-                    } else {
-                        for (int i = 0; i != type.shape(); ++i) {
-                            lvals.add(VAR("m#" + expr.getIndex() + "#" + i));
-                        }
-                    }
-                    // Apply name mangling
-                    String name = toMangledName(expr.getLink().getTarget());
-                    // Recursively (re)construct argument expressions
-                    List<Expr> args = BoogieCompiler.this.visitExpressions(expr.getOperands());
-                    // Apply conversions to arguments as necessary
-                    args = cast(mt.getType().getParameter(), expr.getOperands(), args);
-                    // Add template arguments
-                    for(int i=0;i!=binding.size();++i) {
-                        args.add(i,constructMetaType(binding.get(i), HEAP));
-                    }
-                    // Done
-                    allocations.add(CALL(name, lvals, args, ATTRIBUTE(expr)));
-                }
-            }
-
-            @Override
-            public void visitIndirectInvoke(WyilFile.Expr.IndirectInvoke expr) {
-                super.visitIndirectInvoke(expr);
-                WyilFile.Type.Callable ft = expr.getSource().getType().as(WyilFile.Type.Callable.class);
-                //
-                if (ft instanceof WyilFile.Type.Method) {
-                    WyilFile.Type type = expr.getType();
-                    // Extract any holes
-                    Tuple<WyilFile.Template.Variable> holes = WyilUtils.extractTemplate(ft,meter);
-                    // Construct temporary variable(s)
-                    List<LVal> lvals = new ArrayList<>();
-                    if (type.shape() == 1) {
-                        lvals.add(VAR("m#" + expr.getIndex()));
-                    } else {
-                        for (int i = 0; i != type.shape(); ++i) {
-                            lvals.add(VAR("m#" + expr.getIndex() + "#" + i));
-                        }
-                    }
-                    // Recursively (re)construct source expression
-                    Expr source = BoogieCompiler.this.visitExpression(expr.getSource());
-                    // Rec)ursively (re)construct argument expressions
-                    List<Expr> args = BoogieCompiler.this.visitExpressions(expr.getArguments());
-                    // Add method pointer
-                    args.add(0, source);
-                    // Add meta types
-                    int i = 2;
-                    for(WyilFile.Template.Variable hole : holes) {
-                        args.add(i++,VAR(hole.getName().get()));
-                    }
-                    // Determine the methods name
-                    String name = "apply$" + getMangle(ft);
-                    // Done
-                    allocations.add(CALL(name, lvals, args, ATTRIBUTE(expr)));
-                }
-            }
-
-            @Override
-            public void visitType(WyilFile.Type t) {
-                // Prevent unexpected traverals of types
-            }
-        }.visitExpression(expr);
-        //
-        return allocations;
-    }
-
-    private List<Stmt> constructSideEffects(Tuple<WyilFile.Expr> expr) {
-        ArrayList<Stmt> stmts = new ArrayList<>();
-        for (int i = 0; i != expr.size(); ++i) {
-            stmts.addAll(constructSideEffects(expr.get(i)));
-        }
-        return stmts;
     }
 
     @Override
@@ -2103,6 +1916,44 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     // =========================================================================================
+    // Side Effects & Well-Definedness
+    // =========================================================================================
+
+    public Pair<List<Stmt>, Expr> flatternWithSideEffects(Expr e) {
+        // FIXME: this is obviously broken
+        return new Pair<>(Collections.EMPTY_LIST, e);
+    }
+
+    public Pair<List<Stmt>, List<Expr>> flatternWithSideEffects(List<Expr> es) {
+        List<Stmt> stmts = new ArrayList<>();
+        List<Expr> exprs = new ArrayList<>();
+        for (Expr ee : es) {
+            Pair<List<Stmt>, Expr> f = flatternWithSideEffects(ee);
+            stmts.addAll(f.first());
+            exprs.add(f.second());
+        }
+        return new Pair<>(stmts, exprs);
+    }
+
+    public Pair<List<Stmt>, List<Expr>> flatternMultiWithSideEffects(Expr e) {
+        if (e instanceof FauxTuple) {
+            List<Expr> es = ((FauxTuple) e).getItems();
+            return flatternWithSideEffects(es);
+        } else {
+            Pair<List<Stmt>, Expr> f = flatternWithSideEffects(e);
+            return new Pair<>(f.first(), Arrays.asList(f.second()));
+        }
+    }
+
+    public Expr.Logical flatternAsLogical(Expr e) {
+        return (Expr.Logical) e;
+    }
+
+    public List<Expr.Logical> flatternAsLogical(List e) {
+        return (List<Expr.Logical>) e;
+    }
+
+    // =========================================================================================
     // Preconditions
     // =========================================================================================
 
@@ -2155,14 +2006,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             }
 
             @Override
-            public List<Stmt.Assert> constructLambda(WyilFile.Decl.Lambda lambda, List<Stmt.Assert> body) {
-                // NOTE: do not propagate preconditions from within the lambda outside.  Such preconditions will be
-                // checked within the dummy procedure created for the lambda.
-                return Collections.EMPTY_LIST;
-            }
-
-            @Override
-            public List<Stmt.Assert> constructLogicalAnd(WyilFile.Expr.LogicalAnd expr, List<List<Stmt.Assert>> operands) {
+            public List<Stmt.Assert> constructLogicalAnd(Expr.LogicalAnd expr, List<List<Stmt.Assert>> operands) {
                 // Translate Whiley expressions to form the window.
                 List window = BoogieCompiler.this.visitExpressions(expr.getOperands());
                 List<Stmt.Assert> rs = new ArrayList<>();
@@ -2182,7 +2026,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 
             @Override
-            public List<Stmt.Assert> constructLogicalOr(WyilFile.Expr.LogicalOr expr, List<List<Stmt.Assert>> operands) {
+            public List<Stmt.Assert> constructLogicalOr(Expr.LogicalOr expr, List<List<Stmt.Assert>> operands) {
                 // Translate Whiley expressions to form the window.
                 List window = BoogieCompiler.this.visitExpressions(expr.getOperands());
                 List<Stmt.Assert> rs = new ArrayList<>();
@@ -2201,7 +2045,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             }
 
             @Override
-            public List<Stmt.Assert> constructLogicalImplication(WyilFile.Expr.LogicalImplication expr, List<Stmt.Assert> left, List<Stmt.Assert> right) {
+            public List<Stmt.Assert> constructLogicalImplication(Expr.LogicalImplication expr, List<Stmt.Assert> left, List<Stmt.Assert> right) {
                 Expr.Logical w = (Expr.Logical) BoogieCompiler.this.visitExpression(expr.getFirstOperand());
                 // Map over existing operands
                 List<Stmt.Assert> nright = map(right, s -> {
@@ -2213,15 +2057,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             }
 
             @Override
-            public List<Stmt.Assert> constructUniversalQuantifier(WyilFile.Expr.UniversalQuantifier expr, List<List<Stmt.Assert>> operands, List<Stmt.Assert> body) {
+            public List<Stmt.Assert> constructUniversalQuantifier(Expr.UniversalQuantifier expr, List<List<Stmt.Assert>> operands, List<Stmt.Assert> body) {
                 return constructQuantifier(expr,operands,body);
             }
             @Override
-            public List<Stmt.Assert> constructExistentialQuantifier(WyilFile.Expr.ExistentialQuantifier expr, List<List<Stmt.Assert>> operands, List<Stmt.Assert> body) {
+            public List<Stmt.Assert> constructExistentialQuantifier(Expr.ExistentialQuantifier expr, List<List<Stmt.Assert>> operands, List<Stmt.Assert> body) {
                 return constructQuantifier(expr,operands,body);
             }
 
-            private List<Stmt.Assert> constructQuantifier(WyilFile.Expr.Quantifier expr, List<List<Stmt.Assert>> operands, List<Stmt.Assert> body) {
+            private List<Stmt.Assert> constructQuantifier(Expr.Quantifier expr, List<List<Stmt.Assert>> operands, List<Stmt.Assert> body) {
                 WyilFile.Tuple<WyilFile.Decl.StaticVariable> params = expr.getParameters();
                 List<Decl.Parameter> ps = new ArrayList<>();
                 List<Expr.Logical> clauses = new ArrayList<>();
@@ -2245,14 +2089,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             }
 
             @Override
-            public List<Stmt.Assert> constructArrayAccess(WyilFile.Expr.ArrayAccess expr, List<Stmt.Assert> source, List<Stmt.Assert> index) {
-                List<Stmt.Assert> result = append(source,index);
-                Expr src = BoogieCompiler.this.visitExpression(expr.getFirstOperand());
-                Expr i = BoogieCompiler.this.visitExpression(expr.getSecondOperand());
-                // Add check that index is not negative
-                result.add(ASSERT(LTEQ(CONST(0), i, ATTRIBUTE(expr.getSecondOperand())), ATTRIBUTE(expr.getSecondOperand()), ATTRIBUTE(WyilFile.STATIC_BELOWBOUNDS_INDEX_FAILURE)));
-                // Add check that index below length
-                result.add(ASSERT(LT(i, INVOKE("Array#Length", src), ATTRIBUTE(expr.getSecondOperand())), ATTRIBUTE(expr.getSecondOperand()), ATTRIBUTE(WyilFile.STATIC_ABOVEBOUNDS_INDEX_FAILURE)));
+            public List<Stmt.Assert> constructArrayAccess(Expr.DictionaryAccess expr, List<Stmt.Assert> source, List<Stmt.Assert> index) {
+                List<Stmt.Assert> result = append(source, index);
+//                // Add check that index is not negative
+//                result.add(ASSERT(LTEQ(CONST(0), i, ATTRIBUTE(expr.getSecondOperand())), ATTRIBUTE(expr.getSecondOperand()), ATTRIBUTE(WyilFile.STATIC_BELOWBOUNDS_INDEX_FAILURE)));
+//                // Add check that index below length
+//                result.add(ASSERT(LT(i, INVOKE("Array#Length", src), ATTRIBUTE(expr.getSecondOperand())), ATTRIBUTE(expr.getSecondOperand()), ATTRIBUTE(WyilFile.STATIC_ABOVEBOUNDS_INDEX_FAILURE)));
                 // Done
                 return result;
             }
@@ -2305,77 +2147,18 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
             @Override
             public List<Stmt.Assert> constructInvoke(WyilFile.Expr.Invoke expr, List<List<Stmt.Assert>> preconditions) {
-                List<Stmt.Assert> result = flattern(preconditions, l -> l);
-                WyilFile.Decl.Callable c = expr.getLink().getTarget();
-                if(c instanceof WyilFile.Decl.Function) {
-                    // NOTE: we only generate preconditions for function invocations since these are not implemented as
-                    // procedure calls.  Method invocations are implemented as procedure calls and, hence, benefit from
-                    // Boogie's own checking.
-                    Tuple<WyilFile.Type> binding = expr.getBinding().getArguments();
-                    // Translate arguments
-                    List<Expr> args = BoogieCompiler.this.visitExpressions(expr.getOperands());
-                    // Mangle target name
-                    String name = toMangledName(c);
-                    // Coerce argument types (as necessary)
-                    args = cast(c.getType().getParameter(), expr.getOperands(), args);
-                    // Add template arguments (as necessary)
-                    for (int i = 0; i != binding.size(); ++i) {
-                        args.add(i,constructMetaType(binding.get(i), HEAP));
-                    }
-                    // Add heap argument
-                    args.add(0, HEAP);
-                    // Append the invocation
-                    result.add(ASSERT(INVOKE(name + "#pre", args, ATTRIBUTE(expr)), ATTRIBUTE(expr), ATTRIBUTE(WyilFile.STATIC_PRECONDITION_FAILURE)));
-                }
-                return result;
+                return flattern(preconditions, l -> l);
             }
 
             @Override
             public List<Stmt.Assert> constructIndirectInvoke(WyilFile.Expr.IndirectInvoke expr, List<Stmt.Assert> source, List<List<Stmt.Assert>> preconditions) {
                 List<Stmt.Assert> result = flattern(preconditions, l -> l);
-                Tuple<WyilFile.Expr> args = expr.getArguments();
-                WyilFile.Type.Callable type = expr.getSource().getType().as(WyilFile.Type.Callable.class);
-                // Only need to worry about function invocations
-                if (!(type instanceof WyilFile.Type.Method)) {
-                    WyilFile.Type param = type.getParameter();
-                    for (int i = 0; i != args.size(); ++i) {
-                        WyilFile.Expr ith = args.get(i);
-                        WyilFile.Type target = param.dimension(i);
-                        Expr arg = BoogieCompiler.this.visitExpression(ith);
-                        Expr.Logical test = constructTypeTest(target, ith.getType(), arg, HEAP, ith);
-                        result.add(ASSERT(test, ATTRIBUTE(ith), ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
-                    }
-                }
+                result.addAll(source);
                 return result;
             }
         }.visitExpression(condition);
         //
         return assertions;
-    }
-
-    public List<Stmt> constructDefinednessAssertions(Tuple<? extends WyilFile.Expr> conditions) {
-        ArrayList<Stmt> assertions = new ArrayList<>();
-        for(int i=0;i!=conditions.size();++i) {
-            assertions.addAll(constructDefinednessAssertions(conditions.get(i)));
-        }
-        return assertions;
-    }
-
-    public List<Expr.Logical> constructDefinednessChecks(WyilFile.Expr expr) {
-        // Determine the assertions
-        List<Stmt.Assert> assertions = constructDefinednessAssertions(expr);
-        // Extract the condition from each
-        return map(assertions, a -> a.getCondition());
-    }
-
-    public List<Expr.Logical> constructDefinednessChecks(Tuple<WyilFile.Expr> exprs) {
-        // Determine the assertions
-        List<Stmt.Assert> assertions = new ArrayList<>();
-        for (int i = 0; i != exprs.size(); ++i) {
-            assertions.addAll(constructDefinednessAssertions(exprs.get(i)));
-        }
-        // Extract the condition from each
-        return map(assertions, a -> a.getCondition());
     }
 
     // =========================================================================================
@@ -4203,7 +3986,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             return items;
         }
     }
-
 
     private static List<Decl> constructCommentHeading(String text) {
         ArrayList<Decl> decls = new ArrayList<>();
