@@ -22,7 +22,17 @@ public abstract class AbstractExpressionProducer<E> {
 
     public E visitExpression(Expr expr) {
         //
-        if(expr instanceof Expr.DictionaryAccess) {
+        if(expr instanceof Expr.Integer) {
+            return constructInteger((Expr.Integer) expr);
+        } else if(expr instanceof Expr.Boolean) {
+            return constructBoolean((Expr.Boolean) expr);
+        } else if(expr instanceof Expr.Bytes) {
+            return constructBytes((Expr.Bytes) expr);
+        } else if(expr instanceof Expr.VariableAccess) {
+            return constructVariableAccess((Expr.VariableAccess) expr);
+        } else if(expr instanceof Expr.Invoke) {
+            return visitInvoke((Expr.Invoke) expr);
+        } else if(expr instanceof Expr.DictionaryAccess) {
             return visitDictionaryAccess((Expr.DictionaryAccess) expr);
         } else if(expr instanceof Expr.Equals) {
             return visitEquals((Expr.Equals) expr);
@@ -72,7 +82,7 @@ public abstract class AbstractExpressionProducer<E> {
     protected E visitDictionaryAccess(Expr.DictionaryAccess expr) {
         E source = visitExpression(expr.getSource());
         E index = visitExpression(expr.getIndex());
-        return constructArrayAccess(expr, source, index);
+        return constructDictionaryAccess(expr, source, index);
     }
 
     protected E visitEquals(Expr.Equals expr) {
@@ -214,7 +224,19 @@ public abstract class AbstractExpressionProducer<E> {
         return constructNotEquals(expr,lhs,rhs);
     }
 
-    protected E constructArrayAccess(Expr.DictionaryAccess expr, E source, E index) {
+    protected E constructInteger(Expr.Integer expr) {
+        return BOTTOM();
+    }
+
+    protected E constructBoolean(Expr.Boolean expr) {
+        return BOTTOM();
+    }
+
+    protected E constructBytes(Expr.Bytes expr) {
+        return BOTTOM();
+    }
+
+    protected E constructDictionaryAccess(Expr.DictionaryAccess expr, E source, E index) {
         return join(source,index);
     }
     protected E constructEquals(Expr.Equals expr, E lhs, E rhs) {
