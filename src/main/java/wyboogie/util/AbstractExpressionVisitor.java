@@ -26,8 +26,6 @@ public abstract class AbstractExpressionVisitor<E,L extends E> {
             return constructInteger((Expr.Integer) expr);
         } else if(expr instanceof Expr.Bytes) {
             return constructBytes((Expr.Bytes) expr);
-        } else if(expr instanceof Expr.DictionaryAccess) {
-            return visitDictionaryAccess((Expr.DictionaryAccess) expr);
         } else if(expr instanceof Expr.Negation) {
             return visitNegation((Expr.Negation) expr);
         } else if(expr instanceof Expr.Addition) {
@@ -42,9 +40,21 @@ public abstract class AbstractExpressionVisitor<E,L extends E> {
             return visitIntegerDivision((Expr.IntegerDivision) expr);
         } else if(expr instanceof Expr.Remainder) {
             return visitRemainder((Expr.Remainder) expr);
+        } else if(expr instanceof Expr.DictionaryAccess) {
+            return visitDictionaryAccess((Expr.DictionaryAccess) expr);
+        } else if(expr instanceof Expr.DictionaryUpdate) {
+            return visitDictionaryUpdate((Expr.DictionaryUpdate) expr);
         } else {
             return visitLogical((Expr.Logical) expr);
         }
+    }
+
+    protected List<E> visitExpressions(List<Expr> exprs) {
+        List<E> results = new ArrayList<>();
+        for (int i = 0; i != exprs.size(); ++i) {
+            results.add(visitExpression(exprs.get(i)));
+        }
+        return results;
     }
 
     public L visitLogical(Expr expr) {
@@ -57,6 +67,8 @@ public abstract class AbstractExpressionVisitor<E,L extends E> {
             return visitInvoke((Expr.Invoke) expr);
         } else if(expr instanceof Expr.Equals) {
             return visitEquals((Expr.Equals) expr);
+        } else if(expr instanceof Expr.NotEquals) {
+            return visitNotEquals((Expr.NotEquals) expr);
         } else if(expr instanceof Expr.LessThan) {
             return visitLessThan((Expr.LessThan) expr);
         } else if(expr instanceof Expr.LessThanOrEqual) {
@@ -73,17 +85,13 @@ public abstract class AbstractExpressionVisitor<E,L extends E> {
             return visitLogicalImplication((Expr.Implies) expr);
         } else if(expr instanceof Expr.Iff) {
             return visitLogicalIff((Expr.Iff) expr);
-        } else {
+        } else if(expr instanceof Expr.LogicalNot) {
             return visitLogicalNot((Expr.LogicalNot) expr);
+        } else if(expr instanceof Expr.ExistentialQuantifier){
+            return visitExistentialQuantifier((Expr.ExistentialQuantifier) expr);
+        } else {
+            return visitUniversalQuantifier((Expr.UniversalQuantifier) expr);
         }
-    }
-
-    protected List<E> visitExpressions(List<Expr> exprs) {
-        List<E> results = new ArrayList<>();
-        for (int i = 0; i != exprs.size(); ++i) {
-            results.add(visitExpression(exprs.get(i)));
-        }
-        return results;
     }
 
     protected List<L> visitLogicals(List<Expr.Logical> exprs) {
@@ -99,6 +107,13 @@ public abstract class AbstractExpressionVisitor<E,L extends E> {
         E source = visitExpression(expr.getSource());
         E index = visitExpression(expr.getIndex());
         return constructDictionaryAccess(expr, source, index);
+    }
+
+    protected E visitDictionaryUpdate(Expr.DictionaryUpdate expr) {
+        E source = visitExpression(expr.getSource());
+        E index = visitExpression(expr.getIndex());
+        E value = visitExpression(expr.getValue());
+        return constructDictionaryUpdate(expr, source, index, value);
     }
 
     protected L visitEquals(Expr.Equals expr) {
@@ -198,36 +213,16 @@ public abstract class AbstractExpressionVisitor<E,L extends E> {
         List<L> operands = visitLogicals(expr.getOperands());
         return constructLogicalOr(expr,operands);
     }
-//
-//    protected E visitExistentialQuantifier(Expr.ExistentialQuantifier expr) {
-//        Tuple<Decl.StaticVariable> parameters = expr.getParameters();
-//        List<E> ranges = new ArrayList<>();
-//        for (int i = 0; i != parameters.size(); ++i) {
-//            Decl.StaticVariable parameter = parameters.get(i);
-//            // NOTE: Currently ranges can only appear in quantifiers. Eventually, this will
-//            // be deprecated.
-//            Expr.ArrayRange range = (Expr.ArrayRange) parameter.getInitialiser();
-//            ranges.add(visitExpression(range.getFirstOperand()));
-//            ranges.add(visitExpression(range.getSecondOperand()));
-//        }
-//        E body = visitExpression(expr.getOperand());
-//        return constructExistentialQuantifier(expr,ranges,body);
-//    }
-//
-//    protected E visitUniversalQuantifier(Expr.UniversalQuantifier expr) {
-//        Tuple<Decl.StaticVariable> parameters = expr.getParameters();
-//        List<E> ranges = new ArrayList<>();
-//        for (int i = 0; i != parameters.size(); ++i) {
-//            Decl.StaticVariable parameter = parameters.get(i);
-//            // NOTE: Currently ranges can only appear in quantifiers. Eventually, this will
-//            // be deprecated.
-//            Expr.ArrayRange range = (Expr.ArrayRange) parameter.getInitialiser();
-//            ranges.add(visitExpression(range.getFirstOperand()));
-//            ranges.add(visitExpression(range.getSecondOperand()));
-//        }
-//        E body = visitExpression(expr.getOperand());
-//        return constructUniversalQuantifier(expr,ranges,body);
-//    }
+
+    protected L visitExistentialQuantifier(Expr.ExistentialQuantifier expr) {
+        L body = visitLogical(expr.getBody());
+        return constructExistentialQuantifier(expr,body);
+    }
+
+    protected L visitUniversalQuantifier(Expr.UniversalQuantifier expr) {
+        L body = visitLogical(expr.getBody());
+        return constructUniversalQuantifier(expr,body);
+    }
 
     protected L visitInvoke(Expr.Invoke expr) {
         List<E> args = visitExpressions(expr.getArguments());
@@ -243,6 +238,7 @@ public abstract class AbstractExpressionVisitor<E,L extends E> {
     protected abstract E constructInteger(Expr.Integer expr);
     protected abstract E constructBytes(Expr.Bytes expr);
     protected abstract E constructDictionaryAccess(Expr.DictionaryAccess expr, E source, E index);
+    protected abstract E constructDictionaryUpdate(Expr.DictionaryUpdate expr, E source, E index, E value);
     protected abstract E constructNegation(Expr.Negation expr, E operand);
     protected abstract E constructAddition(Expr.Addition expr, E lhs, E rhs);
     protected abstract E constructSubtraction(Expr.Subtraction expr, E lhs, E rhs);

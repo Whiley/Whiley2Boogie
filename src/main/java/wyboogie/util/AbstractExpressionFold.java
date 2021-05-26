@@ -41,6 +41,11 @@ public abstract class AbstractExpressionFold<E> extends AbstractExpressionVisito
     }
 
     @Override
+    protected E constructDictionaryUpdate(Expr.DictionaryUpdate expr, E source, E index, E value) {
+        return join(source, join(index, value));
+    }
+
+    @Override
     protected E constructEquals(Expr.Equals expr, E lhs, E rhs) {
         return join(lhs, rhs);
     }

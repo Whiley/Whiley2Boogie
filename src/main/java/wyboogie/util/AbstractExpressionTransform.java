@@ -20,15 +20,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 public abstract class AbstractExpressionTransform extends AbstractExpressionVisitor<Expr, Expr.Logical> {
+
+    // Integers
     protected Expr constructInteger(Expr.Integer expr) {
         return expr;
-    }
-    protected Expr constructBytes(Expr.Bytes expr) {
-        return expr;
-    }
-    @Override
-    protected Expr constructDictionaryAccess(Expr.DictionaryAccess expr, Expr source, Expr index) {
-        return BoogieFile.GET(source, index, expr.getAttributes());
     }
     @Override
     protected Expr constructNegation(Expr.Negation expr, Expr operand) {
@@ -58,13 +53,6 @@ public abstract class AbstractExpressionTransform extends AbstractExpressionVisi
     protected Expr constructRemainder(Expr.Remainder expr, Expr lhs, Expr rhs) {
         return BoogieFile.REM(lhs,rhs,expr.getAttributes());
     }
-    protected Expr.Logical constructBoolean(Expr.Boolean expr) {
-        return expr;
-    }
-    @Override
-    protected Expr.Logical constructEquals(Expr.Equals expr, Expr lhs, Expr rhs) {
-        return BoogieFile.EQ(lhs, rhs, expr.getAttributes());
-    }
     @Override
     protected Expr.Logical constructLessThan(Expr.LessThan expr, Expr lhs, Expr rhs) {
         return BoogieFile.LT(lhs, rhs, expr.getAttributes());
@@ -80,6 +68,11 @@ public abstract class AbstractExpressionTransform extends AbstractExpressionVisi
     @Override
     protected Expr.Logical constructGreaterThanOrEqual(Expr.GreaterThanOrEqual expr, Expr lhs, Expr rhs) {
         return BoogieFile.GTEQ(lhs, rhs, expr.getAttributes());
+    }
+
+    // Logical
+    protected Expr.Logical constructBoolean(Expr.Boolean expr) {
+        return expr;
     }
     @Override
     protected Expr.Logical constructLogicalAnd(Expr.LogicalAnd expr, List<Expr.Logical> operands) {
@@ -109,16 +102,43 @@ public abstract class AbstractExpressionTransform extends AbstractExpressionVisi
     protected Expr.Logical constructUniversalQuantifier(Expr.UniversalQuantifier expr, Expr.Logical body) {
         return BoogieFile.FORALL(expr.getParameters(), (Expr.Logical) body, expr.getAttributes());
     }
+
+    // Dictionaries
+
     @Override
-    protected Expr.Logical constructInvoke(Expr.Invoke expr, List<Expr> operands) {
-        return BoogieFile.INVOKE(expr.getName(),operands,expr.getAttributes());
+    protected Expr constructDictionaryAccess(Expr.DictionaryAccess expr, Expr source, Expr index) {
+        return BoogieFile.GET(source, index, expr.getAttributes());
     }
+
+    @Override
+    protected Expr constructDictionaryUpdate(Expr.DictionaryUpdate expr, Expr source, Expr index, Expr value) {
+        return BoogieFile.PUT(source, index, value, expr.getAttributes());
+    }
+
+    // Other
+
+    @Override
+    protected Expr constructBytes(Expr.Bytes expr) {
+        return expr;
+    }
+
+    @Override
+    protected Expr.Logical constructEquals(Expr.Equals expr, Expr lhs, Expr rhs) {
+        return BoogieFile.EQ(lhs, rhs, expr.getAttributes());
+    }
+
     @Override
     protected Expr.Logical constructNotEquals(Expr.NotEquals expr, Expr lhs, Expr rhs) {
         return BoogieFile.NEQ(lhs, rhs, expr.getAttributes());
     }
+
     @Override
     protected Expr.Logical constructVariableAccess(Expr.VariableAccess expr) {
         return expr;
+    }
+
+    @Override
+    protected Expr.Logical constructInvoke(Expr.Invoke expr, List<Expr> operands) {
+        return BoogieFile.INVOKE(expr.getName(),operands,expr.getAttributes());
     }
 }

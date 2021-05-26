@@ -129,7 +129,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Extract template
         Tuple<WyilFile.Template.Variable> template = decl.getTemplate();
         // Add helpful comment
-        decls.addAll(constructCommentHeading("TYPE: " + decl.getQualifiedName() + " : " + instantiation));
+        decls.addAll(constructCommentHeading(decl.getQualifiedName() + " : " + instantiation));
         WyilFile.Decl.Variable var = decl.getVariableDeclaration();
         // Convert the Whiley type into a Boogie type
         Type type = constructType(var.getType());
@@ -241,7 +241,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         List<Expr.Logical> requires = append(parametersAndConstraints.second(), flatternAsLogical(precondition));
         List<Expr.Logical> ensures = append(returnsAndConstraints.second(), flatternAsLogical(postcondition));
         // Add useful comment
-        decls.addAll(constructCommentHeading("METHOD: " + d.getQualifiedName() + " : " + d.getType()));
+        decls.addAll(constructCommentHeading(d.getQualifiedName() + " : " + d.getType()));
         // Add method prototype
         decls.addAll(constructProcedurePrototype(d, name, params, returns, requires, ensures));
         // Add any lambda's used within the method
@@ -258,8 +258,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     public List<Decl> constructProcedurePrototype(WyilFile.Decl.FunctionOrMethod d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, List<Expr.Logical> requires, List<Expr.Logical> ensures) {
         List<String> modifies = Collections.EMPTY_LIST;
         ArrayList<Decl> decls = new ArrayList<>();
-        // Add useful heading
-        decls.addAll(constructCommentSubheading("Prototype"));
         // Add Context Level Guarantee
         requires.add(GT(VAR("Context#Level"), CONST(1)));
         // Apply method-specific stuff
@@ -720,38 +718,34 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     @Override
-    public Stmt constructAssign(WyilFile.Stmt.Assign stmt, List<Expr> _unused, List<Expr> _rhs) {
-
-        // Add all preconditions arising.
-        Pair<List<Stmt>,List<Expr>> f = flatternImpureExpressions(_rhs);
-        ArrayList<Stmt> stmts = new ArrayList<>(f.first());
-        List<Expr> rhs = f.second();
-
-        // FIXME: add assertions for left-hand side!
-
-        // First, flatten left-hand and right-hand sides
-        List<WyilFile.LVal> lvals = flatternAssignmentLeftHandSide(stmt.getLeftHandSide());
-        List<WyilFile.Expr> rvals = flatternAssignmentRightHandSide(stmt.getRightHandSide());
-        // Second, flatten right-hand side
-        List<Expr> vals = flatternAssignmentRightHandSide(rhs);
+    public Stmt constructAssign(WyilFile.Stmt.Assign stmt, List _lhs, List _rhs) {
+        List<WyilFile.LVal> lvals = flatternLVals(stmt.getLeftHandSide());
+        List<WyilFile.Expr> rvals = flatternRVals(stmt.getRightHandSide());
+        // Flattern left-hand side
+        Pair<List<Stmt>,List<Expr>> fl = flatternImpureExpressions(_lhs);
+        ArrayList<Stmt> stmts = new ArrayList<>(fl.first());
+        List<Expr> lhs = fl.second();
+        // Flattern right-hand side
+        Pair<List<Stmt>,List<Expr>> fr = flatternImpureExpressions(_rhs);
+        stmts.addAll(fr.first());
+        List<Expr> rhs = fr.second();
         // Third, coerce right-hand side elements
-        vals = coerceAssignmentRightHandSide(lvals, stmt.getRightHandSide(), vals);
+        rhs = coerceAssignmentRightHandSide(lvals, stmt.getRightHandSide(), rhs);
         // Fourth, determine whether simple assign sufficient (or not)
         if (!WyilUtils.isSimple(stmt) && WyilUtils.hasInterference(stmt, meter)) {
             // Simple assignment is insufficient. Therefore, we need to assign every element
             // on the right-hand side into a temporary variable before (subsequently)
             // assigning it into the corresponding item on the left-hand side.
-            for (int i = 0; i != vals.size(); ++i) {
+            for (int i = 0; i != rhs.size(); ++i) {
                 // Assign item on rhs into temporary
-                stmts.add(ASSIGN(VAR(TEMP(stmt, i)), vals.get(i)));
+                stmts.add(ASSIGN(VAR(TEMP(stmt, i)), rhs.get(i)));
                 // Setup assignment from temporary to the lhs
-                vals.set(i, VAR(TEMP(stmt, i)));
+                rhs.set(i, VAR(TEMP(stmt, i)));
             }
         }
         // Next, action assignments
         for (int i = 0; i != lvals.size(); ++i) {
-            WyilFile.LVal ith = lvals.get(i);
-            stmts.add(constructAssign(ith, vals.get(i)));
+            stmts.add(constructAssign(lvals.get(i), lhs.get(i), rhs.get(i)));
         }
         // Finally, action type tests
         for (int i = 0; i != lvals.size(); ++i) {
@@ -789,7 +783,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @param lhs
      * @return
      */
-    private List<WyilFile.LVal> flatternAssignmentLeftHandSide(Tuple<WyilFile.LVal> lhs) {
+    private List<WyilFile.LVal> flatternLVals(Tuple<WyilFile.LVal> lhs) {
         ArrayList<WyilFile.LVal> lvals = new ArrayList<>();
         for (int i = 0; i != lhs.size(); ++i) {
             WyilFile.LVal ith = lhs.get(i);
@@ -805,40 +799,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         return lvals;
     }
 
-    /**
-     * Flattern the right-hand side of a given assignment. This is relatively straightforward, though we just need to
-     * expand any <code>FauxTuple</code>s that we encounter. For example, the following:
-     *
-     * <pre>
-     * x,(y,z) = 1,f()
-     * </pre>
-     * <p>
-     * The right-hand side above is translated into the following:
-     *
-     * <pre>
-     * x,(y,z) = 1,(f#1(),f#2())
-     * </pre>
-     * <p>
-     * Here, <code>(f#1(),f#2())</code> is a <i>faux tuple</i>.
-     *
-     * @param rhs
-     * @return
-     */
-    private List<Expr> flatternAssignmentRightHandSide(List<Expr> rhs) {
-        ArrayList<Expr> rvals = new ArrayList<>();
-        // First, flattern all rvals
-        for (int i = 0; i != rhs.size(); ++i) {
-            Expr ith = rhs.get(i);
-            if (ith instanceof FauxTuple) {
-                rvals.addAll(((FauxTuple) ith).getItems());
-            } else {
-                rvals.add(ith);
-            }
-        }
-        return rvals;
-    }
-
-    private List<WyilFile.Expr> flatternAssignmentRightHandSide(Tuple<WyilFile.Expr> rhs) {
+    private List<WyilFile.Expr> flatternRVals(Tuple<WyilFile.Expr> rhs) {
         ArrayList<WyilFile.Expr> rvals = new ArrayList<>();
         // First, flattern all rvals
         for (int i = 0; i != rhs.size(); ++i) {
@@ -847,7 +808,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             if(n > 1) {
                 if (ith instanceof WyilFile.Expr.TupleInitialiser) {
                     WyilFile.Expr.TupleInitialiser ti = (WyilFile.Expr.TupleInitialiser) ith;
-                    rvals.addAll(flatternAssignmentRightHandSide(ti.getOperands()));
+                    rvals.addAll(flatternRVals(ti.getOperands()));
                 } else {
                     // This may seem a bit weird, but it's the best we can do in the circumstance
                     for(int j=0;j<n;++j) {
@@ -902,71 +863,60 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @param rhs  Translated and coerced right-hand side(s)
      * @return
      */
-    private Stmt constructAssign(WyilFile.LVal lval, Expr rhs) {
+    private Stmt constructAssign(WyilFile.LVal lval, Expr lhs, Expr rhs) {
         switch (lval.getOpcode()) {
             case WyilFile.EXPR_arrayaccess:
             case WyilFile.EXPR_arrayborrow: {
-                WyilFile.Expr.ArrayAccess l = (WyilFile.Expr.ArrayAccess) lval;
-                // Reconstruct source expression
-                Expr src = visitExpression(l.getFirstOperand());
-                // Reconstruct index expression
-                Expr index = visitExpression(l.getSecondOperand());
-                // Box the right-hand side (as necessary)
+                Expr.DictionaryAccess l = (Expr.DictionaryAccess) lhs;
+                WyilFile.Expr.ArrayAccess v = (WyilFile.Expr.ArrayAccess) lval;
+                // Box right-hand side (as necessary)
                 rhs = box(lval.getType(), rhs);
-                // Done
-                return constructAssign((WyilFile.LVal) l.getFirstOperand(), PUT(src, index, rhs));
-            }
-            case WyilFile.EXPR_dereference: {
-                WyilFile.Expr.Dereference r = (WyilFile.Expr.Dereference) lval;
-                // Reconstruct source expression
-                Expr src = visitExpression(r.getOperand());
-                // Box the right-hand side (as necessary)
-                rhs = box(lval.getType(), rhs);
-                //
-                return ASSIGN(HEAP, PUT(HEAP, src, rhs));
-            }
-            case WyilFile.EXPR_fielddereference: {
-                WyilFile.Expr.FieldDereference r = (WyilFile.Expr.FieldDereference) lval;
-                // Extract the source reference type
-                WyilFile.Type.Reference refT = r.getOperand().getType().as(WyilFile.Type.Reference.class);
-                // Extract the source record type
-                WyilFile.Type.Record recT = refT.getElement().as(WyilFile.Type.Record.class);
-                // Reconstruct source expression
-                Expr src = visitExpression(r.getOperand());
-                // Reconstruct index expression
-                Expr index = VAR("$" + r.getField());
-                // Box the right-hand side (as necessary)
-                rhs = box(lval.getType(), rhs);
-                // Make the field assignment
-                rhs = PUT(unbox(recT, GET(HEAP, src)), index, rhs);
-                // Box again!
-                rhs = box(recT, rhs);
-                // Done
-                return ASSIGN(HEAP, PUT(HEAP, src, rhs));
+                // Recurse assignment
+                return constructAssign((WyilFile.LVal) v.getFirstOperand(), l.getSource(), PUT(l.getSource(), l.getIndex(), rhs));
             }
             case WyilFile.EXPR_recordaccess:
             case WyilFile.EXPR_recordborrow: {
-                WyilFile.Expr.RecordAccess l = (WyilFile.Expr.RecordAccess) lval;
-                // Reconstruct source expression
-                Expr src = visitExpression(l.getOperand());
-                // Reconstruct index expression
-                Expr index = VAR("$" + l.getField());
-                // Box the right-hand side (as necessary)
+                Expr.DictionaryAccess l = (Expr.DictionaryAccess) lhs;
+                WyilFile.Expr.RecordAccess v = (WyilFile.Expr.RecordAccess) lval;
+                // Box right-hand side (as necessary)
                 rhs = box(lval.getType(), rhs);
-                // Done
-                return constructAssign((WyilFile.LVal) l.getOperand(), PUT(src, index, rhs));
+                // Recurse assignment
+                return constructAssign((WyilFile.LVal) v.getOperand(), l.getSource(), PUT(l.getSource(), l.getIndex(), rhs));
+            }
+            case WyilFile.EXPR_dereference: {
+                Expr.DictionaryAccess l = (Expr.DictionaryAccess) lhs;
+                WyilFile.Expr.Dereference v = (WyilFile.Expr.Dereference) lval;
+                // Box right-hand side (as necessary)
+                rhs = box(lval.getType(), rhs);
+                // Recurse assignment
+                return constructAssign((WyilFile.LVal) v.getOperand(), l.getSource(), PUT(l.getSource(), l.getIndex(), rhs));
             }
             case WyilFile.EXPR_variablecopy:
             case WyilFile.EXPR_variablemove: {
-                WyilFile.Expr.VariableAccess expr = (WyilFile.Expr.VariableAccess) lval;
-                WyilFile.Decl.Variable decl = expr.getVariableDeclaration();
-                String name = toVariableName(expr.getVariableDeclaration());
-                // NOTE: the manner in which the following cast is applied seems odd to me, and is an artifact of how WyC is currently typing assignments.
-                return ASSIGN(VAR(name), cast(decl.getType(), expr.getType(), rhs));
+                return ASSIGN((Expr.VariableAccess) lhs, rhs);
             }
             default:
                 throw new UnsupportedOperationException("invalid lval");
         }
+//            case WyilFile.EXPR_fielddereference: {
+//                WyilFile.Expr.FieldDereference r = (WyilFile.Expr.FieldDereference) lval;
+//                // Extract the source reference type
+//                WyilFile.Type.Reference refT = r.getOperand().getType().as(WyilFile.Type.Reference.class);
+//                // Extract the source record type
+//                WyilFile.Type.Record recT = refT.getElement().as(WyilFile.Type.Record.class);
+//                // Reconstruct source expression
+//                Expr src = visitExpression(r.getOperand());
+//                // Reconstruct index expression
+//                Expr index = VAR("$" + r.getField());
+//                // Box the right-hand side (as necessary)
+//                rhs = box(lval.getType(), rhs);
+//                // Make the field assignment
+//                rhs = PUT(unbox(recT, GET(HEAP, src)), index, rhs);
+//                // Box again!
+//                rhs = box(recT, rhs);
+//                // Done
+//                return ASSIGN(HEAP, PUT(HEAP, src, rhs));
+//            }
     }
 
     @Override
@@ -1151,14 +1101,20 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     @Override
-    public Stmt constructInvokeStmt(WyilFile.Expr.Invoke expr, List<Expr> args) {
+    public Stmt constructInvokeStmt(WyilFile.Expr.Invoke expr, List<Expr> _args) {
         WyilFile.Type.Callable ft = expr.getLink().getTarget().getType();
-        // Add all preconditions arising. If there are any, they will likely fail!
-        Pair<List<Stmt>, List<Expr>> f = flatternImpureExpressions(args);
+        // Flattern (potentially impure) arguments
+        Pair<List<Stmt>, List<Expr>> f = flatternImpureExpressions(_args);
         ArrayList<Stmt> stmts = new ArrayList<>(f.first());
+        List<Expr> args = f.second();
         //
-        if (ft instanceof WyilFile.Type.Method) {
-            WyilFile.Type.Callable mt = (WyilFile.Type.Method) ft;
+        if (ft instanceof WyilFile.Type.Property) {
+            // NOTE: this case arises when for a property invocation which discards the
+            // return value. That doesn't really make sense, and for now we just treat as a
+            // "skip".
+            stmts.add(ASSERT(CONST(true)));
+        } else {
+            WyilFile.Type.Callable mt = (WyilFile.Type.Callable) ft;
             // Extract template arguments
             Tuple<WyilFile.Type> binding = expr.getBinding().getArguments();
             // Extract declared return type
@@ -1169,10 +1125,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             // procedure called, even if they are never used.
             List<LVal> lvals = new ArrayList<>();
             if (type.shape() == 1) {
-                lvals.add(VAR("m#" + expr.getIndex()));
+                lvals.add(VAR(TEMP(expr)));
             } else {
                 for (int i = 0; i != type.shape(); ++i) {
-                    lvals.add(VAR("m#" + expr.getIndex() + "#" + i));
+                    lvals.add(VAR(TEMP(expr, i)));
                 }
             }
             // Apply conversions to arguments as necessary
@@ -1183,11 +1139,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             }
             // Done
             stmts.add(CALL(name, lvals, args, ATTRIBUTE(expr)));
-        } else {
-            // NOTE: this case arises when for a function invocation which discards the
-            // return value. That doesn't really make sense, and for now we just treat as a
-            // "skip".
-            stmts.add(ASSERT(CONST(true)));
         }
         return SEQUENCE(stmts);
     }
@@ -1872,19 +1823,24 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 SyntacticItem wyItem = expr.getAttribute(SyntacticItem.class);
                 // Check whether this corresponds to Whiley invocation or not.
                 if (wyItem instanceof WyilFile.Expr.Invoke) {
-                    Expr.VariableAccess var = VAR(TEMP((WyilFile.Expr) wyItem));
-                    // Add all well-definedness checks
-                    for(int i=0;i!=arguments.size();++i) {
-                        Expr ith = arguments.get(i);
-                        stmts.addAll(extractor.visitExpression(ith));
+                    WyilFile.Expr.Invoke ivk = (WyilFile.Expr.Invoke) wyItem;
+                    // Determine name mangle for call
+                    String name = toMangledName(ivk.getLink().getTarget());
+                    // Check mangled name matches (otherwise is synthetic)
+                    if(expr.getName().equals(name)) {
+                        Expr.VariableAccess var = VAR(TEMP((WyilFile.Expr) wyItem));
+                        // Add all well-definedness checks
+                        for (int i = 0; i != arguments.size(); ++i) {
+                            Expr ith = arguments.get(i);
+                            stmts.addAll(extractor.visitExpression(ith));
+                        }
+                        // Add procedure call
+                        stmts.add(CALL(expr.getName(), var, arguments, expr.getAttributes()));
+                        // Return variable access
+                        return var;
                     }
-                    // Add procedure call
-                    stmts.add(CALL(expr.getName(), var, arguments, expr.getAttributes()));
-                    // Return variable access
-                    return var;
-                } else {
-                    return super.constructInvoke(expr, arguments);
                 }
+                return super.constructInvoke(expr, arguments);
             }
         }.visitExpression(e);
         // Extract well-definedness conditions
@@ -1896,10 +1852,19 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     public Pair<List<Stmt>, List<Expr>> flatternImpureExpressions(List<Expr> es) {
         List<Stmt> stmts = new ArrayList<>();
         List<Expr> exprs = new ArrayList<>();
-        for (Expr ee : es) {
-            Pair<List<Stmt>, Expr> f = flatternImpureExpression(ee);
-            stmts.addAll(f.first());
-            exprs.add(f.second());
+        for (Expr e : es) {
+            if (e instanceof FauxTuple) {
+                List<Expr> ees = ((FauxTuple) e).getItems();
+                for(int i=0;i!=ees.size();++i) {
+                    Pair<List<Stmt>, Expr> f = flatternImpureExpression(ees.get(i));
+                    stmts.addAll(f.first());
+                    exprs.add(f.second());
+                }
+            } else {
+                Pair<List<Stmt>, Expr> f = flatternImpureExpression(e);
+                stmts.addAll(f.first());
+                exprs.add(f.second());
+            }
         }
         return new Pair<>(stmts, exprs);
     }
