@@ -1,6 +1,5 @@
 package wyboogie.util;
 
-import wyboogie.tasks.BoogieCompiler;
 import wybs.lang.SyntacticItem;
 import wyil.lang.WyilFile;
 
@@ -37,7 +36,7 @@ import static wyboogie.util.Util.*;
  * @param condition
  * @return
  */
-public class DefinednessExtractor extends AbstractExpressionProducer<List<Stmt.Assert>> {
+public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Assert>> {
 
     public static List<Stmt.Assert> extractDefinednessAssertions(Expr expr) {
         return new DefinednessExtractor().visitExpression(expr);
@@ -111,22 +110,21 @@ public class DefinednessExtractor extends AbstractExpressionProducer<List<Stmt.A
     }
 
     @Override
-    public List<Stmt.Assert> constructUniversalQuantifier(Expr.UniversalQuantifier expr, List<List<Stmt.Assert>> operands, List<Stmt.Assert> body) {
-        return constructQuantifier(expr,operands,body);
-    }
-    @Override
-    public List<Stmt.Assert> constructExistentialQuantifier(Expr.ExistentialQuantifier expr, List<List<Stmt.Assert>> operands, List<Stmt.Assert> body) {
-        return constructQuantifier(expr,operands,body);
+    public List<Stmt.Assert> constructUniversalQuantifier(Expr.UniversalQuantifier expr, List<Stmt.Assert> body) {
+        return constructQuantifier(expr, body);
     }
 
-    private List<Stmt.Assert> constructQuantifier(Expr.Quantifier expr, List<List<Stmt.Assert>> operands, List<Stmt.Assert> body) {
-        List<Stmt.Assert> lhs = flattern(operands, l -> l);
-        List<Stmt.Assert> rhs = map(body, s -> {
+    @Override
+    public List<Stmt.Assert> constructExistentialQuantifier(Expr.ExistentialQuantifier expr, List<Stmt.Assert> body) {
+        return constructQuantifier(expr, body);
+    }
+
+    private List<Stmt.Assert> constructQuantifier(Expr.Quantifier expr, List<Stmt.Assert> body) {
+        return map(body, s -> {
             SyntacticItem item = s.getAttribute(SyntacticItem.class);
             Integer errcode = s.getAttribute(Integer.class);
             return ASSERT(FORALL(expr.getParameters(), s.getCondition()), ATTRIBUTE(errcode));
         });
-        return append(lhs, rhs);
     }
 
     @Override

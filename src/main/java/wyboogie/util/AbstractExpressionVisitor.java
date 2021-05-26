@@ -14,36 +14,20 @@
 package wyboogie.util;
 
 import wyboogie.core.BoogieFile.Expr;
+
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
-public abstract class AbstractExpressionProducer<E> {
+public abstract class AbstractExpressionVisitor<E,L extends E> {
 
     public E visitExpression(Expr expr) {
         //
         if(expr instanceof Expr.Integer) {
             return constructInteger((Expr.Integer) expr);
-        } else if(expr instanceof Expr.Boolean) {
-            return constructBoolean((Expr.Boolean) expr);
         } else if(expr instanceof Expr.Bytes) {
             return constructBytes((Expr.Bytes) expr);
-        } else if(expr instanceof Expr.VariableAccess) {
-            return constructVariableAccess((Expr.VariableAccess) expr);
-        } else if(expr instanceof Expr.Invoke) {
-            return visitInvoke((Expr.Invoke) expr);
         } else if(expr instanceof Expr.DictionaryAccess) {
             return visitDictionaryAccess((Expr.DictionaryAccess) expr);
-        } else if(expr instanceof Expr.Equals) {
-            return visitEquals((Expr.Equals) expr);
-        } else if(expr instanceof Expr.LessThan) {
-            return visitLessThan((Expr.LessThan) expr);
-        } else if(expr instanceof Expr.LessThanOrEqual) {
-            return visitLessThanOrEqual((Expr.LessThanOrEqual) expr);
-        } else if(expr instanceof Expr.GreaterThan) {
-            return visitGreaterThan((Expr.GreaterThan) expr);
-        } else if(expr instanceof Expr.GreaterThanOrEqual) {
-            return visitGreaterThanOrEqual((Expr.GreaterThanOrEqual) expr);
         } else if(expr instanceof Expr.Negation) {
             return visitNegation((Expr.Negation) expr);
         } else if(expr instanceof Expr.Addition) {
@@ -58,6 +42,29 @@ public abstract class AbstractExpressionProducer<E> {
             return visitIntegerDivision((Expr.IntegerDivision) expr);
         } else if(expr instanceof Expr.Remainder) {
             return visitRemainder((Expr.Remainder) expr);
+        } else {
+            return visitLogical((Expr.Logical) expr);
+        }
+    }
+
+    public L visitLogical(Expr expr) {
+        //
+        if(expr instanceof Expr.Boolean) {
+            return constructBoolean((Expr.Boolean) expr);
+        } else if(expr instanceof Expr.VariableAccess) {
+            return constructVariableAccess((Expr.VariableAccess) expr);
+        } else if(expr instanceof Expr.Invoke) {
+            return visitInvoke((Expr.Invoke) expr);
+        } else if(expr instanceof Expr.Equals) {
+            return visitEquals((Expr.Equals) expr);
+        } else if(expr instanceof Expr.LessThan) {
+            return visitLessThan((Expr.LessThan) expr);
+        } else if(expr instanceof Expr.LessThanOrEqual) {
+            return visitLessThanOrEqual((Expr.LessThanOrEqual) expr);
+        } else if(expr instanceof Expr.GreaterThan) {
+            return visitGreaterThan((Expr.GreaterThan) expr);
+        } else if(expr instanceof Expr.GreaterThanOrEqual) {
+            return visitGreaterThanOrEqual((Expr.GreaterThanOrEqual) expr);
         } else if(expr instanceof Expr.LogicalAnd) {
             return visitLogicalAnd((Expr.LogicalAnd) expr);
         } else if(expr instanceof Expr.LogicalOr) {
@@ -71,7 +78,7 @@ public abstract class AbstractExpressionProducer<E> {
         }
     }
 
-    protected List<E> visitExpressions(List<? extends Expr> exprs) {
+    protected List<E> visitExpressions(List<Expr> exprs) {
         List<E> results = new ArrayList<>();
         for (int i = 0; i != exprs.size(); ++i) {
             results.add(visitExpression(exprs.get(i)));
@@ -79,37 +86,46 @@ public abstract class AbstractExpressionProducer<E> {
         return results;
     }
 
+    protected List<L> visitLogicals(List<Expr.Logical> exprs) {
+        List<L> results = new ArrayList<>();
+        for (int i = 0; i != exprs.size(); ++i) {
+            results.add(visitLogical(exprs.get(i)));
+        }
+        return results;
+    }
+
+
     protected E visitDictionaryAccess(Expr.DictionaryAccess expr) {
         E source = visitExpression(expr.getSource());
         E index = visitExpression(expr.getIndex());
         return constructDictionaryAccess(expr, source, index);
     }
 
-    protected E visitEquals(Expr.Equals expr) {
+    protected L visitEquals(Expr.Equals expr) {
         E lhs = visitExpression(expr.getLeftHandSide());
         E rhs = visitExpression(expr.getRightHandSide());
         return constructEquals(expr,lhs,rhs);
     }
 
-    protected E visitLessThan(Expr.LessThan expr) {
+    protected L visitLessThan(Expr.LessThan expr) {
         E lhs = visitExpression(expr.getLeftHandSide());
         E rhs = visitExpression(expr.getRightHandSide());
         return constructLessThan(expr,lhs,rhs);
     }
 
-    protected E visitLessThanOrEqual(Expr.LessThanOrEqual expr) {
+    protected L visitLessThanOrEqual(Expr.LessThanOrEqual expr) {
         E lhs = visitExpression(expr.getLeftHandSide());
         E rhs = visitExpression(expr.getRightHandSide());
         return constructLessThanOrEqual(expr,lhs,rhs);
     }
 
-    protected E visitGreaterThan(Expr.GreaterThan expr) {
+    protected L visitGreaterThan(Expr.GreaterThan expr) {
         E lhs = visitExpression(expr.getLeftHandSide());
         E rhs = visitExpression(expr.getRightHandSide());
         return constructGreaterThan(expr,lhs,rhs);
     }
 
-    protected E visitGreaterThanOrEqual(Expr.GreaterThanOrEqual expr) {
+    protected L visitGreaterThanOrEqual(Expr.GreaterThanOrEqual expr) {
         E lhs = visitExpression(expr.getLeftHandSide());
         E rhs = visitExpression(expr.getRightHandSide());
         return constructGreaterThanOrEqual(expr,lhs,rhs);
@@ -156,30 +172,30 @@ public abstract class AbstractExpressionProducer<E> {
         return constructRemainder(expr,lhs,rhs);
     }
 
-    protected E visitLogicalAnd(Expr.LogicalAnd expr) {
-        List<E> operands = visitExpressions(expr.getOperands());
+    protected L visitLogicalAnd(Expr.LogicalAnd expr) {
+        List<L> operands = visitLogicals(expr.getOperands());
         return constructLogicalAnd(expr,operands);
     }
 
-    protected E visitLogicalImplication(Expr.Implies expr) {
-        E lhs = visitExpression(expr.getLeftHandSide());
-        E rhs = visitExpression(expr.getRightHandSide());
+    protected L visitLogicalImplication(Expr.Implies expr) {
+        L lhs = visitLogical(expr.getLeftHandSide());
+        L rhs = visitLogical(expr.getRightHandSide());
         return constructLogicalImplication(expr,lhs,rhs);
     }
 
-    protected E visitLogicalIff(Expr.Iff expr) {
-        E lhs = visitExpression(expr.getLeftHandSide());
-        E rhs = visitExpression(expr.getRightHandSide());
+    protected L visitLogicalIff(Expr.Iff expr) {
+        L lhs = visitLogical(expr.getLeftHandSide());
+        L rhs = visitLogical(expr.getRightHandSide());
         return constructLogicalIff(expr,lhs,rhs);
     }
 
-    protected E visitLogicalNot(Expr.LogicalNot expr) {
-        E source = visitExpression(expr.getOperand());
+    protected L visitLogicalNot(Expr.LogicalNot expr) {
+        L source = visitLogical(expr.getOperand());
         return constructLogicalNot(expr,source);
     }
 
-    protected E visitLogicalOr(Expr.LogicalOr expr) {
-        List<E> operands = visitExpressions(expr.getOperands());
+    protected L visitLogicalOr(Expr.LogicalOr expr) {
+        List<L> operands = visitLogicals(expr.getOperands());
         return constructLogicalOr(expr,operands);
     }
 //
@@ -213,103 +229,42 @@ public abstract class AbstractExpressionProducer<E> {
 //        return constructUniversalQuantifier(expr,ranges,body);
 //    }
 
-    protected E visitInvoke(Expr.Invoke expr) {
+    protected L visitInvoke(Expr.Invoke expr) {
         List<E> args = visitExpressions(expr.getArguments());
         return constructInvoke(expr,args);
     }
 
-    protected E visitNotEquals(Expr.NotEquals expr) {
+    protected L visitNotEquals(Expr.NotEquals expr) {
         E lhs = visitExpression(expr.getLeftHandSide());
         E rhs = visitExpression(expr.getRightHandSide());
         return constructNotEquals(expr,lhs,rhs);
     }
 
-    protected E constructInteger(Expr.Integer expr) {
-        return BOTTOM();
-    }
-
-    protected E constructBoolean(Expr.Boolean expr) {
-        return BOTTOM();
-    }
-
-    protected E constructBytes(Expr.Bytes expr) {
-        return BOTTOM();
-    }
-
-    protected E constructDictionaryAccess(Expr.DictionaryAccess expr, E source, E index) {
-        return join(source,index);
-    }
-    protected E constructEquals(Expr.Equals expr, E lhs, E rhs) {
-        return join(lhs,rhs);
-    }
-    protected E constructLessThan(Expr.LessThan expr, E lhs, E rhs) {
-        return join(lhs,rhs);
-    }
-    protected E constructLessThanOrEqual(Expr.LessThanOrEqual expr, E lhs, E rhs) {
-        return join(lhs,rhs);
-    }
-    protected E constructGreaterThan(Expr.GreaterThan expr, E lhs, E rhs) {
-        return join(lhs,rhs);
-    }
-    protected E constructGreaterThanOrEqual(Expr.GreaterThanOrEqual expr, E lhs, E rhs) {
-        return join(lhs,rhs);
-    }
-    protected E constructNegation(Expr.Negation expr, E operand) {
-        return operand;
-    }
-    protected E constructAddition(Expr.Addition expr, E lhs, E rhs) {
-        return join(lhs,rhs);
-    }
-    protected E constructSubtraction(Expr.Subtraction expr, E lhs, E rhs) {
-        return join(lhs,rhs);
-    }
-    protected E constructMultiplication(Expr.Multiplication expr, E lhs, E rhs) {
-        return join(lhs,rhs);
-    }
-    protected E constructDivision(Expr.Division expr, E lhs, E rhs) {
-        return join(lhs,rhs);
-    }
-    protected E constructIntegerDivision(Expr.IntegerDivision expr, E lhs, E rhs) {
-        return join(lhs,rhs);
-    }
-    protected E constructRemainder(Expr.Remainder expr, E lhs, E rhs) {
-        return join(lhs,rhs);
-    }
-    protected E constructLogicalAnd(Expr.LogicalAnd expr, List<E> operands) {
-        return join(operands);
-    }
-    protected E constructLogicalImplication(Expr.Implies expr, E lhs, E rhs) {
-        return join(lhs,rhs);
-    }
-    protected E constructLogicalIff(Expr.Iff expr, E lhs, E rhs) {
-        return join(lhs,rhs);
-    }
-    protected E constructLogicalNot(Expr.LogicalNot expr, E source) {
-        return source;
-    }
-    protected E constructLogicalOr(Expr.LogicalOr expr, List<E> operands) {
-        return join(operands);
-    }
-    protected E constructExistentialQuantifier(Expr.ExistentialQuantifier expr, List<E> ranges, E body) {
-        return join(join(ranges),body);
-    }
-    protected E constructUniversalQuantifier(Expr.UniversalQuantifier expr, List<E> ranges, E body) {
-        return join(join(ranges),body);
-    }
-    protected E constructInvoke(Expr.Invoke expr, List<E> operands) {
-        return join(operands);
-    }
-    protected E constructNotEquals(Expr.NotEquals expr, E lhs, E rhs) {
-        return join(lhs,rhs);
-    }
-
-    protected E constructVariableAccess(Expr.VariableAccess expr) {
-        return BOTTOM();
-    }
-
-    protected abstract E BOTTOM();
-
-    protected abstract E join(E lhs, E rhs);
-
-    protected abstract E join(List<E> operands);
+    protected abstract E constructInteger(Expr.Integer expr);
+    protected abstract E constructBytes(Expr.Bytes expr);
+    protected abstract E constructDictionaryAccess(Expr.DictionaryAccess expr, E source, E index);
+    protected abstract E constructNegation(Expr.Negation expr, E operand);
+    protected abstract E constructAddition(Expr.Addition expr, E lhs, E rhs);
+    protected abstract E constructSubtraction(Expr.Subtraction expr, E lhs, E rhs);
+    protected abstract E constructMultiplication(Expr.Multiplication expr, E lhs, E rhs);
+    protected abstract E constructDivision(Expr.Division expr, E lhs, E rhs);
+    protected abstract E constructIntegerDivision(Expr.IntegerDivision expr, E lhs, E rhs);
+    protected abstract E constructRemainder(Expr.Remainder expr, E lhs, E rhs);
+    // logicals
+    protected abstract L constructBoolean(Expr.Boolean expr);
+    protected abstract L constructGreaterThan(Expr.GreaterThan expr, E lhs, E rhs);
+    protected abstract L constructGreaterThanOrEqual(Expr.GreaterThanOrEqual expr, E lhs, E rhs);
+    protected abstract L constructEquals(Expr.Equals expr, E lhs, E rhs);
+    protected abstract L constructLessThan(Expr.LessThan expr, E lhs, E rhs);
+    protected abstract L constructLessThanOrEqual(Expr.LessThanOrEqual expr, E lhs, E rhs);
+    protected abstract L constructLogicalAnd(Expr.LogicalAnd expr, List<L> operands);
+    protected abstract L constructLogicalImplication(Expr.Implies expr, L lhs, L rhs);
+    protected abstract L constructLogicalIff(Expr.Iff expr, L lhs, L rhs);
+    protected abstract L constructLogicalNot(Expr.LogicalNot expr, L source);
+    protected abstract L constructLogicalOr(Expr.LogicalOr expr, List<L> operands);
+    protected abstract L constructExistentialQuantifier(Expr.ExistentialQuantifier expr, L body);
+    protected abstract L constructUniversalQuantifier(Expr.UniversalQuantifier expr, L body);
+    protected abstract L constructInvoke(Expr.Invoke expr, List<E> operands);
+    protected abstract L constructNotEquals(Expr.NotEquals expr, E lhs, E rhs);
+    protected abstract L constructVariableAccess(Expr.VariableAccess expr);
 }
