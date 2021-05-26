@@ -1191,6 +1191,10 @@ public class BoogieFile {
 			public String getVariable() {
 				return variable;
 			}
+
+			public String toString() {
+				return "VAR(" + variable + ")";
+			}
 		}
 	}
 
