@@ -1824,20 +1824,29 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 // Check whether this corresponds to Whiley invocation or not.
                 if (wyItem instanceof WyilFile.Expr.Invoke) {
                     WyilFile.Expr.Invoke ivk = (WyilFile.Expr.Invoke) wyItem;
+                    int returns = ivk.getType().shape();
                     // Determine name mangle for call
                     String name = toMangledName(ivk.getLink().getTarget());
                     // Check mangled name matches (otherwise is synthetic)
-                    if(expr.getName().equals(name)) {
-                        Expr.VariableAccess var = VAR(TEMP((WyilFile.Expr) wyItem));
+                    System.out.println("GOT: " + expr.getName() + " vs " + name);
+                    if(expr.getName().startsWith(name)) {
+                        ArrayList lvals = new ArrayList<>();
                         // Add all well-definedness checks
                         for (int i = 0; i != arguments.size(); ++i) {
                             Expr ith = arguments.get(i);
                             stmts.addAll(extractor.visitExpression(ith));
                         }
+                        if (returns == 1) {
+                            lvals.add(VAR(TEMP((WyilFile.Expr) wyItem)));
+                        } else {
+                            for (int i = 0; i != returns; ++i) {
+                                lvals.add(VAR(TEMP((WyilFile.Expr) wyItem, i)));
+                            }
+                        }
                         // Add procedure call
-                        stmts.add(CALL(expr.getName(), var, arguments, expr.getAttributes()));
+                        stmts.add(CALL(name, lvals, arguments, expr.getAttributes()));
                         // Return variable access
-                        return var;
+                        return new FauxTuple(lvals);
                     }
                 }
                 return super.constructInvoke(expr, arguments);
@@ -3701,7 +3710,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      *
      * @author David J. Pearce
      */
-    private static class FauxTuple extends BoogieFile.AbstractItem implements BoogieFile.Expr {
+    private static class FauxTuple extends BoogieFile.AbstractItem implements BoogieFile.Expr.Logical {
         private final List<Expr> items;
 
         public FauxTuple(List<Expr> items, Attribute... attributes) {
