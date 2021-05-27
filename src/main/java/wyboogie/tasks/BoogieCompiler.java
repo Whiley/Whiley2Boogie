@@ -881,26 +881,31 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 WyilFile.Expr.RecordAccess v = (WyilFile.Expr.RecordAccess) lval;
                 // Box right-hand side (as necessary)
                 rhs = box(lval.getType(), rhs);
+                Expr src = unboxAsNecessary(v.getOperand().getType(),l.getSource());
                 // Recurse assignment
-                return constructAssign((WyilFile.LVal) v.getOperand(), l.getSource(), PUT(l.getSource(), l.getIndex(), rhs));
+                return constructAssign((WyilFile.LVal) v.getOperand(), l.getSource(), PUT(src, l.getIndex(), rhs));
             }
             case WyilFile.EXPR_dereference: {
                 Expr.DictionaryAccess l = (Expr.DictionaryAccess) lhs;
                 WyilFile.Expr.Dereference v = (WyilFile.Expr.Dereference) lval;
                 // Box right-hand side (as necessary)
                 rhs = box(lval.getType(), rhs);
+                Expr src = unboxAsNecessary(v.getOperand().getType(),l.getSource());
                 // Recurse assignment
-                return constructAssign((WyilFile.LVal) v.getOperand(), l.getSource(), PUT(l.getSource(), l.getIndex(), rhs));
+                return constructAssign((WyilFile.LVal) v.getOperand(), l.getSource(), PUT(src, l.getIndex(), rhs));
             }
-            case WyilFile.EXPR_variablecopy:
-            case WyilFile.EXPR_variablemove: {
-                return ASSIGN((Expr.VariableAccess) lhs, rhs);
-            }
-            default:
-                throw new UnsupportedOperationException("invalid lval");
-        }
-//            case WyilFile.EXPR_fielddereference: {
-//                WyilFile.Expr.FieldDereference r = (WyilFile.Expr.FieldDereference) lval;
+            case WyilFile.EXPR_fielddereference: {
+                WyilFile.Expr.FieldDereference fr = (WyilFile.Expr.FieldDereference) lval;
+                Expr.DictionaryAccess r = (Expr.DictionaryAccess) lhs;
+                Expr.DictionaryAccess h = (Expr.DictionaryAccess) r.getSource();
+                // Box right-hand side (as necessary)
+                rhs = box(lval.getType(), rhs);
+                WyilFile.Type.Reference t = fr.getOperand().getType().as(WyilFile.Type.Reference.class);
+                Expr r_src = unboxAsNecessary(t.getElement(),r.getSource());
+                Expr h_src = unboxAsNecessary(t,h.getSource());
+                // Recurse assignment
+                return constructAssign((WyilFile.LVal) fr.getOperand(), h.getSource(), PUT(h_src, h.getIndex(), box(t.getElement(),PUT(r_src, r.getIndex(), rhs))));
+
 //                // Extract the source reference type
 //                WyilFile.Type.Reference refT = r.getOperand().getType().as(WyilFile.Type.Reference.class);
 //                // Extract the source record type
@@ -917,7 +922,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 //                rhs = box(recT, rhs);
 //                // Done
 //                return ASSIGN(HEAP, PUT(HEAP, src, rhs));
-//            }
+            }
+            case WyilFile.EXPR_variablecopy:
+            case WyilFile.EXPR_variablemove: {
+                return ASSIGN((Expr.VariableAccess) lhs, rhs);
+            }
+            default:
+                throw new UnsupportedOperationException("invalid lval");
+        }
     }
 
     @Override
@@ -972,10 +984,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         stmts.add(body);
         // Flattern (potentiall impure) condition
         Pair<List<Stmt>,Expr> f = flatternImpureExpression(condition);
-        //
-        if (!f.first().isEmpty()) {
-            throw new IllegalArgumentException("loop with side effects");
+        // Add continue label (if necessary)
+        if (needContinueLabel) {
+            stmts.add(LABEL("CONTINUE_" + stmt.getIndex()));
         }
+        // Add all side effects & checks
+        stmts.addAll(f.first());
+        body = SEQUENCE(append(body, f.first()));
         // Preprepend the necessary definedness checks
         invariant = flatternAsLogical(invariant);
         // Add type constraints arising from modified variables
@@ -985,10 +1000,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             stmts.add(BoogieFile.ASSIGN(OHEAP,HEAP));
             // Add necessary loop frame
             invariant.addAll(constructLoopFrame(stmt,OHEAP,HEAP));
-        }
-        // Add continue label (if necessary)
-        if (needContinueLabel) {
-            stmts.add(LABEL("CONTINUE_" + stmt.getIndex()));
         }
         // Add the loop itself
         stmts.add(WHILE((Expr.Logical) f.second(), invariant, body));
@@ -1017,8 +1028,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         String name = toVariableName(stmt.getVariable());
         Expr.VariableAccess var = VAR(name);
         ArrayList<Stmt> stmts = new ArrayList<>();
-        // Add all preconditions arising.
-        // FIXME: handle preconditions and side-effects from the loop invariant(s).
         // Flattern (potentiall impure) condition
         Pair<List<Stmt>,Expr> lhs = flatternImpureExpression(range.first());
         Pair<List<Stmt>,Expr> rhs = flatternImpureExpression(range.second());
@@ -1033,7 +1042,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         Expr condition = LT(var, rhs.second());
         // Add variable increment for completeness
         loopBody.add(ASSIGN(var, ADD(var, CONST(1))));
-        // FIXME: need to reassert side-effects and assertions?
         // Update invariant
         invariant.add(0, AND(LTEQ(lhs.second(), var), LTEQ(var, rhs.second()),ATTRIBUTE(stmt.getVariable().getInitialiser())));
         // Preprepend the necessary definedness checks
@@ -1056,8 +1064,6 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         if (needBreakLabel) {
             stmts.add(LABEL("BREAK_" + stmt.getIndex()));
         }
-        // FIXME: handle preconditions and side-effects arising from subsequent
-        // iterations.
         // Done.
         return SEQUENCE(stmts);
     }
@@ -1303,23 +1309,22 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         ArrayList<Stmt> stmts = new ArrayList<>();
         // Flattern (potentiall impure) condition
         Pair<List<Stmt>,Expr> f = flatternImpureExpression(condition);
-        //
-        if (!f.first().isEmpty()) {
-            throw new IllegalArgumentException("loop with side effects");
+        // Add continue label (if necessary)
+        if (needContinueLabel) {
+            stmts.add(LABEL("CONTINUE_" + stmt.getIndex()));
         }
+        // Add all side effects & checks
+        stmts.addAll(f.first());
+        body = SEQUENCE(append(body, f.first()));
         // Preprepend the necessary definedness checks
         invariant = flatternAsLogical(invariant);
         // Add any type constraints arising (first)
         invariant.addAll(0, constructTypeConstraints(modified, HEAP));
-        if(!pure) {
+        if (!pure) {
             // Save OLD heap
-            stmts.add(BoogieFile.ASSIGN(OHEAP,HEAP));
+            stmts.add(BoogieFile.ASSIGN(OHEAP, HEAP));
             // Add necessary loop frame
-            invariant.addAll(constructLoopFrame(stmt,OHEAP,HEAP));
-        }
-        // Add continue label (if necessary)
-        if (needContinueLabel) {
-            stmts.add(LABEL("CONTINUE_" + stmt.getIndex()));
+            invariant.addAll(constructLoopFrame(stmt, OHEAP, HEAP));
         }
         //
         stmts.add(WHILE((Expr.Logical) f.second(), invariant, body));
@@ -1666,10 +1671,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         String name = toMangledName(expr.getLink().getTarget());
         // Apply conversions to arguments as necessary
         arguments = cast(ft.getParameter(), expr.getOperands(), arguments);
-        // Add heap argument
-        arguments.add(0,HEAP);
         // Add template arguments
         arguments.addAll(0, templateArguments);
+        // Add heap argument
+        arguments.add(0,HEAP);
         //
         if (rt.shape() == 1) {
             return cast(rt, ftrt, INVOKE(name, arguments, ATTRIBUTE(expr)));
@@ -1690,12 +1695,18 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         boolean method = (ft instanceof WyilFile.Type.Method);
         // Extract (concrete) return type
         WyilFile.Type rt = expr.getType();
+        // Identify any holes
+        Tuple<WyilFile.Template.Variable> holes = WyilUtils.extractTemplate(ft,meter);
         // Determine the target name
         String name = toLambdaMangle(ft);
         // Apply conversions to arguments as necessary
         arguments = cast(ft.getParameter(), expr.getArguments(), arguments);
         // Add lambda value
         arguments.add(0, source);
+        // Add bindings
+        for (WyilFile.Template.Variable hole : holes) {
+            arguments.add(VAR(hole.getName().get()));
+        }
         //
         if (rt.shape() == 1) {
             return cast(rt, ftrt, INVOKE(name, arguments, ATTRIBUTE(expr)));
@@ -1902,11 +1913,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 // Check whether this corresponds to Whiley invocation or not.
                 if (wyItem instanceof WyilFile.Expr.Invoke) {
                     WyilFile.Expr.Invoke ivk = (WyilFile.Expr.Invoke) wyItem;
+                    WyilFile.Type.Callable ft = ivk.getBinding().getConcreteType();
                     int returns = ivk.getType().shape();
                     // Determine name mangle for call
                     String name = toMangledName(ivk.getLink().getTarget());
                     // Check mangled name matches (otherwise is synthetic)
-                    if(expr.getName().startsWith(name)) {
+                    if(expr.getName().startsWith(name) && !(ft instanceof WyilFile.Type.Property)) {
                         // Strip HEAP argument
                         arguments.remove(0);
                         // Add all well-definedness checks
@@ -2597,6 +2609,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         new AbstractVisitor(meter) {
             @Override
             public void visitIndirectInvoke(WyilFile.Expr.IndirectInvoke expr) {
+                super.visitIndirectInvoke(expr);
                 WyilFile.Type.Callable type = expr.getSource().getType().as(WyilFile.Type.Callable.class);
                 lambdas.add(type);
             }

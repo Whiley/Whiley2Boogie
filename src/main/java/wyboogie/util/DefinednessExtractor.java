@@ -142,7 +142,7 @@ public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Asser
             // Add check that index is not negative
             result.add(ASSERT(LTEQ(CONST(0), idx, idx.getAttributes()), ATTRIBUTE(WyilFile.STATIC_BELOWBOUNDS_INDEX_FAILURE)));
             // Add check that index below length
-            result.add(ASSERT(LT(idx, INVOKE("Array#Length", src), src.getAttributes()), ATTRIBUTE(WyilFile.STATIC_ABOVEBOUNDS_INDEX_FAILURE)));
+            result.add(ASSERT(LT(idx, INVOKE("Array#Length", src), idx.getAttributes()), ATTRIBUTE(WyilFile.STATIC_ABOVEBOUNDS_INDEX_FAILURE)));
         }
         // Done
         return result;
