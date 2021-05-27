@@ -871,8 +871,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 WyilFile.Expr.ArrayAccess v = (WyilFile.Expr.ArrayAccess) lval;
                 // Box right-hand side (as necessary)
                 rhs = box(lval.getType(), rhs);
+                Expr src = unboxAsNecessary(v.getFirstOperand().getType(),l.getSource());
                 // Recurse assignment
-                return constructAssign((WyilFile.LVal) v.getFirstOperand(), l.getSource(), PUT(l.getSource(), l.getIndex(), rhs));
+                return constructAssign((WyilFile.LVal) v.getFirstOperand(), l.getSource(), PUT(src, l.getIndex(), rhs));
             }
             case WyilFile.EXPR_recordaccess:
             case WyilFile.EXPR_recordborrow: {
@@ -1157,7 +1158,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         ArrayList<Stmt> stmts = new ArrayList<>(f1.first());
         stmts.addAll(f2.first());
         //
-        if (ft instanceof WyilFile.Type.Method) {
+        args = f2.second();
+        //
+        if (ft instanceof WyilFile.Type.Property) {
+            // NOTE: this case arises when for a property invocation which discards the
+            // return value. That doesn't really make sense, and for now we just treat as a
+            // "skip".
+            stmts.add(ASSERT(CONST(true)));
+        } else {
             // Extract declared return type
             WyilFile.Type type = ft.getReturn();
             // Extract any holes
@@ -1182,12 +1190,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             // Determine the methods name
             String name = toLambdaMangle(ft);
             // Done
-            stmts.add(CALL(name, lvals, f2.second(), ATTRIBUTE(expr)));
-        } else {
-            // NOTE: this case arises when for a function invocation which discards the
-            // return value. That doesn't really make sense, and for now we just treat as a
-            // "skip".
-            stmts.add(ASSERT(CONST(true)));
+            stmts.add(CALL(name, lvals, args, ATTRIBUTE(expr)));
         }
         return SEQUENCE(stmts);
     }
@@ -1663,6 +1666,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         String name = toMangledName(expr.getLink().getTarget());
         // Apply conversions to arguments as necessary
         arguments = cast(ft.getParameter(), expr.getOperands(), arguments);
+        // Add heap argument
+        arguments.add(0,HEAP);
         // Add template arguments
         arguments.addAll(0, templateArguments);
         //
@@ -1752,7 +1757,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Expr constructNew(WyilFile.Expr.New expr, Expr operand) {
-        return VAR("l#" + expr.getIndex(), ATTRIBUTE(expr));
+        // Box operand (as necessary)
+        operand = box(expr.getOperand().getType(), operand);
+        //
+        return INVOKE("Ref#new", operand, ATTRIBUTE(expr));
     }
 
     @Override
@@ -1899,6 +1907,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     String name = toMangledName(ivk.getLink().getTarget());
                     // Check mangled name matches (otherwise is synthetic)
                     if(expr.getName().startsWith(name)) {
+                        // Strip HEAP argument
+                        arguments.remove(0);
                         // Add all well-definedness checks
                         for (int i = 0; i != arguments.size(); ++i) {
                             Expr ith = arguments.get(i);
@@ -1963,6 +1973,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                             return (Expr.VariableAccess) lvals.get(n);
                         }
                     }
+                } else if(wyItem instanceof WyilFile.Expr.New && expr.getName().equals("Ref#new")) {
+                    Expr.VariableAccess lval = VAR(TEMP((WyilFile.Expr) wyItem));
+                    // Add procedure call
+                    stmts.add(CALL(expr.getName(), lval, arguments, expr.getAttributes()));
+                    // Return variable access
+                    return lval;
                 }
                 return super.constructInvoke(expr, arguments);
             }
@@ -3140,6 +3156,20 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             }
         }
         return e;
+    }
+
+    /**
+     * Unbox a given expression on demand based on its structure.
+     * @param type
+     * @param e
+     * @return
+     */
+    public static Expr unboxAsNecessary(WyilFile.Type type, Expr e) {
+        if(e instanceof Expr.DictionaryAccess) {
+            return unbox(type,e);
+        } else {
+            return e;
+        }
     }
 
     /**

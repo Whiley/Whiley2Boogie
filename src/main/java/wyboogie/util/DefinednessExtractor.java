@@ -1,5 +1,6 @@
 package wyboogie.util;
 
+import wyboogie.tasks.BoogieCompiler;
 import wybs.lang.SyntacticItem;
 import wyil.lang.WyilFile;
 
@@ -134,9 +135,10 @@ public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Asser
         List<Stmt.Assert> result = append(source, index);
         // Check whether this is associated with an array access
         if (wyItem instanceof WyilFile.Expr.ArrayAccess) {
+            WyilFile.Expr.ArrayAccess a = (WyilFile.Expr.ArrayAccess) wyItem;
             // Yes it is, so extract index and source operands
             Expr idx = expr.getIndex();
-            Expr src = expr.getSource();
+            Expr src = BoogieCompiler.unboxAsNecessary(a.getFirstOperand().getType(), expr.getSource());
             // Add check that index is not negative
             result.add(ASSERT(LTEQ(CONST(0), idx, idx.getAttributes()), ATTRIBUTE(WyilFile.STATIC_BELOWBOUNDS_INDEX_FAILURE)));
             // Add check that index below length
