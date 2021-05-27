@@ -998,6 +998,10 @@ public class BoogieFile {
 			public BigInteger getValue() {
 				return value;
 			}
+
+			public String toString() {
+				return "INT(" + value + ")";
+			}
 		}
 
 		public static class Bytes extends AbstractItem implements Expr {
@@ -1030,6 +1034,10 @@ public class BoogieFile {
 			public Expr getIndex() {
 				return index;
 			}
+
+			public String toString() {
+				return "GET(" + source + ", " + index + ")";
+			}
 		}
 
 		public static class DictionaryUpdate extends AbstractItem implements LVal {
@@ -1055,6 +1063,10 @@ public class BoogieFile {
 			public Expr getValue() {
 				return value;
 			}
+
+			public String toString() {
+				return "PUT(" + source + ", " + index + "," + value + ")";
+			}
 		}
 
 		public static class Invoke extends AbstractItem implements Logical {
@@ -1073,6 +1085,10 @@ public class BoogieFile {
 
 			public List<Expr> getArguments() {
 				return arguments;
+			}
+
+			public String toString() {
+				return "FNCALL(" + name + "," + arguments.toString() + ")";
 			}
 		}
 
@@ -1099,6 +1115,10 @@ public class BoogieFile {
 			public Expr getOperand() {
 				return operand;
 			}
+
+			public String toString() {
+				return "OLD(" + operand + ")";
+			}
 		}
 
 		public static class LogicalNot extends AbstractItem implements Logical,  UnaryOperator {
@@ -1110,6 +1130,10 @@ public class BoogieFile {
 
 			public Logical getOperand() {
 				return operand;
+			}
+
+			public String toString() {
+				return "NOT(" + operand + ")";
 			}
 		}
 

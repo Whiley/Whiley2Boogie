@@ -266,59 +266,31 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             ensures.addAll(constructMethodFrame((WyilFile.Decl.Method) d));
             // Methods always modify the heap
             modifies = Arrays.asList("HEAP");
+        } else {
+            ArrayList<Decl.Parameter> f_params = new ArrayList<>(params);
+            f_params.add(0,HEAP_PARAM);
+            // Add function prototype
+            switch (d.getReturns().size()) {
+                case 0:
+                    decls.add(FUNCTION(name, f_params, ANY));
+                    break;
+                case 1: {
+                    Type returnType = returns.get(0).getType();
+                    decls.add(FUNCTION(name, f_params, returnType));
+                    break;
+                }
+                default: {
+                    // Multiple returns require special handling
+                    for (int i = 0; i != returns.size(); ++i) {
+                        Type returnType = returns.get(i).getType();
+                        decls.add(FUNCTION(name + "#" + i, f_params, returnType));
+                    }
+                }
+            }
         }
         // Construct procedure prototype
         decls.add(new Decl.Procedure(name, params, returns, requires, ensures, modifies));
         //
-        return decls;
-    }
-
-
-    /**
-     * Construct the "prototype" for a given function. This is a standalone uninterpreted function which can be called
-     * directly from within an expression, rather than via a procedure. Whilst this is not strictly necessary, it does
-     * help maintain better coherence between the Whiley code and the generated Boogie.
-     *
-     * @param d
-     * @param name
-     * @param parameters
-     * @param returns
-     * @return
-     */
-    public List<Decl> constructFunctionPrototype(WyilFile.Decl.Function d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, List<Expr.Logical> requires, List<Expr.Logical> ensures) {
-        WyilFile.Type.Callable instantiation = d.getType();
-        ArrayList<Decl> decls = new ArrayList<>();
-        // Construct function representation precondition
-        decls.addAll(constructCommentSubheading("Precondition Check"));
-        decls.add(FUNCTION(name + "#pre", params, Type.Bool, AND(requires)));
-        // Construct function representation postcondition
-        decls.addAll(constructCommentSubheading("Postcondition Check"));
-        decls.add(FUNCTION(name + "#post", append(params, returns), Type.Bool, AND(ensures)));
-        decls.addAll(constructCommentSubheading("Prototype"));
-        // Construct prototype which can be called from an expression.
-        switch (d.getReturns().size()) {
-            case 0:
-                decls.add(FUNCTION(name, params, ANY));
-                break;
-            case 1: {
-                Type returnType = returns.get(0).getType();
-                decls.add(FUNCTION(name, params, returnType));
-                break;
-            }
-            default: {
-                // Multiple returns require special handling
-                for (int i = 0; i != returns.size(); ++i) {
-                    Type returnType = returns.get(i).getType();
-                    decls.add(FUNCTION(name + "#" + i, params, returnType));
-                }
-            }
-        }
-        // Construct well-definedness check
-        // decls.addAll(constructFunctionCheck(d, name, params, returns, requires, ensures));
-        // Add "lambda" value axioms
-        decls.addAll(constructCommentSubheading("Lambda Reference & Axiom"));
-        decls.addAll(constructLambdaAxioms(d, instantiation));
-        // Done
         return decls;
     }
 
@@ -869,63 +841,70 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             case WyilFile.EXPR_arrayborrow: {
                 Expr.DictionaryAccess l = (Expr.DictionaryAccess) lhs;
                 WyilFile.Expr.ArrayAccess v = (WyilFile.Expr.ArrayAccess) lval;
+                // Reconstruct source as expression
+                Expr src = visitExpression(v.getFirstOperand());
+                // Flattern reconstructed source
+                src = flatternImpureExpression(src).second();
                 // Box right-hand side (as necessary)
-                rhs = box(lval.getType(), rhs);
-                Expr src = unboxAsNecessary(v.getFirstOperand().getType(),l.getSource());
+                rhs = PUT(src, l.getIndex(), box(lval.getType(), rhs));
                 // Recurse assignment
-                return constructAssign((WyilFile.LVal) v.getFirstOperand(), l.getSource(), PUT(src, l.getIndex(), rhs));
+                return constructAssign((WyilFile.LVal) v.getFirstOperand(), l.getSource(), rhs);
             }
             case WyilFile.EXPR_recordaccess:
             case WyilFile.EXPR_recordborrow: {
                 Expr.DictionaryAccess l = (Expr.DictionaryAccess) lhs;
                 WyilFile.Expr.RecordAccess v = (WyilFile.Expr.RecordAccess) lval;
+                // Reconstruct source as expression
+                Expr src = visitExpression(v.getOperand());
+                // Flattern reconstructed source
+                src = flatternImpureExpression(src).second();
                 // Box right-hand side (as necessary)
-                rhs = box(lval.getType(), rhs);
-                Expr src = unboxAsNecessary(v.getOperand().getType(),l.getSource());
+                rhs = PUT(src, l.getIndex(), box(lval.getType(), rhs));
                 // Recurse assignment
-                return constructAssign((WyilFile.LVal) v.getOperand(), l.getSource(), PUT(src, l.getIndex(), rhs));
+                return constructAssign((WyilFile.LVal) v.getOperand(), l.getSource(), rhs);
             }
             case WyilFile.EXPR_dereference: {
                 Expr.DictionaryAccess l = (Expr.DictionaryAccess) lhs;
                 WyilFile.Expr.Dereference v = (WyilFile.Expr.Dereference) lval;
+                // Reconstruct source as expression
+                Expr src = visitExpression(v.getOperand());
+                // Flattern reconstructed source
+                src = flatternImpureExpression(src).second();
                 // Box right-hand side (as necessary)
                 rhs = box(lval.getType(), rhs);
-                Expr src = unboxAsNecessary(v.getOperand().getType(),l.getSource());
-                // Recurse assignment
-                return constructAssign((WyilFile.LVal) v.getOperand(), l.getSource(), PUT(src, l.getIndex(), rhs));
+                // Construct assignment
+                return ASSIGN(HEAP, PUT(HEAP, src, rhs));
             }
             case WyilFile.EXPR_fielddereference: {
-                WyilFile.Expr.FieldDereference fr = (WyilFile.Expr.FieldDereference) lval;
                 Expr.DictionaryAccess r = (Expr.DictionaryAccess) lhs;
                 Expr.DictionaryAccess h = (Expr.DictionaryAccess) r.getSource();
-                // Box right-hand side (as necessary)
+                WyilFile.Expr.FieldDereference fr = (WyilFile.Expr.FieldDereference) lval;
+                // Extract the source reference type
+                WyilFile.Type.Reference refT = fr.getOperand().getType().as(WyilFile.Type.Reference.class);
+                // Extract the source record type
+                WyilFile.Type.Record recT = refT.getElement().as(WyilFile.Type.Record.class);
+                // Reconstruct source as expression
+                Expr src = visitExpression(fr.getOperand());
+                // Flattern reconstructed source
+                src = flatternImpureExpression(src).second();
+                // Reconstruct index expression
+                Expr index = VAR("$" + fr.getField());
+                // Box the right-hand side (as necessary)
                 rhs = box(lval.getType(), rhs);
-                WyilFile.Type.Reference t = fr.getOperand().getType().as(WyilFile.Type.Reference.class);
-                Expr r_src = unboxAsNecessary(t.getElement(),r.getSource());
-                Expr h_src = unboxAsNecessary(t,h.getSource());
-                // Recurse assignment
-                return constructAssign((WyilFile.LVal) fr.getOperand(), h.getSource(), PUT(h_src, h.getIndex(), box(t.getElement(),PUT(r_src, r.getIndex(), rhs))));
-
-//                // Extract the source reference type
-//                WyilFile.Type.Reference refT = r.getOperand().getType().as(WyilFile.Type.Reference.class);
-//                // Extract the source record type
-//                WyilFile.Type.Record recT = refT.getElement().as(WyilFile.Type.Record.class);
-//                // Reconstruct source expression
-//                Expr src = visitExpression(r.getOperand());
-//                // Reconstruct index expression
-//                Expr index = VAR("$" + r.getField());
-//                // Box the right-hand side (as necessary)
-//                rhs = box(lval.getType(), rhs);
-//                // Make the field assignment
-//                rhs = PUT(unbox(recT, GET(HEAP, src)), index, rhs);
-//                // Box again!
-//                rhs = box(recT, rhs);
-//                // Done
-//                return ASSIGN(HEAP, PUT(HEAP, src, rhs));
+                // Make the field assignment
+                rhs = PUT(unbox(recT, GET(HEAP, src)), index, rhs);
+                // Box again!
+                rhs = box(recT, rhs);
+                // Construct assignment
+                return ASSIGN(HEAP, PUT(HEAP, src, rhs));
             }
             case WyilFile.EXPR_variablecopy:
             case WyilFile.EXPR_variablemove: {
-                return ASSIGN((Expr.VariableAccess) lhs, rhs);
+                WyilFile.Expr.VariableAccess expr = (WyilFile.Expr.VariableAccess) lval;
+                WyilFile.Decl.Variable decl = expr.getVariableDeclaration();
+                String name = toVariableName(expr.getVariableDeclaration());
+                // NOTE: the manner in which the following cast is applied seems odd to me, and is an artifact of how WyC is currently typing assignments.
+                return ASSIGN(VAR(name), cast(decl.getType(), expr.getType(), rhs));
             }
             default:
                 throw new UnsupportedOperationException("invalid lval");
@@ -1366,7 +1345,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Expr constructVariableAccessLVal(WyilFile.Expr.VariableAccess expr) {
-        return constructVariableAccess(expr);
+        // Determine mangled name of this variable
+        String name = toVariableName(expr.getVariableDeclaration());
+        //
+        return VAR(name, ATTRIBUTE(expr));
     }
 
     @Override
