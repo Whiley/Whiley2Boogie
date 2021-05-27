@@ -1909,7 +1909,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                             stmts.addAll(extractor.visitExpression(ith));
                         }
                         if (returns == 1) {
-                            Expr.VariableAccess lval = VAR(TEMP((WyilFile.Expr) wyItem));
+                            Expr.VariableAccess lval = VAR(TEMP((WyilFile.Expr) wyItem),expr.getAttributes());
                             // Add procedure call
                             stmts.add(CALL(name, lval, arguments, expr.getAttributes()));
                             // Return variable access
@@ -1920,7 +1920,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                             //
                             ArrayList lvals = new ArrayList<>();
                             for (int i = 0; i != returns; ++i) {
-                                lvals.add(VAR(TEMP((WyilFile.Expr) wyItem, i)));
+                                lvals.add(VAR(TEMP((WyilFile.Expr) wyItem, i),expr.getAttributes()));
                             }
                             //
                             if (n == 0) {
@@ -1945,7 +1945,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                             stmts.addAll(extractor.visitExpression(ith));
                         }
                         if (returns == 1) {
-                            Expr.VariableAccess lval = VAR(TEMP((WyilFile.Expr) wyItem));
+                            Expr.VariableAccess lval = VAR(TEMP((WyilFile.Expr) wyItem),expr.getAttributes());
                             // Add procedure call
                             stmts.add(CALL(name, lval, arguments, expr.getAttributes()));
                             // Return variable access
@@ -1956,7 +1956,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                             //
                             ArrayList lvals = new ArrayList<>();
                             for (int i = 0; i != returns; ++i) {
-                                lvals.add(VAR(TEMP((WyilFile.Expr) wyItem, i)));
+                                lvals.add(VAR(TEMP((WyilFile.Expr) wyItem, i),expr.getAttributes()));
                             }
                             //
                             if (n == 0) {
@@ -1968,7 +1968,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                         }
                     }
                 } else if(wyItem instanceof WyilFile.Expr.New && expr.getName().equals("Ref#new")) {
-                    Expr.VariableAccess lval = VAR(TEMP((WyilFile.Expr) wyItem));
+                    Expr.VariableAccess lval = VAR(TEMP((WyilFile.Expr) wyItem),expr.getAttributes());
                     // Add procedure call
                     stmts.add(CALL(expr.getName(), lval, arguments, expr.getAttributes()));
                     // Return variable access
