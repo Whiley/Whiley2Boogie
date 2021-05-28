@@ -21,7 +21,6 @@ import java.util.List;
 public abstract class AbstractExpressionVisitor<E,L extends E> {
 
     public E visitExpression(Expr expr) {
-        //
         if(expr instanceof Expr.Integer) {
             return constructInteger((Expr.Integer) expr);
         } else if(expr instanceof Expr.Bytes) {

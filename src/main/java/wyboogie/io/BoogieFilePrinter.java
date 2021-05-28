@@ -284,6 +284,8 @@ public class BoogieFilePrinter {
 			writeCall(indent,(Stmt.Call)s);
 		} else if(s instanceof Stmt.Goto) {
 			writeGoto(indent,(Stmt.Goto)s);
+		} else if(s instanceof Stmt.Havoc) {
+			writeHavoc(indent,(Stmt.Havoc)s);
 		} else if(s instanceof Stmt.Label) {
 			writeLabel(indent,(Stmt.Label)s);
 		} else if(s instanceof Stmt.IfElse) {
@@ -354,22 +356,58 @@ public class BoogieFilePrinter {
 		}
 		out.println(";", s);
 	}
-	private void writeLabel(int indent, Stmt.Label s) {
+	private void writeHavoc(int indent, Stmt.Havoc s) {
 		out.tab(indent);
+		out.print("havoc ", s);
+		for (int i = 0; i != s.size(); ++i) {
+			if (i != 0) {
+				out.print(", ", s);
+			}
+			out.print(s.get(i), s);
+		}
+		out.println(";", s);
+	}
+	private void writeLabel(int indent, Stmt.Label s) {
+		out.tab(indent-1);
 		out.print(s.getLabel(), s);
 		out.println(":", s);
 	}
 	private void writeIfElse(int indent, Stmt.IfElse s) {
 		out.tab(indent);
+		if(isIfGoto(s)) {
+			writeIfGoto(s);
+		} else {
+			out.print("if(", s);
+			writeExpression(s.getCondition());
+			out.println(") {", s);
+			writeStmt(indent + 1, s.getTrueBranch());
+			if (s.getFalseBranch() != null) {
+				out.tab(indent);
+				out.println("} else {", s);
+				writeStmt(indent + 1, s.getFalseBranch());
+			}
+			out.tab(indent);
+			out.println("}", s);
+		}
+	}
+	private void writeIfGoto(Stmt.IfElse s) {
 		out.print("if(", s);
 		writeExpression(s.getCondition());
-		out.println(") {",s);
-		writeStmt(indent + 1, s.getTrueBranch());
-		if(s.getFalseBranch() != null) {
-			out.tab(indent);out.println("} else {",s);
-			writeStmt(indent + 1, s.getFalseBranch());
+		out.print(") { ", s);
+		Stmt.Goto g = (Stmt.Goto) s.getTrueBranch();
+		out.print("goto ", g);
+		for (int i = 0; i != g.size(); ++i) {
+			if (i != 0) {
+				out.print(", ", s);
+			}
+			out.print(g.get(i), s);
 		}
-		out.tab(indent);out.println("}",s);
+		out.println("; }", s);
+	}
+	private boolean isIfGoto(Stmt.IfElse s) {
+		Stmt tb = s.getTrueBranch();
+		Stmt fb = s.getFalseBranch();
+		return fb == null && tb instanceof Stmt.Goto;
 	}
 	private void writeReturn(int indent, Stmt.Return s) {
 		out.tab(indent);

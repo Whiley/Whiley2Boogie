@@ -133,11 +133,14 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 					// Attempt to extract error code (if any)
 					Integer errcode = item.getAttribute(Integer.class);
 					//
+					if(wyItem == null && item instanceof BoogieFile.Stmt.Assert) {
+						BoogieFile.Stmt.Assert stmt = (BoogieFile.Stmt.Assert) item;
+						// Update item since the assertion is not our objective!
+						wyItem = stmt.getCondition().getAttribute(SyntacticItem.class);
+					}
+					//
 					switch (err.getCode()) {
 						case Boogie.ERROR_ASSERTION_FAILURE: {
-							BoogieFile.Stmt.Assert stmt = (BoogieFile.Stmt.Assert) item;
-							// Update item since the assertion is not our objective!
-							wyItem = stmt.getCondition().getAttribute(SyntacticItem.class);
 							// NOTE: since a lot of Whiley failures are encoded as Boogie asserts, we must decode the exact kind of failure.
 							ErrorMessages.syntaxError(wyItem, errcode);
 							break;
