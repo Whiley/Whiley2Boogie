@@ -99,11 +99,10 @@ public class ValidTests {
 		IGNORED.put("Reference_Valid_31",""); // needs old syntax
 		// Known issues.  These are known problems with issues raised on github.
 		IGNORED.put("ConstrainedList_Valid_18","#26");
-		IGNORED.put("Lambda_Valid_3","#97");
-		IGNORED.put("Lambda_Valid_4","#97");
 		IGNORED.put("Lambda_Valid_13","#52");
 		IGNORED.put("Lambda_Valid_24","#59");
 		IGNORED.put("Lambda_Valid_25","#59");
+		IGNORED.put("Lambda_Valid_26","#52");
 		IGNORED.put("MethodRef_Valid_6","#60");
 		IGNORED.put("Process_Valid_6","#60");
 		IGNORED.put("Process_Valid_9","#56");
@@ -113,6 +112,7 @@ public class ValidTests {
 		IGNORED.put("RecursiveType_Valid_7","#98");
 		IGNORED.put("RecursiveType_Valid_19","#79");
 		IGNORED.put("RecursiveType_Valid_20","#79");
+		IGNORED.put("Requires_Valid_2","#79");
 		IGNORED.put("Reference_Valid_6","#56");
 		IGNORED.put("Reference_Valid_11","#61");
 		IGNORED.put("Reference_Valid_23","#60");
@@ -120,8 +120,9 @@ public class ValidTests {
 		IGNORED.put("Reference_Valid_29","#60");
 		IGNORED.put("Reference_Valid_33","#60");
 		IGNORED.put("Reference_Valid_39","#115");
-		IGNORED.put("Template_Valid_57","#66");
 		IGNORED.put("UnknownReference_Valid_3","#60");
+
+		IGNORED.put("UnionType_Valid_2","#74");
 	}
 
 	// ======================================================================
