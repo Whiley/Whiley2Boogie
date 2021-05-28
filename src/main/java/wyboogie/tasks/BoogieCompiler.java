@@ -258,6 +258,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     public List<Decl> constructProcedurePrototype(WyilFile.Decl.FunctionOrMethod d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, List<Expr.Logical> requires, List<Expr.Logical> ensures) {
         List<String> modifies = Collections.EMPTY_LIST;
         ArrayList<Decl> decls = new ArrayList<>();
+        ArrayList<Expr.Logical> freeRequires = new ArrayList<>();
+        ArrayList<Expr.Logical> freeEnsures = new ArrayList<>();
         // Add Context Level Guarantee
         requires.add(GT(VAR("Context#Level"), CONST(1)));
         // Apply method-specific stuff
@@ -269,6 +271,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         } else {
             ArrayList<Decl.Parameter> f_params = new ArrayList<>(params);
             f_params.add(0,HEAP_PARAM);
+            List<Expr> f_args = map(f_params, p -> VAR(p.getName()));
+            List<Expr> f_rets = map(returns, p -> VAR(p.getName()));
             // Add function prototype
             switch (d.getReturns().size()) {
                 case 0:
@@ -277,6 +281,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 case 1: {
                     Type returnType = returns.get(0).getType();
                     decls.add(FUNCTION(name, f_params, returnType));
+                    // Establish connection
+                    freeEnsures.add(EQ(INVOKE(name,f_args),f_rets.get(0)));
                     break;
                 }
                 default: {
@@ -284,12 +290,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     for (int i = 0; i != returns.size(); ++i) {
                         Type returnType = returns.get(i).getType();
                         decls.add(FUNCTION(name + "#" + i, f_params, returnType));
+                        // Establish connection
+                        freeEnsures.add(EQ(INVOKE(name + "#" + i,f_args),f_rets.get(i)));
                     }
                 }
             }
         }
         // Construct procedure prototype
-        decls.add(new Decl.Procedure(name, params, returns, requires, ensures, modifies));
+        decls.add(new Decl.Procedure(name, params, returns, requires, ensures, freeRequires, freeEnsures, Collections.EMPTY_LIST, modifies, null));
         //
         return decls;
     }
@@ -1685,6 +1693,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         arguments = cast(ft.getParameter(), expr.getArguments(), arguments);
         // Add lambda value
         arguments.add(0, source);
+        // Add heap argument
+        arguments.add(0,HEAP);
         // Add bindings
         for (WyilFile.Template.Variable hole : holes) {
             arguments.add(VAR(hole.getName().get()));
@@ -1939,6 +1949,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     String name = toLambdaMangle(ft);
                     // Check mangled name matches (otherwise is synthetic)
                     if (expr.getName().startsWith(name)) {
+                        // Strip HEAP argument
+                        arguments.remove(0);
                         // Add all well-definedness checks
                         for (int i = 0; i != arguments.size(); ++i) {
                             Expr ith = arguments.get(i);
@@ -2499,6 +2511,33 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             postcondition.addAll(constructMethodFrame(mt, i -> ("p#" + i), i -> ("r#" + i), mt));
             // Specific modifies heap
             modifies = Arrays.asList("HEAP");
+        } else {
+            ArrayList<Decl.Parameter> f_params = new ArrayList<>(parameters);
+            f_params.add(0,HEAP_PARAM);
+            List<Expr> f_args = map(f_params, p -> VAR(p.getName()));
+            List<Expr> f_rets = map(returns, p -> VAR(p.getName()));
+            // Add function prototype
+            switch (returns.size()) {
+                case 0:
+                    decls.add(FUNCTION(name, f_params, ANY));
+                    break;
+                case 1: {
+                    Type rt = returns.get(0).getType();
+                    decls.add(FUNCTION(name, f_params, rt));
+                    // Establish connection
+                    postcondition.add(EQ(INVOKE(name,f_args),f_rets.get(0)));
+                    break;
+                }
+                default: {
+                    // Multiple returns require special handling
+                    for (int i = 0; i != returns.size(); ++i) {
+                        Type rt = returns.get(i).getType();
+                        decls.add(FUNCTION(name + "#" + i, f_params, rt));
+                        // Establish connection
+                        postcondition.add(EQ(INVOKE(name + "#" + i,f_args),f_rets.get(i)));
+                    }
+                }
+            }
         }
         // Add heap for method invocations
         decls.add(new Decl.Procedure(name, parameters, returns, precondition, postcondition, modifies));

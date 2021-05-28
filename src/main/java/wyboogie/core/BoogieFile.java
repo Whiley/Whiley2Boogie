@@ -295,7 +295,9 @@ public class BoogieFile {
 			private final List<Parameter> parameters;
 			private final List<Parameter> returns;
 			private final List<Expr.Logical> requires;
+			private final List<Expr.Logical> freeRequires;
 			private final List<Expr.Logical> ensures;
+			private final List<Expr.Logical> freeEnsures;
 			private final List<String> modifies;
 			private final List<Decl.Variable> locals;
 			private final Stmt body;
@@ -306,7 +308,12 @@ public class BoogieFile {
 			}
 
 			public Procedure(String name, List<Parameter> parameters, List<Parameter> returns, List<Expr.Logical> requires,
-					List<Expr.Logical> ensures, List<Decl.Variable> locals, List<String> modifies, Stmt body, Attribute... attributes) {
+							 List<Expr.Logical> ensures, List<Decl.Variable> locals, List<String> modifies, Stmt body, Attribute... attributes) {
+				this(name, parameters, returns, requires, ensures, Collections.EMPTY_LIST, Collections.EMPTY_LIST, locals, modifies, body, attributes);
+			}
+
+			public Procedure(String name, List<Parameter> parameters, List<Parameter> returns, List<Expr.Logical> requires,
+					List<Expr.Logical> ensures, List<Expr.Logical> freeRequires, List<Expr.Logical> freeEnsures, List<Decl.Variable> locals, List<String> modifies, Stmt body, Attribute... attributes) {
 				super(attributes);
 				if (body == null && locals.size() > 0) {
 					throw new IllegalArgumentException("Cannot specify local variables for procedure prototype");
@@ -316,6 +323,8 @@ public class BoogieFile {
 				this.returns = new ArrayList<>(returns);
 				this.requires = new ArrayList<>(requires);
 				this.ensures = new ArrayList<>(ensures);
+				this.freeRequires = new ArrayList<>(freeRequires);
+				this.freeEnsures = new ArrayList<>(freeEnsures);
 				this.modifies = new ArrayList<>(modifies);
 				this.locals = new ArrayList<>(locals);
 				this.body = body;
@@ -339,6 +348,14 @@ public class BoogieFile {
 
 			public List<Expr.Logical> getEnsures() {
 				return ensures;
+			}
+
+			public List<Expr.Logical> getFreeRequires() {
+				return freeRequires;
+			}
+
+			public List<Expr.Logical> getFreeEnsures() {
+				return freeEnsures;
 			}
 
 			public List<String> getModifies() {
