@@ -1326,6 +1326,10 @@ public class BoogieFile {
 					return null;
 				}
 			}
+			@Override
+			public String toString() {
+				return "ATTR(" + o + ")";
+			}
 		};
 	}
 

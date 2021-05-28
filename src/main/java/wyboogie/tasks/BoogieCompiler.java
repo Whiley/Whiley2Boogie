@@ -992,7 +992,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Stmt constructFail(WyilFile.Stmt.Fail stmt) {
-        return ASSERT(CONST(false), ATTRIBUTE(stmt), ATTRIBUTE(WyilFile.STATIC_FAULT));
+        return ASSERT(CONST(false, ATTRIBUTE(stmt)), ATTRIBUTE(WyilFile.STATIC_FAULT));
     }
 
     @Override
@@ -2017,7 +2017,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Extract the conditions
         List<Expr.Logical> es = map(assertions, a -> a.getCondition());
         es.add(e);
-        return AND(es);
+        return AND(es, e.getAttributes());
     }
 
     public List<Expr.Logical> flatternAsLogical(List e) {

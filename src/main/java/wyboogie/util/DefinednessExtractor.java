@@ -5,6 +5,7 @@ import wybs.lang.SyntacticItem;
 import wyil.lang.WyilFile;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -69,12 +70,13 @@ public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Asser
         for (int i = 0; i < operands.size(); ++i) {
             List<Stmt.Assert> ith = operands.get(i);
             // Construct inference window
-            Expr.Logical w = AND(window.subList(0, i));
+            Expr.Logical w = AND(window.subList(0, i),expr.getAttributes());
             // Map over existing operands
             rs.addAll(map(ith, s -> {
+                Expr.Logical c = s.getCondition();
                 SyntacticItem item = s.getAttribute(SyntacticItem.class);
                 Integer errcode = s.getAttribute(Integer.class);
-                return ASSERT(IMPLIES(w, s.getCondition()), ATTRIBUTE(errcode));
+                return ASSERT(IMPLIES(w, c, expr.getAttributes()), ATTRIBUTE(errcode));
             }));
         }
         return rs;
@@ -88,12 +90,13 @@ public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Asser
         for(int i=0;i<operands.size();++i) {
             List<Stmt.Assert> ith = operands.get(i);
             // Construct inference window
-            Expr.Logical w = OR(window.subList(0,i));
+            Expr.Logical w = OR(window.subList(0,i),expr.getAttributes());
             // Map over existing operands
             rs.addAll(map(ith,s -> {
+                Expr.Logical c = s.getCondition();
                 SyntacticItem item = s.getAttribute(SyntacticItem.class);
                 Integer errcode = s.getAttribute(Integer.class);
-                return ASSERT(OR(w,s.getCondition()),ATTRIBUTE(errcode));
+                return ASSERT(OR(w, c, expr.getAttributes()), ATTRIBUTE(errcode));
             }));
         }
         return rs;
@@ -103,9 +106,9 @@ public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Asser
     public List<Stmt.Assert> constructLogicalImplication(Expr.Implies expr, List<Stmt.Assert> left, List<Stmt.Assert> right) {
         // Map over existing operands
         List<Stmt.Assert> nright = map(right, s -> {
-            SyntacticItem item = s.getAttribute(SyntacticItem.class);
+            Expr.Logical c = s.getCondition();
             Integer errcode = s.getAttribute(Integer.class);
-            return ASSERT(IMPLIES(expr.getLeftHandSide(), s.getCondition()),ATTRIBUTE(errcode));
+            return ASSERT(IMPLIES(expr.getLeftHandSide(), c, expr.getAttributes()), ATTRIBUTE(errcode));
         });
         return append(left, nright);
     }
@@ -122,9 +125,9 @@ public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Asser
 
     private List<Stmt.Assert> constructQuantifier(Expr.Quantifier expr, List<Stmt.Assert> body) {
         return map(body, s -> {
-            SyntacticItem item = s.getAttribute(SyntacticItem.class);
             Integer errcode = s.getAttribute(Integer.class);
-            return ASSERT(FORALL(expr.getParameters(), s.getCondition()), ATTRIBUTE(errcode));
+            Expr.Logical c = s.getCondition();
+            return ASSERT(FORALL(expr.getParameters(), c, expr.getAttributes()), ATTRIBUTE(errcode));
         });
     }
 
@@ -170,7 +173,13 @@ public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Asser
 
     @Override
     public List<Stmt.Assert> constructInvoke(Expr.Invoke expr, List<List<Stmt.Assert>> preconditions) {
-        return flattern(preconditions, l -> l);
+        List<Stmt.Assert> rs = flattern(preconditions, l -> l);
+        // Special case!
+        if (expr.getName().equals("Array#Generator")) {
+            Expr len = expr.getArguments().get(1);
+            rs.add(ASSERT(LTEQ(CONST(0), len, len.getAttributes()), ATTRIBUTE(WyilFile.STATIC_NEGATIVE_LENGTH_FAILURE)));
+        }
+        return rs;
     }
 
 }
