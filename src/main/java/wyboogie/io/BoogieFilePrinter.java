@@ -173,17 +173,17 @@ public class BoogieFilePrinter {
 		List<Expr.Logical> freeRequires = d.getFreeRequires();
 		List<Expr.Logical> ensures = d.getEnsures();
 		List<Expr.Logical> freeEnsures = d.getFreeEnsures();
-		for(int i=0;i!=requires.size();++i) {
-			Expr.Logical ith = requires.get(i);
-			out.tab(indent);
-			out.print("requires ", ith);
-			writeExpression(ith);
-			out.println(";", ith);
-		}
 		for(int i=0;i!=freeRequires.size();++i) {
 			Expr.Logical ith = freeRequires.get(i);
 			out.tab(indent);
 			out.print("free requires ", ith);
+			writeExpression(ith);
+			out.println(";", ith);
+		}
+		for(int i=0;i!=requires.size();++i) {
+			Expr.Logical ith = requires.get(i);
+			out.tab(indent);
+			out.print("requires ", ith);
 			writeExpression(ith);
 			out.println(";", ith);
 		}

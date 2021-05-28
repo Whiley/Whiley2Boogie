@@ -11,7 +11,7 @@ ensures (x == y) && (x == z):
 
 function inc(int x) -> (int y, int z)
 ensures (x == y) && (x+1 == z):
-    return x,1
+    return x,x+1
 
 public export method test():
     assert apply(&id,1) == (1,1)

@@ -40,8 +40,10 @@ import static wyboogie.util.Util.*;
  */
 public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Assert>> {
 
-    public static List<Stmt.Assert> extractDefinednessAssertions(Expr expr) {
-        return new DefinednessExtractor().visitExpression(expr);
+    private final BoogieCompiler bc;
+
+    public DefinednessExtractor(BoogieCompiler bc) {
+        this.bc = bc;
     }
 
     @Override
@@ -139,9 +141,10 @@ public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Asser
         // Check whether this is associated with an array access
         if (wyItem instanceof WyilFile.Expr.ArrayAccess) {
             WyilFile.Expr.ArrayAccess a = (WyilFile.Expr.ArrayAccess) wyItem;
-            // Yes it is, so extract index and source operands
-            Expr idx = expr.getIndex();
-            Expr src = BoogieCompiler.unboxAsNecessary(a.getFirstOperand().getType(), expr.getSource());
+            // Reconstruct source as expression
+            Expr src = bc.reconstructExpression(a.getFirstOperand());
+            // Reconstruct index as expression
+            Expr idx = bc.reconstructExpression(a.getSecondOperand());
             // Add check that index is not negative
             result.add(ASSERT(LTEQ(CONST(0), idx, idx.getAttributes()), ATTRIBUTE(WyilFile.STATIC_BELOWBOUNDS_INDEX_FAILURE)));
             // Add check that index below length
@@ -181,5 +184,4 @@ public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Asser
         }
         return rs;
     }
-
 }

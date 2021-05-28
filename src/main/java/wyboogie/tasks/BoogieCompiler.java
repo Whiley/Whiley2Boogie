@@ -238,34 +238,34 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         List<Decl.Parameter> params = parametersAndConstraints.first();
         List<Decl.Parameter> returns = returnsAndConstraints.first();
         // Merge preconditions / postconditions
-        List<Expr.Logical> requires = append(parametersAndConstraints.second(), flatternAsLogical(precondition));
-        List<Expr.Logical> ensures = append(returnsAndConstraints.second(), flatternAsLogical(postcondition));
+        List<Expr.Logical> requires = flatternAsLogical(precondition);
+        List<Expr.Logical> ensures = flatternAsLogical(postcondition);
+        List<Expr.Logical> freeRequires = parametersAndConstraints.second();
+        List<Expr.Logical> freeEnsures = returnsAndConstraints.second();
         // Add useful comment
         decls.addAll(constructCommentHeading(d.getQualifiedName() + " : " + d.getType()));
         // Add method prototype
-        decls.addAll(constructProcedurePrototype(d, name, params, returns, requires, ensures));
+        decls.addAll(constructProcedurePrototype(d, name, params, returns, requires, ensures, freeRequires, freeEnsures));
         // Add any lambda's used within the method
         decls.addAll(constructLambdas(d));
         // Add implementation (if one exists)
         if(d.getBody().size() > 0) {
             // Yes, this is not an external symbol
-            decls.addAll(constructProcedureImplementation(d, name, params, returns, requires, ensures, body));
+            decls.addAll(constructProcedureImplementation(d, name, params, returns, body));
         }
         // Done
         return new Decl.Sequence(decls);
     }
 
-    public List<Decl> constructProcedurePrototype(WyilFile.Decl.FunctionOrMethod d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, List<Expr.Logical> requires, List<Expr.Logical> ensures) {
+    public List<Decl> constructProcedurePrototype(WyilFile.Decl.FunctionOrMethod d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, List<Expr.Logical> requires, List<Expr.Logical> ensures, List<Expr.Logical> freeRequires, List<Expr.Logical> freeEnsures) {
         List<String> modifies = Collections.EMPTY_LIST;
         ArrayList<Decl> decls = new ArrayList<>();
-        ArrayList<Expr.Logical> freeRequires = new ArrayList<>();
-        ArrayList<Expr.Logical> freeEnsures = new ArrayList<>();
         // Add Context Level Guarantee
         requires.add(GT(VAR("Context#Level"), CONST(1)));
         // Apply method-specific stuff
         if(d instanceof WyilFile.Decl.Method) {
             // Add type invariant preservation guarantee
-            ensures.addAll(constructMethodFrame((WyilFile.Decl.Method) d));
+            freeEnsures.addAll(constructMethodFrame((WyilFile.Decl.Method) d));
             // Methods always modify the heap
             modifies = Arrays.asList("HEAP");
         } else {
@@ -302,7 +302,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         return decls;
     }
 
-    public List<Decl> constructProcedureImplementation(WyilFile.Decl.FunctionOrMethod d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, List<Expr.Logical> requires, List<Expr.Logical> ensures, Stmt body) {
+    public List<Decl> constructProcedureImplementation(WyilFile.Decl.FunctionOrMethod d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, Stmt body) {
         ArrayList<Decl> decls = new ArrayList<>();
         // Add useful heading
         decls.addAll(constructCommentSubheading("Implementation"));
@@ -850,9 +850,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 Expr.DictionaryAccess l = (Expr.DictionaryAccess) lhs;
                 WyilFile.Expr.ArrayAccess v = (WyilFile.Expr.ArrayAccess) lval;
                 // Reconstruct source as expression
-                Expr src = visitExpression(v.getFirstOperand());
-                // Flattern reconstructed source
-                src = flatternImpureExpression(src).second();
+                Expr src = reconstructExpression(v.getFirstOperand());
                 // Box right-hand side (as necessary)
                 rhs = PUT(src, l.getIndex(), box(lval.getType(), rhs));
                 // Recurse assignment
@@ -863,9 +861,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 Expr.DictionaryAccess l = (Expr.DictionaryAccess) lhs;
                 WyilFile.Expr.RecordAccess v = (WyilFile.Expr.RecordAccess) lval;
                 // Reconstruct source as expression
-                Expr src = visitExpression(v.getOperand());
-                // Flattern reconstructed source
-                src = flatternImpureExpression(src).second();
+                Expr src = reconstructExpression(v.getOperand());
                 // Box right-hand side (as necessary)
                 rhs = PUT(src, l.getIndex(), box(lval.getType(), rhs));
                 // Recurse assignment
@@ -875,9 +871,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 Expr.DictionaryAccess l = (Expr.DictionaryAccess) lhs;
                 WyilFile.Expr.Dereference v = (WyilFile.Expr.Dereference) lval;
                 // Reconstruct source as expression
-                Expr src = visitExpression(v.getOperand());
-                // Flattern reconstructed source
-                src = flatternImpureExpression(src).second();
+                Expr src = reconstructExpression(v.getOperand());
                 // Box right-hand side (as necessary)
                 rhs = box(lval.getType(), rhs);
                 // Construct assignment
@@ -892,9 +886,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 // Extract the source record type
                 WyilFile.Type.Record recT = refT.getElement().as(WyilFile.Type.Record.class);
                 // Reconstruct source as expression
-                Expr src = visitExpression(fr.getOperand());
-                // Flattern reconstructed source
-                src = flatternImpureExpression(src).second();
+                Expr src = reconstructExpression(fr.getOperand());
                 // Reconstruct index expression
                 Expr index = VAR("$" + fr.getField());
                 // Box the right-hand side (as necessary)
@@ -1868,7 +1860,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @return
      */
     public Pair<List<Stmt>, Expr> flatternImpureExpression(Expr e) {
-        DefinednessExtractor extractor = new DefinednessExtractor() {
+        DefinednessExtractor extractor = new DefinednessExtractor(this) {
              @Override
             public List<Stmt.Assert> visitLogical(Expr e) {
                  if (e instanceof FauxTuple) {
@@ -2024,7 +2016,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     public Expr.Logical flatternAsLogical(Expr.Logical e) {
-        DefinednessExtractor extractor = new DefinednessExtractor();
+        DefinednessExtractor extractor = new DefinednessExtractor(this);
         List<Stmt.Assert> assertions = extractor.visitExpression(e);
         // Extract the conditions
         List<Expr.Logical> es = map(assertions, a -> a.getCondition());
@@ -2038,6 +2030,21 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             rs.add(flatternAsLogical((Expr.Logical) e.get(i)));
         }
         return rs;
+    }
+
+    /**
+     * This is a wierd method.  Basically, we want to retranslate a given expression to ensure property casting and all
+     * that jazz has happened.  Normally, we're doing this in a situation where we can't easily test.  However, we can
+     * assume that neccessary impure pieces have already been pulled out.
+     *
+     * @param e
+     * @return
+     */
+    public Expr reconstructExpression(WyilFile.Expr e) {
+        // First translate the expression
+        Expr r = visitExpression(e);
+        // Now flattern it, whilst discarding the impure stuff
+        return flatternImpureExpression(r).second();
     }
 
     // =========================================================================================
