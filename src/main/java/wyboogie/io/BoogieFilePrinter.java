@@ -361,15 +361,40 @@ public class BoogieFilePrinter {
 	}
 	private void writeIfElse(int indent, Stmt.IfElse s) {
 		out.tab(indent);
+		if(isIfGoto(s)) {
+			writeIfGoto(s);
+		} else {
+			out.print("if(", s);
+			writeExpression(s.getCondition());
+			out.println(") {", s);
+			writeStmt(indent + 1, s.getTrueBranch());
+			if (s.getFalseBranch() != null) {
+				out.tab(indent);
+				out.println("} else {", s);
+				writeStmt(indent + 1, s.getFalseBranch());
+			}
+			out.tab(indent);
+			out.println("}", s);
+		}
+	}
+	private void writeIfGoto(Stmt.IfElse s) {
 		out.print("if(", s);
 		writeExpression(s.getCondition());
-		out.println(") {",s);
-		writeStmt(indent + 1, s.getTrueBranch());
-		if(s.getFalseBranch() != null) {
-			out.tab(indent);out.println("} else {",s);
-			writeStmt(indent + 1, s.getFalseBranch());
+		out.print(") { ", s);
+		Stmt.Goto g = (Stmt.Goto) s.getTrueBranch();
+		out.print("goto ", g);
+		for (int i = 0; i != g.size(); ++i) {
+			if (i != 0) {
+				out.print(", ", s);
+			}
+			out.print(g.get(i), s);
 		}
-		out.tab(indent);out.println("}",s);
+		out.println("; }", s);
+	}
+	private boolean isIfGoto(Stmt.IfElse s) {
+		Stmt tb = s.getTrueBranch();
+		Stmt fb = s.getFalseBranch();
+		return fb == null && tb instanceof Stmt.Goto;
 	}
 	private void writeReturn(int indent, Stmt.Return s) {
 		out.tab(indent);

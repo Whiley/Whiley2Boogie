@@ -31,7 +31,9 @@ import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.Stmt;
 import wyboogie.core.BoogieFile.LVal;
 
+import wyboogie.util.AbstractExpressionFold;
 import wyboogie.util.AbstractExpressionTransform;
+import wyboogie.util.AbstractFold;
 import wyboogie.util.DefinednessExtractor;
 import wybs.lang.Build;
 import wybs.lang.Build.Meter;
@@ -39,12 +41,7 @@ import wybs.lang.SyntacticItem;
 import wybs.util.AbstractCompilationUnit.Tuple;
 import wyfs.util.Pair;
 import wyil.lang.WyilFile;
-import wyil.util.AbstractVisitor;
-import wyil.util.AbstractTranslator;
-import wyil.util.IncrementalSubtypingEnvironment;
-import wyil.util.Subtyping;
-import wyil.util.TypeMangler;
-import wyil.util.WyilUtils;
+import wyil.util.*;
 
 public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     /**
@@ -445,15 +442,32 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     public List<Decl.Variable> constructLocals(WyilFile.Stmt blk) {
         ArrayList<Decl.Variable> decls = new ArrayList<>();
         // Handle local variables
-        new AbstractVisitor(meter) {
+        new AbstractFold<Boolean>(meter) {
+            public Boolean BOTTOM() {
+                return false;
+            }
+
+            public Boolean join(Boolean lhs, Boolean rhs) {
+                return lhs || rhs;
+            }
+
+            public Boolean join(List<Boolean> operands) {
+                for (int i = 0; i != operands.size(); ++i) {
+                    if (operands.get(i)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
             @Override
-            public void visitLambda(WyilFile.Decl.Lambda decl) {
+            public Boolean constructLambda(WyilFile.Decl.Lambda decl) {
                 // NOTE: we don't construct locals through a lambda since the body of the lambda
                 // will be extracted into a standalone procedure.
             }
 
             @Override
-            public void visitInitialiser(WyilFile.Stmt.Initialiser stmt) {
+            public Boolean constructInitialiser(WyilFile.Stmt.Initialiser stmt) {
                 super.visitInitialiser(stmt);
                 WyilFile.Tuple<WyilFile.Decl.Variable> vars = stmt.getVariables();
                 for (int i = 0; i != vars.size(); ++i) {
@@ -464,7 +478,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             }
 
             @Override
-            public void visitAssign(WyilFile.Stmt.Assign stmt) {
+            public Boolean constructAssign(WyilFile.Stmt.Assign stmt) {
                 super.visitAssign(stmt);
                 if (!WyilUtils.isSimple(stmt) && WyilUtils.hasInterference(stmt, meter)) {
                     Tuple<WyilFile.LVal> lhs = stmt.getLeftHandSide();
@@ -481,7 +495,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             }
 
             @Override
-            public void visitFor(WyilFile.Stmt.For stmt) {
+            public Boolean constructFor(WyilFile.Stmt.For stmt) {
                 super.visitFor(stmt);
                 WyilFile.Decl.StaticVariable v = stmt.getVariable();
                 String name = toVariableName(v);
@@ -496,7 +510,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             }
 
             @Override
-            public void visitWhile(WyilFile.Stmt.While stmt) {
+            public Boolean constructWhile(WyilFile.Stmt.While stmt) {
                 super.visitWhile(stmt);
                 if(!isPure(stmt)) {
                     // Loop modifies heap in some way.  Hence, need to store a copy of HEAP at beginning of loop which
@@ -506,7 +520,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             }
 
             @Override
-            public void visitDoWhile(WyilFile.Stmt.DoWhile stmt) {
+            public Boolean constructDoWhile(WyilFile.Stmt.DoWhile stmt) {
                 super.visitDoWhile(stmt);
                 if(!isPure(stmt)) {
                     // Loop modifies heap in some way.  Hence, need to store a copy of HEAP at beginning of loop which
@@ -516,19 +530,19 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             }
 
             @Override
-            public void visitDeclaration(WyilFile.Decl d) {
+            public Boolean constructDeclaration(WyilFile.Decl d) {
                 // Prevent unexpected traverals of declarations.
             }
 
             @Override
-            public void visitNew(WyilFile.Expr.New expr) {
+            public Boolean constructNew(WyilFile.Expr.New expr) {
                 super.visitNew(expr);
                 String name = TEMP(expr);
                 decls.add(new Decl.Variable(name, REF));
             }
 
             @Override
-            public void visitInvoke(WyilFile.Expr.Invoke expr) {
+            public Boolean constructInvoke(WyilFile.Expr.Invoke expr) {
                 super.visitInvoke(expr);
                 WyilFile.Decl.Callable ft = expr.getLink().getTarget();
                 if (ft instanceof WyilFile.Decl.FunctionOrMethod) {
@@ -546,7 +560,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             }
 
             @Override
-            public void visitIndirectInvoke(WyilFile.Expr.IndirectInvoke expr) {
+            public Boolean constructIndirectInvoke(WyilFile.Expr.IndirectInvoke expr) {
                 super.visitIndirectInvoke(expr);
                 WyilFile.Type.Callable ft = expr.getSource().getType().as(WyilFile.Type.Callable.class);
                 //
@@ -566,8 +580,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             }
 
             @Override
-            public void visitType(WyilFile.Type t) {
-                // Prevent unexpected traverals of types
+            public Boolean visitType(WyilFile.Type t) {
+                return false;
             }
         }.visitStatement(blk);
         // Done
@@ -1979,6 +1993,38 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     return lval;
                 }
                 return super.constructInvoke(expr, arguments);
+            }
+
+            @Override
+            public Expr.Logical constructLogicalAnd(Expr.LogicalAnd expr, List<Expr.Logical> operands) {
+                SyntacticItem wyItem = expr.getAttribute(SyntacticItem.class);
+                //
+                if(equals(expr.getOperands(),operands)) {
+                    return expr;
+                } else {
+                    String lab = "END_" + wyItem.getIndex();
+                    Expr.VariableAccess var = VAR(TEMP((WyilFile.Expr) wyItem), expr.getAttributes());
+                    stmts.add(ASSIGN(var, CONST(false)));
+                    for (int i = 0; i != operands.size(); ++i) {
+                        if((i+1) != operands.size()) {
+                            Expr.Logical ith = NOT(operands.get(i));
+                            stmts.add(IFELSE(ith, GOTO(lab), null));
+                        } else {
+                            stmts.add(ASSIGN(var, operands.get(i)));
+                        }
+                    }
+                    stmts.add(LABEL(lab));
+                    return var;
+                }
+            }
+
+            @Override
+            public Expr.Logical constructLogicalOr(Expr.LogicalOr expr, List<Expr.Logical> operands) {
+                if(equals(expr.getOperands(),operands)) {
+                    return expr;
+                } else {
+                    throw new IllegalArgumentException("SPOTTED A PROBLEM!");
+                }
             }
         }.visitExpression(e);
         // Extract well-definedness conditions

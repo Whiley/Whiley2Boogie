@@ -234,7 +234,7 @@ public abstract class AbstractExpressionTransform extends AbstractExpressionVisi
         }
     }
 
-    private static <T> boolean equals(List<T> lhs, List<T> rhs) {
+    protected static <T> boolean equals(List<T> lhs, List<T> rhs) {
         if(lhs.size() != rhs.size()) {
             for(int i=0;i!=lhs.size();++i) {
                 if(lhs.get(i) != rhs.get(i)) {
