@@ -27,47 +27,91 @@ public abstract class AbstractExpressionTransform extends AbstractExpressionVisi
     }
     @Override
     protected Expr constructNegation(Expr.Negation expr, Expr operand) {
-        return BoogieFile.NEG(operand, expr.getAttributes());
+        if(expr.getOperand() == operand) {
+            return expr;
+        } else {
+            return BoogieFile.NEG(operand, expr.getAttributes());
+        }
     }
     @Override
     protected Expr constructAddition(Expr.Addition expr, Expr lhs, Expr rhs) {
-        return BoogieFile.ADD(lhs,rhs,expr.getAttributes());
+        if(expr.getLeftHandSide() == lhs && expr.getRightHandSide() == rhs) {
+            return expr;
+        } else {
+            return BoogieFile.ADD(lhs, rhs, expr.getAttributes());
+        }
     }
     @Override
     protected Expr constructSubtraction(Expr.Subtraction expr, Expr lhs, Expr rhs) {
-        return BoogieFile.SUB(lhs,rhs,expr.getAttributes());
+        if(expr.getLeftHandSide() == lhs && expr.getRightHandSide() == rhs) {
+            return expr;
+        } else {
+            return BoogieFile.SUB(lhs, rhs, expr.getAttributes());
+        }
     }
     @Override
     protected Expr constructMultiplication(Expr.Multiplication expr, Expr lhs, Expr rhs) {
-        return BoogieFile.MUL(lhs,rhs,expr.getAttributes());
+        if(expr.getLeftHandSide() == lhs && expr.getRightHandSide() == rhs) {
+            return expr;
+        } else {
+            return BoogieFile.MUL(lhs, rhs, expr.getAttributes());
+        }
     }
     @Override
     protected Expr constructDivision(Expr.Division expr, Expr lhs, Expr rhs) {
-        return BoogieFile.DIV(lhs,rhs,expr.getAttributes());
+        if(expr.getLeftHandSide() == lhs && expr.getRightHandSide() == rhs) {
+            return expr;
+        } else {
+            return BoogieFile.DIV(lhs, rhs, expr.getAttributes());
+        }
     }
     @Override
     protected Expr constructIntegerDivision(Expr.IntegerDivision expr, Expr lhs, Expr rhs) {
-        return BoogieFile.IDIV(lhs,rhs,expr.getAttributes());
+        if(expr.getLeftHandSide() == lhs && expr.getRightHandSide() == rhs) {
+            return expr;
+        } else {
+            return BoogieFile.IDIV(lhs, rhs, expr.getAttributes());
+        }
     }
     @Override
     protected Expr constructRemainder(Expr.Remainder expr, Expr lhs, Expr rhs) {
-        return BoogieFile.REM(lhs,rhs,expr.getAttributes());
+        if(expr.getLeftHandSide() == lhs && expr.getRightHandSide() == rhs) {
+            return expr;
+        } else {
+            return BoogieFile.REM(lhs, rhs, expr.getAttributes());
+        }
     }
     @Override
     protected Expr.Logical constructLessThan(Expr.LessThan expr, Expr lhs, Expr rhs) {
-        return BoogieFile.LT(lhs, rhs, expr.getAttributes());
+        if(expr.getLeftHandSide() == lhs && expr.getRightHandSide() == rhs) {
+            return expr;
+        } else {
+            return BoogieFile.LT(lhs, rhs, expr.getAttributes());
+        }
     }
     @Override
     protected Expr.Logical constructLessThanOrEqual(Expr.LessThanOrEqual expr, Expr lhs, Expr rhs) {
-        return BoogieFile.LTEQ(lhs, rhs, expr.getAttributes());
+        if(expr.getLeftHandSide() == lhs && expr.getRightHandSide() == rhs) {
+            return expr;
+        } else {
+            return BoogieFile.LTEQ(lhs, rhs, expr.getAttributes());
+        }
     }
     @Override
     protected Expr.Logical constructGreaterThan(Expr.GreaterThan expr, Expr lhs, Expr rhs) {
-        return BoogieFile.GT(lhs, rhs, expr.getAttributes());
+        if(expr.getLeftHandSide() == lhs && expr.getRightHandSide() == rhs) {
+            return expr;
+        } else {
+            return BoogieFile.GT(lhs, rhs, expr.getAttributes());
+        }
     }
     @Override
     protected Expr.Logical constructGreaterThanOrEqual(Expr.GreaterThanOrEqual expr, Expr lhs, Expr rhs) {
-        return BoogieFile.GTEQ(lhs, rhs, expr.getAttributes());
+        if(expr.getLeftHandSide() == lhs && expr.getRightHandSide() == rhs) {
+            return expr;
+        } else {
+            return BoogieFile.GTEQ(lhs, rhs, expr.getAttributes());
+        }
     }
 
     // Logical
@@ -76,43 +120,79 @@ public abstract class AbstractExpressionTransform extends AbstractExpressionVisi
     }
     @Override
     protected Expr.Logical constructLogicalAnd(Expr.LogicalAnd expr, List<Expr.Logical> operands) {
-        return BoogieFile.AND(operands,expr.getAttributes());
+        if(equals(expr.getOperands(),operands)) {
+            return expr;
+        } else {
+            return BoogieFile.AND(operands, expr.getAttributes());
+        }
     }
     @Override
     protected Expr.Logical constructLogicalImplication(Expr.Implies expr, Expr.Logical lhs, Expr.Logical rhs) {
-        return BoogieFile.IMPLIES(lhs,rhs,expr.getAttributes());
+        if(expr.getLeftHandSide() == lhs && expr.getRightHandSide() == rhs) {
+            return expr;
+        } else {
+            return BoogieFile.IMPLIES(lhs, rhs, expr.getAttributes());
+        }
     }
     @Override
     protected Expr.Logical constructLogicalIff(Expr.Iff expr, Expr.Logical lhs, Expr.Logical rhs) {
-        return BoogieFile.IFF((Expr.Logical) lhs, (Expr.Logical) rhs, expr.getAttributes());
+        if(expr.getLeftHandSide() == lhs && expr.getRightHandSide() == rhs) {
+            return expr;
+        } else {
+            return BoogieFile.IFF((Expr.Logical) lhs, (Expr.Logical) rhs, expr.getAttributes());
+        }
     }
     @Override
     protected Expr.Logical constructLogicalNot(Expr.LogicalNot expr, Expr.Logical operand) {
-        return BoogieFile.NOT((Expr.Logical)operand,expr.getAttributes());
+        if(expr.getOperand() == operand) {
+            return expr;
+        } else {
+            return BoogieFile.NOT((Expr.Logical) operand, expr.getAttributes());
+        }
     }
     @Override
     protected Expr.Logical constructLogicalOr(Expr.LogicalOr expr, List<Expr.Logical> operands) {
-        return BoogieFile.OR(operands,expr.getAttributes());
+        if(equals(expr.getOperands(),operands)) {
+            return expr;
+        } else {
+            return BoogieFile.OR(operands, expr.getAttributes());
+        }
     }
     @Override
     protected Expr.Logical constructExistentialQuantifier(Expr.ExistentialQuantifier expr, Expr.Logical body) {
-        return BoogieFile.EXISTS(expr.getParameters(), (Expr.Logical) body, expr.getAttributes());
+        if(expr.getBody() == body) {
+            return expr;
+        } else {
+            return BoogieFile.EXISTS(expr.getParameters(), (Expr.Logical) body, expr.getAttributes());
+        }
     }
     @Override
     protected Expr.Logical constructUniversalQuantifier(Expr.UniversalQuantifier expr, Expr.Logical body) {
-        return BoogieFile.FORALL(expr.getParameters(), (Expr.Logical) body, expr.getAttributes());
+        if(expr.getBody() == body) {
+            return expr;
+        } else {
+            return BoogieFile.FORALL(expr.getParameters(), (Expr.Logical) body, expr.getAttributes());
+        }
     }
 
     // Dictionaries
 
     @Override
     protected Expr constructDictionaryAccess(Expr.DictionaryAccess expr, Expr source, Expr index) {
-        return BoogieFile.GET(source, index, expr.getAttributes());
+        if(expr.getSource() == source && expr.getIndex() == index) {
+            return expr;
+        } else {
+            return BoogieFile.GET(source, index, expr.getAttributes());
+        }
     }
 
     @Override
     protected Expr constructDictionaryUpdate(Expr.DictionaryUpdate expr, Expr source, Expr index, Expr value) {
-        return BoogieFile.PUT(source, index, value, expr.getAttributes());
+        if(expr.getSource() == source && expr.getIndex() == index && expr.getValue() == value) {
+            return expr;
+        } else {
+            return BoogieFile.PUT(source, index, value, expr.getAttributes());
+        }
     }
 
     // Other
@@ -124,12 +204,20 @@ public abstract class AbstractExpressionTransform extends AbstractExpressionVisi
 
     @Override
     protected Expr.Logical constructEquals(Expr.Equals expr, Expr lhs, Expr rhs) {
-        return BoogieFile.EQ(lhs, rhs, expr.getAttributes());
+        if(expr.getLeftHandSide() == lhs && expr.getRightHandSide() == rhs) {
+            return expr;
+        } else {
+            return BoogieFile.EQ(lhs, rhs, expr.getAttributes());
+        }
     }
 
     @Override
     protected Expr.Logical constructNotEquals(Expr.NotEquals expr, Expr lhs, Expr rhs) {
-        return BoogieFile.NEQ(lhs, rhs, expr.getAttributes());
+        if(expr.getLeftHandSide() == lhs && expr.getRightHandSide() == rhs) {
+            return expr;
+        } else {
+            return BoogieFile.NEQ(lhs, rhs, expr.getAttributes());
+        }
     }
 
     @Override
@@ -139,6 +227,22 @@ public abstract class AbstractExpressionTransform extends AbstractExpressionVisi
 
     @Override
     protected Expr.Logical constructInvoke(Expr.Invoke expr, List<Expr> operands) {
-        return BoogieFile.INVOKE(expr.getName(),operands,expr.getAttributes());
+        if (equals(expr.getArguments(), operands)) {
+            return expr;
+        } else {
+            return BoogieFile.INVOKE(expr.getName(), operands, expr.getAttributes());
+        }
+    }
+
+    private static <T> boolean equals(List<T> lhs, List<T> rhs) {
+        if(lhs.size() != rhs.size()) {
+            for(int i=0;i!=lhs.size();++i) {
+                if(lhs.get(i) != rhs.get(i)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
     }
 }
