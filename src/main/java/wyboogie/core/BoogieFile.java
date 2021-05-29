@@ -876,6 +876,10 @@ public class BoogieFile {
 			public Logical getRightHandSide() {
 				return rhs;
 			}
+
+			public String toString() {
+				return "IMPLIES(" + lhs + "," + rhs + ")";
+			}
 		}
 
 		public static class Addition extends AbstractItem implements Expr, BinaryOperator {

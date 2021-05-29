@@ -40,6 +40,240 @@ public abstract class AbstractFold<R> {
 		this.meter = meter;
 	}
 
+
+	public R visitStatement(Stmt stmt) {
+		meter.step("statement");
+		switch (stmt.getOpcode()) {
+			case STMT_assert:
+				return visitAssert((Stmt.Assert) stmt);
+			case STMT_assign:
+				return visitAssign((Stmt.Assign) stmt);
+			case STMT_assume:
+				return visitAssume((Stmt.Assume) stmt);
+			case STMT_block:
+				return visitBlock((Stmt.Block) stmt);
+			case STMT_break:
+				return constructBreak((Stmt.Break) stmt);
+			case STMT_continue:
+				return constructContinue((Stmt.Continue) stmt);
+			case STMT_debug:
+				return visitDebug((Stmt.Debug) stmt);
+			case STMT_dowhile:
+				return visitDoWhile((Stmt.DoWhile) stmt);
+			case STMT_fail:
+				return constructFail((Stmt.Fail) stmt);
+			case STMT_for:
+				return visitFor((Stmt.For) stmt);
+			case STMT_if:
+			case STMT_ifelse:
+				return visitIfElse((Stmt.IfElse) stmt);
+			case STMT_initialiser:
+			case STMT_initialiservoid:
+				return visitInitialiser((Stmt.Initialiser) stmt);
+			case EXPR_invoke:
+				return visitInvoke((Expr.Invoke) stmt);
+			case EXPR_indirectinvoke:
+				return visitIndirectInvoke((Expr.IndirectInvoke) stmt);
+			case STMT_namedblock:
+				return visitNamedBlock((Stmt.NamedBlock) stmt);
+			case STMT_return:
+			case STMT_returnvoid:
+				return visitReturn((Stmt.Return) stmt);
+			case STMT_skip:
+				return constructSkip((Stmt.Skip) stmt);
+			case STMT_switch:
+				return visitSwitch((Stmt.Switch) stmt);
+			case STMT_while:
+				return visitWhile((Stmt.While) stmt);
+			default:
+				return visitExpression((Expr) stmt);
+		}
+	}
+
+	public R visitAssert(Stmt.Assert stmt) {
+		R operand = visitExpression(stmt.getCondition());
+		return constructAssert(stmt,operand);
+	}
+
+
+	public R visitAssign(Stmt.Assign stmt) {
+		List<R> lvals = visitLVals(stmt.getLeftHandSide());
+		List<R> rvals = visitExpressions(stmt.getRightHandSide());
+		return constructAssign(stmt,lvals,rvals);
+	}
+
+	public List<R> visitLVals(Tuple<LVal> lvals) {
+		ArrayList<R> r = new ArrayList<>();
+		for(int i=0;i!=lvals.size();++i) {
+			r.add(visitExpression(lvals.get(i)));
+		}
+		return r;
+	}
+
+	public R visitAssume(Stmt.Assume stmt) {
+		R operand = visitExpression(stmt.getCondition());
+		return constructAssume(stmt,operand);
+	}
+
+	public R visitBlock(Stmt.Block stmt) {
+		ArrayList<R> r = new ArrayList<>();
+		for(int i=0;i!=stmt.size();++i) {
+			r.add(visitStatement(stmt.get(i)));
+		}
+		return constructBlock(stmt,r);
+	}
+
+	public R visitDebug(Stmt.Debug stmt) {
+		R operand = visitExpression(stmt.getOperand());
+		return constructDebug(stmt,operand);
+	}
+
+	public R visitDoWhile(Stmt.DoWhile stmt) {
+		R body = visitStatement(stmt.getBody());
+		R condition = visitExpression(stmt.getCondition());
+		List<R> invariants = visitExpressions(stmt.getInvariant());
+		return constructDoWhile(stmt,condition,invariants,body);
+	}
+
+	public R visitFor(Stmt.For stmt) {
+		ArrayList<R> ranges = new ArrayList<>();
+		R var = visitExpression(stmt.getVariable().getInitialiser());
+		List<R> invariant = visitExpressions(stmt.getInvariant());
+		R body = visitStatement(stmt.getBody());
+		return constructFor(stmt,var,invariant,body);
+	}
+
+
+	public R visitIfElse(Stmt.IfElse stmt) {
+		R condition = visitExpression(stmt.getCondition());
+		R trueBranch = visitStatement(stmt.getTrueBranch());
+		R falseBranch = bottom();
+		if(stmt.hasFalseBranch()) {
+			falseBranch = visitStatement(stmt.getFalseBranch());
+		}
+		return constructIfElse(stmt,condition,trueBranch,falseBranch);
+	}
+
+
+	public R visitInitialiser(Stmt.Initialiser stmt) {
+		R init = bottom();
+		if(stmt.hasInitialiser()) {
+			init = visitExpression(stmt.getInitialiser());
+		}
+		return constructInitialiser(stmt,init);
+	}
+
+	public R visitNamedBlock(Stmt.NamedBlock stmt) {
+		R body = visitStatement(stmt.getBlock());
+		return constructNamedBlock(stmt,body);
+	}
+
+	public R visitReturn(Stmt.Return stmt) {
+		R rv = bottom();
+		if(stmt.hasReturn()) {
+			rv = visitExpression(stmt.getReturn());
+		}
+		return constructReturn(stmt,rv);
+	}
+
+	public R visitSwitch(Stmt.Switch stmt) {
+		R condition = visitExpression(stmt.getCondition());
+		List<R> rs = new ArrayList<>();
+		Tuple<Stmt.Case> cases = stmt.getCases();
+		for(int i=0;i!=cases.size();++i) {
+			rs.add(visitCase(cases.get(i)));
+		}
+		return constructSwitch(stmt,condition,rs);
+	}
+
+	public R visitCase(Stmt.Case stmt) {
+		List<R> conditions = visitExpressions(stmt.getConditions());
+		R body = visitStatement(stmt.getBlock());
+		return constructCase(stmt,conditions,body);
+	}
+
+	public R visitWhile(Stmt.While stmt) {
+		R condition = visitExpression(stmt.getCondition());
+		List<R> invariants = visitExpressions(stmt.getInvariant());
+		R body = visitStatement(stmt.getBody());
+		return constructWhile(stmt,condition,invariants,body);
+	}
+
+
+	public R constructAssert(Stmt.Assert stmt, R operand) {
+		return operand;
+	}
+
+
+	public R constructAssign(Stmt.Assign stmt, List<R> lvals, List<R> rvals) {
+		return join(join(lvals),join(rvals));
+	}
+
+	public R constructAssume(Stmt.Assume stmt, R operand) {
+		return operand;
+	}
+
+	public R constructBreak(Stmt.Break stmt) {
+		return bottom();
+	}
+
+	public R constructBlock(Stmt.Block stmt, List<R> operands) {
+		return join(operands);
+	}
+
+	public R constructContinue(Stmt.Continue stmt) {
+		return bottom();
+	}
+
+	public R constructDebug(Stmt.Debug stmt, R operand) {
+		return operand;
+	}
+
+	public R constructDoWhile(Stmt.DoWhile stmt, R condition, List<R> invariants, R body) {
+		return join(condition, join(join(invariants), body));
+	}
+
+	public R constructFail(Stmt.Fail stmt) {
+		return bottom();
+	}
+
+	public R constructFor(Stmt.For stmt, R var, List<R> invariants, R body) {
+		return join(var, join(join(invariants), body));
+	}
+
+	public R constructIfElse(Stmt.IfElse stmt, R condition, R trueBranch, R falseBranch) {
+		return join(condition, join(trueBranch, falseBranch));
+	}
+
+	public R constructInitialiser(Stmt.Initialiser stmt, R operand) {
+		return operand;
+	}
+
+	public R constructNamedBlock(Stmt.NamedBlock stmt, R body) {
+		return body;
+	}
+
+	public R constructReturn(Stmt.Return stmt, R operand) {
+		return operand;
+	}
+
+	public R constructSwitch(Stmt.Switch stmt, R condition, List<R> cases) {
+		return join(condition,join(cases));
+	}
+
+	public R constructSkip(Stmt.Skip stmt) {
+		return bottom();
+	}
+
+	public R constructCase(Stmt.Case stmt, List<R> conditions, R body) {
+		return join(join(conditions),body);
+	}
+
+	public R constructWhile(Stmt.While stmt, R condition, List<R> invariants, R body) {
+		return join(condition, join(join(invariants), body));
+	}
+
+
 	public List<R> visitExpressions(Tuple<Expr> exprs) {
 		ArrayList<R> r = new ArrayList<>();
 		for (int i = 0; i != exprs.size(); ++i) {

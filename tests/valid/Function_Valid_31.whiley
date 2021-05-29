@@ -8,7 +8,7 @@ public export method main():
     int i = 0
     int[] xs = [1,2,3,0,2]
     //
-    if i >= |xs| || get(xs,i) != 0
+    if i >= |xs| || get(xs,i) != 0:
         i = i + 1
     //
     assert i == 1

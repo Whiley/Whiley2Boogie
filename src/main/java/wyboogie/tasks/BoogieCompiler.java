@@ -443,7 +443,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         ArrayList<Decl.Variable> decls = new ArrayList<>();
         // Handle local variables
         new AbstractFold<Boolean>(meter) {
-            public Boolean BOTTOM() {
+
+            public Boolean bottom() {
                 return false;
             }
 
@@ -461,25 +462,18 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             }
 
             @Override
-            public Boolean constructLambda(WyilFile.Decl.Lambda decl) {
-                // NOTE: we don't construct locals through a lambda since the body of the lambda
-                // will be extracted into a standalone procedure.
-            }
-
-            @Override
-            public Boolean constructInitialiser(WyilFile.Stmt.Initialiser stmt) {
-                super.visitInitialiser(stmt);
+            public Boolean constructInitialiser(WyilFile.Stmt.Initialiser stmt, Boolean initialiser) {
                 WyilFile.Tuple<WyilFile.Decl.Variable> vars = stmt.getVariables();
                 for (int i = 0; i != vars.size(); ++i) {
                     WyilFile.Decl.Variable ith = vars.get(i);
                     String name = toVariableName(ith);
                     decls.add(new Decl.Variable(name, constructType(ith.getType())));
                 }
+                return false;
             }
 
             @Override
-            public Boolean constructAssign(WyilFile.Stmt.Assign stmt) {
-                super.visitAssign(stmt);
+            public Boolean constructAssign(WyilFile.Stmt.Assign stmt, List<Boolean> lvals, List<Boolean> rvals) {
                 if (!WyilUtils.isSimple(stmt) && WyilUtils.hasInterference(stmt, meter)) {
                     Tuple<WyilFile.LVal> lhs = stmt.getLeftHandSide();
                     for (int i = 0, k = 0; i != lhs.size(); ++i) {
@@ -492,11 +486,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                         }
                     }
                 }
+                return false;
             }
 
             @Override
-            public Boolean constructFor(WyilFile.Stmt.For stmt) {
-                super.visitFor(stmt);
+            public Boolean constructFor(WyilFile.Stmt.For stmt, Boolean var, List<Boolean> invariants, Boolean body) {
                 WyilFile.Decl.StaticVariable v = stmt.getVariable();
                 String name = toVariableName(v);
                 Type type = constructType(v.getType());
@@ -507,43 +501,72 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     // can be used as the reference point.
                     decls.add(new Decl.Variable("HEAP$" + stmt.getIndex(), REFMAP));
                 }
+                return false;
             }
 
             @Override
-            public Boolean constructWhile(WyilFile.Stmt.While stmt) {
-                super.visitWhile(stmt);
+            public Boolean constructWhile(WyilFile.Stmt.While stmt, Boolean condition, List<Boolean> invariants, Boolean body) {
                 if(!isPure(stmt)) {
                     // Loop modifies heap in some way.  Hence, need to store a copy of HEAP at beginning of loop which
                     // can be used as the reference point.
                     decls.add(new Decl.Variable("HEAP$" + stmt.getIndex(), REFMAP));
                 }
+                return false;
             }
 
             @Override
-            public Boolean constructDoWhile(WyilFile.Stmt.DoWhile stmt) {
-                super.visitDoWhile(stmt);
+            public Boolean constructDoWhile(WyilFile.Stmt.DoWhile stmt, Boolean condition, List<Boolean> invariants, Boolean body) {
                 if(!isPure(stmt)) {
                     // Loop modifies heap in some way.  Hence, need to store a copy of HEAP at beginning of loop which
                     // can be used as the reference point.
                     decls.add(new Decl.Variable("HEAP$" + stmt.getIndex(), REFMAP));
                 }
+                return false;
             }
 
             @Override
-            public Boolean constructDeclaration(WyilFile.Decl d) {
-                // Prevent unexpected traverals of declarations.
+            public Boolean constructLambda(WyilFile.Decl.Lambda decl, Boolean body) {
+                // NOTE: we don't construct locals through a lambda since the body of the lambda
+                // will be extracted into a standalone procedure.
+                return true;
             }
 
             @Override
-            public Boolean constructNew(WyilFile.Expr.New expr) {
-                super.visitNew(expr);
+            public Boolean constructLogicalAnd(WyilFile.Expr.LogicalAnd expr, List<Boolean> operands) {
+                Boolean r = join(operands);
+                if(r) {
+                    decls.add(new Decl.Variable(TEMP(expr), Type.Bool));
+                }
+                return r;
+            }
+
+            @Override
+            public Boolean constructLogicalImplication(WyilFile.Expr.LogicalImplication expr, Boolean lhs, Boolean rhs) {
+                Boolean r = join(lhs,rhs);
+                if(r) {
+                    decls.add(new Decl.Variable(TEMP(expr), Type.Bool));
+                }
+                return r;
+            }
+
+            @Override
+            public Boolean constructLogicalOr(WyilFile.Expr.LogicalOr expr, List<Boolean> operands) {
+                Boolean r = join(operands);
+                if(r) {
+                    decls.add(new Decl.Variable(TEMP(expr), Type.Bool));
+                }
+                return r;
+            }
+
+            @Override
+            public Boolean constructNew(WyilFile.Expr.New expr, Boolean operand) {
                 String name = TEMP(expr);
                 decls.add(new Decl.Variable(name, REF));
+                return true;
             }
 
             @Override
-            public Boolean constructInvoke(WyilFile.Expr.Invoke expr) {
-                super.visitInvoke(expr);
+            public Boolean constructInvoke(WyilFile.Expr.Invoke expr, List<Boolean> operands) {
                 WyilFile.Decl.Callable ft = expr.getLink().getTarget();
                 if (ft instanceof WyilFile.Decl.FunctionOrMethod) {
                     WyilFile.Type type = ft.getType().getReturn();
@@ -556,12 +579,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                                     constructType(type.dimension(i))));
                         }
                     }
+                    return true;
+                } else {
+                    return join(operands);
                 }
             }
 
             @Override
-            public Boolean constructIndirectInvoke(WyilFile.Expr.IndirectInvoke expr) {
-                super.visitIndirectInvoke(expr);
+            public Boolean constructIndirectInvoke(WyilFile.Expr.IndirectInvoke expr, Boolean source, List<Boolean> operands) {
                 WyilFile.Type.Callable ft = expr.getSource().getType().as(WyilFile.Type.Callable.class);
                 //
                 if (!(ft instanceof WyilFile.Type.Property)) {
@@ -576,12 +601,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                                     constructType(type.dimension(i))));
                         }
                     }
+                    return true;
+                } else {
+                    return join(source,join(operands));
                 }
-            }
-
-            @Override
-            public Boolean visitType(WyilFile.Type t) {
-                return false;
             }
         }.visitStatement(blk);
         // Done
@@ -1154,7 +1177,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         Pair<List<Stmt>, Expr> f1 = flatternImpureExpression(source);
         Pair<List<Stmt>, List<Expr>> f2 = flatternImpureExpressions(args);
         // Add side effects
-        ArrayList<Stmt> stmts = new ArrayList<>(f1.first());
+        ArrayList<Stmt> stmts = new ArrayList<>();
+        stmts.addAll(f1.first());
         stmts.addAll(f2.first());
         //
         args = f2.second();
@@ -1889,27 +1913,57 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                  }
              }
         };
-        ArrayList<Stmt> stmts = new ArrayList<>();
         // Flatten expression
-        Expr r = new AbstractExpressionTransform() {
+        Pair<Stmt,Expr> r = new AbstractExpressionTransform<Stmt>() {
+
+            public Stmt join(Stmt lhs, Stmt rhs) {
+                if (lhs == null) {
+                    return rhs;
+                } else if (rhs == null) {
+                    return lhs;
+                } else {
+                    return SEQUENCE(lhs, rhs);
+                }
+            }
+
+            public Stmt join(List<Stmt> stmts) {
+                ArrayList<Stmt> r = new ArrayList<>();
+                for (Stmt s : stmts) {
+                    if (s != null) {
+                        r.add(s);
+                    }
+                }
+                if (r.size() == 1) {
+                    return r.get(0);
+                } else {
+                    return SEQUENCE(r);
+                }
+            }
+
             @Override
-            public Expr.Logical visitLogical(Expr e) {
+            public Pair<Stmt,Expr> visitLogical(Expr e) {
                 if (e instanceof FauxTuple) {
                     FauxTuple ft = (FauxTuple) e;
                     ArrayList<Expr> rs = new ArrayList<>();
+                    ArrayList<Stmt> ss = new ArrayList<>();
                     for (Expr fe : ft.items) {
-                        rs.add(super.visitExpression(fe));
+                        Pair<Stmt, Expr> p = super.visitExpression(fe);
+                        if(p.first() != null) {
+                            ss.add(p.first());
+                        }
+                        rs.add(p.second());
                     }
-                    return new FauxTuple(rs);
+                    return new Pair<>(SEQUENCE(ss), new FauxTuple(rs));
                 } else {
                     return super.visitLogical(e);
                 }
             }
             @Override
-            public Expr.Logical constructInvoke(Expr.Invoke expr, List<Expr> arguments) {
+            public Pair<Stmt,Expr> constructInvoke(Expr.Invoke expr, List<Pair<Stmt,Expr>> arguments) {
                 SyntacticItem wyItem = expr.getAttribute(SyntacticItem.class);
                 // Check whether this corresponds to Whiley invocation or not.
                 if (wyItem instanceof WyilFile.Expr.Invoke) {
+                    ArrayList<Stmt> stmts = new ArrayList<>();
                     WyilFile.Expr.Invoke ivk = (WyilFile.Expr.Invoke) wyItem;
                     WyilFile.Type.Callable ft = ivk.getBinding().getConcreteType();
                     int returns = ivk.getType().shape();
@@ -1921,15 +1975,18 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                         arguments.remove(0);
                         // Add all well-definedness checks
                         for (int i = 0; i != arguments.size(); ++i) {
-                            Expr ith = arguments.get(i);
-                            stmts.addAll(extractor.visitExpression(ith));
+                            Pair<Stmt,Expr> ith = arguments.get(i);
+                            if(ith.first() != null) {
+                                stmts.add(ith.first());
+                            }
+                            stmts.addAll(extractor.visitExpression(ith.second()));
                         }
                         if (returns == 1) {
                             Expr.VariableAccess lval = VAR(TEMP((WyilFile.Expr) wyItem),expr.getAttributes());
                             // Add procedure call
-                            stmts.add(CALL(name, lval, arguments, expr.getAttributes()));
+                            stmts.add(CALL(name, lval, extractSecond(arguments), expr.getAttributes()));
                             // Return variable access
-                            return lval;
+                            return new Pair<>(SEQUENCE(stmts), lval);
                         } else {
                             // Determine invoke index
                             int n = Integer.valueOf(expr.getName().substring(name.length() + 1));
@@ -1941,10 +1998,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                             //
                             if (n == 0) {
                                 // Add procedure call only on first occurrence
-                                stmts.add(CALL(name, lvals, arguments, expr.getAttributes()));
+                                stmts.add(CALL(name, lvals, extractSecond(arguments), expr.getAttributes()));
                             }
                             // Return variable access
-                            return (Expr.VariableAccess) lvals.get(n);
+                            return new Pair<>(SEQUENCE(stmts), (Expr.VariableAccess) lvals.get(n));
                         }
                     }
                 } else if(wyItem instanceof WyilFile.Expr.IndirectInvoke) {
@@ -1955,19 +2012,23 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     String name = toLambdaMangle(ft);
                     // Check mangled name matches (otherwise is synthetic)
                     if (expr.getName().startsWith(name)) {
+                        ArrayList<Stmt> stmts = new ArrayList<>();
                         // Strip HEAP argument
                         arguments.remove(0);
                         // Add all well-definedness checks
                         for (int i = 0; i != arguments.size(); ++i) {
-                            Expr ith = arguments.get(i);
-                            stmts.addAll(extractor.visitExpression(ith));
+                            Pair<Stmt,Expr> ith = arguments.get(i);
+                            if(ith.first() != null) {
+                                stmts.add(ith.first());
+                            }
+                            stmts.addAll(extractor.visitExpression(ith.second()));
                         }
                         if (returns == 1) {
                             Expr.VariableAccess lval = VAR(TEMP((WyilFile.Expr) wyItem),expr.getAttributes());
                             // Add procedure call
-                            stmts.add(CALL(name, lval, arguments, expr.getAttributes()));
+                            stmts.add(CALL(name, lval, extractSecond(arguments), expr.getAttributes()));
                             // Return variable access
-                            return lval;
+                            return new Pair<>(SEQUENCE(stmts), lval);
                         } else {
                             // Determine invoke index
                             int n = Integer.valueOf(expr.getName().substring(name.length() + 1));
@@ -1979,58 +2040,114 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                             //
                             if (n == 0) {
                                 // Add procedure call only on first occurrence
-                                stmts.add(CALL(name, lvals, arguments, expr.getAttributes()));
+                                stmts.add(CALL(name, lvals, extractSecond(arguments), expr.getAttributes()));
                             }
                             // Return variable access
-                            return (Expr.VariableAccess) lvals.get(n);
+                            return new Pair<>(SEQUENCE(stmts), (Expr.VariableAccess) lvals.get(n));
                         }
                     }
                 } else if(wyItem instanceof WyilFile.Expr.New && expr.getName().equals("Ref#new")) {
+                    ArrayList<Stmt> stmts = new ArrayList<>();
                     Expr.VariableAccess lval = VAR(TEMP((WyilFile.Expr) wyItem),expr.getAttributes());
+                    // Add all well-definedness checks
+                    for (int i = 0; i != arguments.size(); ++i) {
+                        Pair<Stmt,Expr> ith = arguments.get(i);
+                        if(ith.first() != null) {
+                            stmts.add(ith.first());
+                        }
+                        stmts.addAll(extractor.visitExpression(ith.second()));
+                    }
                     // Add procedure call
-                    stmts.add(CALL(expr.getName(), lval, arguments, expr.getAttributes()));
+                    stmts.add(CALL(expr.getName(), lval, extractSecond(arguments), expr.getAttributes()));
                     // Return variable access
-                    return lval;
+                    return new Pair<>(SEQUENCE(stmts), lval);
                 }
                 return super.constructInvoke(expr, arguments);
             }
 
             @Override
-            public Expr.Logical constructLogicalAnd(Expr.LogicalAnd expr, List<Expr.Logical> operands) {
+            public Pair<Stmt,Expr> constructLogicalAnd(Expr.LogicalAnd expr, List<Pair<Stmt,Expr>> operands) {
                 SyntacticItem wyItem = expr.getAttribute(SyntacticItem.class);
                 //
                 if(equals(expr.getOperands(),operands)) {
-                    return expr;
+                    return new Pair<>(join(extractFirst(operands)), expr);
                 } else {
+                    ArrayList<Stmt> stmts = new ArrayList<>();
                     String lab = "END_" + wyItem.getIndex();
                     Expr.VariableAccess var = VAR(TEMP((WyilFile.Expr) wyItem), expr.getAttributes());
                     stmts.add(ASSIGN(var, CONST(false)));
                     for (int i = 0; i != operands.size(); ++i) {
+                        Pair<Stmt,Expr> ith = operands.get(i);
+                        Expr.Logical e = (Expr.Logical) ith.second();
+                        if(ith.first() != null) {
+                            stmts.add(ith.first());
+                        }
                         if((i+1) != operands.size()) {
-                            Expr.Logical ith = NOT(operands.get(i));
-                            stmts.add(IFELSE(ith, GOTO(lab), null));
+                            stmts.add(IFELSE(NOT(e), GOTO(lab), null));
                         } else {
-                            stmts.add(ASSIGN(var, operands.get(i)));
+                            stmts.add(ASSIGN(var, e));
                         }
                     }
                     stmts.add(LABEL(lab));
-                    return var;
+                    return new Pair<>(SEQUENCE(stmts), var);
                 }
             }
 
             @Override
-            public Expr.Logical constructLogicalOr(Expr.LogicalOr expr, List<Expr.Logical> operands) {
+            public Pair<Stmt,Expr> constructLogicalOr(Expr.LogicalOr expr, List<Pair<Stmt,Expr>> operands) {
+                SyntacticItem wyItem = expr.getAttribute(SyntacticItem.class);
+                //
                 if(equals(expr.getOperands(),operands)) {
-                    return expr;
+                    return new Pair<>(join(extractFirst(operands)), expr);
                 } else {
-                    throw new IllegalArgumentException("SPOTTED A PROBLEM!");
+                    ArrayList<Stmt> stmts = new ArrayList<>();
+                    String lab = "END_" + wyItem.getIndex();
+                    Expr.VariableAccess var = VAR(TEMP((WyilFile.Expr) wyItem), expr.getAttributes());
+                    stmts.add(ASSIGN(var, CONST(true)));
+                    for (int i = 0; i != operands.size(); ++i) {
+                        Pair<Stmt,Expr> ith = operands.get(i);
+                        Expr.Logical e = (Expr.Logical) ith.second();
+                        if(ith.first() != null) {
+                            stmts.add(ith.first());
+                        }
+                        if((i+1) != operands.size()) {
+                            stmts.add(IFELSE(e, GOTO(lab), null));
+                        } else {
+                            stmts.add(ASSIGN(var, e));
+                        }
+                    }
+                    stmts.add(LABEL(lab));
+                    return new Pair<>(SEQUENCE(stmts), var);
+                }
+            }
+
+            @Override
+            public Pair<Stmt, Expr> constructLogicalImplication(Expr.Implies expr, Pair<Stmt, Expr> lhs, Pair<Stmt, Expr> rhs) {
+                SyntacticItem wyItem = expr.getAttribute(SyntacticItem.class);
+                //
+                if (expr.getLeftHandSide() == lhs.second() && expr.getRightHandSide() == rhs.second()) {
+                    return new Pair<>(join(lhs.first(),rhs.first()), expr);
+                } else {
+                    ArrayList<Stmt> stmts = new ArrayList<>();
+                    String lab = "END_" + wyItem.getIndex();
+                    Expr.VariableAccess var = VAR(TEMP((WyilFile.Expr) wyItem), expr.getAttributes());
+                    stmts.add(ASSIGN(var, CONST(true)));
+                    if (lhs.first() != null) {
+                        stmts.add(lhs.first());
+                    }
+                    stmts.add(IFELSE(NOT((Expr.Logical) lhs.second()), GOTO(lab), null));
+                    if (rhs.first() != null) {
+                        stmts.add(rhs.first());
+                    }
+                    stmts.add(ASSIGN(var, rhs.second()));
+                    stmts.add(LABEL(lab));
+                    return new Pair<>(SEQUENCE(stmts), var);
                 }
             }
         }.visitExpression(e);
-        // Extract well-definedness conditions
-        stmts.addAll(extractor.visitExpression(r));
         // Done
-        return new Pair<>(stmts, r);
+        List<Stmt> stmts = (r.first() == null) ? Collections.EMPTY_LIST : Arrays.asList(r.first());
+        return new Pair<>(stmts,r.second());
     }
 
     /**
