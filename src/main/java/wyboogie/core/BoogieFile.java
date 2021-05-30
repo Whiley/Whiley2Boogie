@@ -585,7 +585,8 @@ public class BoogieFile {
 			private final List<String> labels;
 
 			private Goto(Collection<String> labels, Attribute[] attributes) {
-				super(attributes);this.labels = new ArrayList<>(labels);
+				super(attributes);
+				this.labels = new ArrayList<>(labels);
 			}
 
 			public int size() {
@@ -598,6 +599,27 @@ public class BoogieFile {
 
 			public List<String> getLabels() {
 				return labels;
+			}
+		}
+
+		public static class Havoc extends AbstractItem implements Stmt {
+			private final List<String> vars;
+
+			private Havoc(Collection<String> labels, Attribute[] attributes) {
+				super(attributes);
+				this.vars = new ArrayList<>(labels);
+			}
+
+			public int size() {
+				return vars.size();
+			}
+
+			public String get(int i) {
+				return vars.get(i);
+			}
+
+			public List<String> getVariables() {
+				return vars;
 			}
 		}
 
@@ -614,18 +636,18 @@ public class BoogieFile {
 		}
 
 		public static class IfElse extends AbstractItem implements Stmt {
-			private final Expr condition;
+			private final Expr.Logical condition;
 			private final Stmt trueBranch;
 			private final Stmt falseBranch;
 
-			private IfElse(Expr condition, Stmt trueBranch, Stmt falseBranch, Attribute... attributes) {
+			private IfElse(Expr.Logical condition, Stmt trueBranch, Stmt falseBranch, Attribute... attributes) {
 				super(attributes);
 				this.condition = condition;
 				this.trueBranch = trueBranch;
 				this.falseBranch = falseBranch;
 			}
 
-			public Expr getCondition() {
+			public Expr.Logical getCondition() {
 				return condition;
 			}
 
@@ -639,18 +661,18 @@ public class BoogieFile {
 		}
 
 		public static class While extends AbstractItem implements Stmt {
-			private final Expr condition;
+			private final Expr.Logical condition;
 			private final List<Expr.Logical> invariant;
 			private final Stmt body;
 
-			private While(Expr condition, List<Expr.Logical> invariant, Stmt body, Attribute... attributes) {
+			private While(Expr.Logical condition, List<Expr.Logical> invariant, Stmt body, Attribute... attributes) {
 				super(attributes);
 				this.condition = condition;
 				this.invariant = new ArrayList<>(invariant);
 				this.body = body;
 			}
 
-			public Expr getCondition() {
+			public Expr.Logical getCondition() {
 				return condition;
 			}
 
@@ -875,6 +897,10 @@ public class BoogieFile {
 
 			public Logical getRightHandSide() {
 				return rhs;
+			}
+
+			public String toString() {
+				return "IMPLIES(" + lhs + "," + rhs + ")";
 			}
 		}
 
@@ -1442,6 +1468,9 @@ public class BoogieFile {
 
 	public static Stmt.Goto GOTO(String label, Attribute... attributes) {
 		return new Stmt.Goto(Arrays.asList(label),attributes);
+	}
+	public static Stmt.Havoc HAVOC(List<String> variables, Attribute... attributes) {
+		return new Stmt.Havoc(variables,attributes);
 	}
 	public static Stmt.While WHILE(Expr.Logical condition, List<Expr.Logical> invariant, Stmt body, Attribute... attributes) {
 		return new Stmt.While(condition, invariant, body, attributes);

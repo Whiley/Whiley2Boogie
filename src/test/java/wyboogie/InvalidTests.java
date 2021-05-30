@@ -53,7 +53,10 @@ import wyil.lang.WyilFile;
 
 @RunWith(Parameterized.class)
 public class InvalidTests {
-
+	/**
+	 * Configure Timeout to use for Boogie (in seconds)
+	 */
+	public final static int TIMEOUT = 60;
 	/**
 	 * The directory containing the source files for each test case. Every test
 	 * corresponds to a file in this directory.
@@ -158,6 +161,8 @@ public class InvalidTests {
 					BoogieCompileTask task = new BoogieCompileTask(project, bgTarget, wyilTarget);
 					// Enable verification!
 					task.setVerification(true);
+					// Set longer timeout
+					task.setTimeout(TIMEOUT);
 					// Configure debugging
 					task.setDebug(DEBUG);
 					// Submit the task for execution

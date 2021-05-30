@@ -47,6 +47,20 @@ public class Util {
      * @param <T>
      * @return
      */
+    public static <T> List<T> append(T left, T right) {
+        ArrayList<T> result = new ArrayList();
+        result.add(left);
+        result.add(right);
+        return result;
+    }
+
+    /**
+     * Functional list append.  This creates a fresh list containing both <code>left</code> and <code>right</code> operands.
+     * @param left
+     * @param right
+     * @param <T>
+     * @return
+     */
     public static <T> List<T> append(T left, List<T> right) {
         ArrayList<T> result = new ArrayList();
         result.add(left);
