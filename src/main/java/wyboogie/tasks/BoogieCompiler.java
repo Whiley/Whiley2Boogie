@@ -238,14 +238,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         List<Decl.Parameter> params = parametersAndConstraints.first();
         List<Decl.Parameter> returns = returnsAndConstraints.first();
         // Merge preconditions / postconditions
-        List<Expr.Logical> requires = flatternAsLogical(precondition);
-        List<Expr.Logical> ensures = flatternAsLogical(postcondition);
-        List<Expr.Logical> freeRequires = parametersAndConstraints.second();
-        List<Expr.Logical> freeEnsures = returnsAndConstraints.second();
+        List<Expr.Logical> requires = append(parametersAndConstraints.second(),flatternAsLogical(precondition));
+        List<Expr.Logical> ensures = append(returnsAndConstraints.second(),flatternAsLogical(postcondition));
         // Add useful comment
         decls.addAll(constructCommentHeading(d.getQualifiedName() + " : " + d.getType()));
         // Add method prototype
-        decls.addAll(constructProcedurePrototype(d, name, params, returns, requires, ensures, freeRequires, freeEnsures));
+        decls.addAll(constructProcedurePrototype(d, name, params, returns, requires, ensures));
         // Add any lambda's used within the method
         decls.addAll(constructLambdas(d));
         // Add implementation (if one exists)
@@ -257,7 +255,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         return new Decl.Sequence(decls);
     }
 
-    public List<Decl> constructProcedurePrototype(WyilFile.Decl.FunctionOrMethod d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, List<Expr.Logical> requires, List<Expr.Logical> ensures, List<Expr.Logical> freeRequires, List<Expr.Logical> freeEnsures) {
+    public List<Decl> constructProcedurePrototype(WyilFile.Decl.FunctionOrMethod d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, List<Expr.Logical> requires, List<Expr.Logical> ensures) {
+        List<Expr.Logical> freeRequires = new ArrayList<>();
+        List<Expr.Logical> freeEnsures = new ArrayList<>();
         List<String> modifies = Collections.EMPTY_LIST;
         ArrayList<Decl> decls = new ArrayList<>();
         // Add Context Level Guarantee

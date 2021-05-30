@@ -103,12 +103,9 @@ public class ValidTests {
 		IGNORED.put("Lambda_Valid_24","#59");
 		IGNORED.put("Lambda_Valid_25","#59");
 		IGNORED.put("Lambda_Valid_26","#52");
-		IGNORED.put("MethodRef_Valid_6","#60");
-		IGNORED.put("Process_Valid_6","#60");
 		IGNORED.put("Process_Valid_9","#56");
 		IGNORED.put("Process_Valid_10","#56");
 		IGNORED.put("Property_Valid_17","#55");
-		IGNORED.put("RecordAccess_Valid_1","#60");
 		IGNORED.put("RecursiveType_Valid_7","#98");
 		IGNORED.put("RecursiveType_Valid_19","#79");
 		IGNORED.put("RecursiveType_Valid_20","#79");
@@ -120,8 +117,6 @@ public class ValidTests {
 		IGNORED.put("Reference_Valid_29","#60");
 		IGNORED.put("Reference_Valid_33","#60");
 		IGNORED.put("Reference_Valid_39","#115");
-		IGNORED.put("UnknownReference_Valid_3","#60");
-
 		IGNORED.put("UnionType_Valid_2","#74");
 	}
 
