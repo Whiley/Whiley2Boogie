@@ -56,7 +56,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     /**
      * Flag to signal whether or not structured loops should be used.  By default this is enabled.
      */
-    private boolean structuredLoops = false;
+    private boolean structuredLoops = true;
 
     public BoogieCompiler(Meter meter, BoogieFile target) {
         super(meter, subtyping);

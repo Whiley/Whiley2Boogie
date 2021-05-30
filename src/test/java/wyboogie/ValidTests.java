@@ -117,7 +117,6 @@ public class ValidTests {
 		IGNORED.put("Reference_Valid_29","#60");
 		IGNORED.put("Reference_Valid_33","#60");
 		IGNORED.put("Reference_Valid_39","#115");
-		IGNORED.put("UnionType_Valid_2","#74");
 	}
 
 	// ======================================================================
