@@ -4,7 +4,7 @@ ensures r == xs[i]:
     return xs[i]
 
 
-public export method main():
+public export method test():
     int i = 0
     int[] xs = [1,2,3,0,2]
     //

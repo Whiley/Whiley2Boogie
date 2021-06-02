@@ -3,7 +3,7 @@ requires 0 <= i && i < |xs|:
     return xs[i]
 
 
-public export method main():
+public export method test():
     int i = 0
     int[] xs = [1,2,3,0,2]
     //
@@ -11,4 +11,4 @@ public export method main():
     where i >= 0:
         i = i + 1
     //
-    assume i == 2
+    assume i == 3

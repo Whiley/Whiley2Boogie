@@ -4,7 +4,7 @@ method fill(List l, int v)
 ensures l->data == v:
     l->data = v
 
-public export method main():
+public export method test():
     // Allocate two links
     List l1 = new {data:0, next:null}
     List l2 = new {data:0, next:l1}
