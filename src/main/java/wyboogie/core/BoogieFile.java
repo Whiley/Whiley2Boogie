@@ -51,6 +51,12 @@ public class BoogieFile {
 		}
 
 		@Override
+		public BoogieFile read(Path.ID id, InputStream input) throws IOException {
+			// FIXME: this is a bit of a kludge for now.
+			return new BoogieFile();
+		}
+
+		@Override
 		public void write(OutputStream output, BoogieFile bf) throws IOException {
 			new BoogieFilePrinter(output).write(bf);
 		}
