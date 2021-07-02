@@ -35,7 +35,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import wyboogie.core.BoogieFile;
-import wyboogie.tasks.BoogieCompileTask;
+import wyboogie.tasks.BoogieTask;
 import wybs.lang.Build;
 import wybs.lang.SyntacticException;
 import wybs.util.Logger;
@@ -158,7 +158,7 @@ public class InvalidTests {
 				@Override
 				public void apply(Collection<Build.Task> tasks) throws IOException {
 					// Construct a new build task
-					BoogieCompileTask task = new BoogieCompileTask(project, bgTarget, wyilTarget);
+					BoogieTask task = new BoogieTask(project, bgTarget, wyilTarget);
 					// Enable verification!
 					task.setVerification(true);
 					// Set longer timeout

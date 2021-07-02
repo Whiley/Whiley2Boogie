@@ -13,25 +13,21 @@
 // limitations under the License.
 package wyboogie.tasks;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.util.*;
-import java.util.function.Function;
+import java.util.List;
 
 import wyboogie.core.BoogieFile;
 import wyboogie.util.Boogie;
-import wybs.lang.Build;
-import wybs.lang.Build.Meter;
-import wybs.lang.SyntacticException;
-import wybs.lang.SyntacticHeap;
-import wybs.lang.SyntacticItem;
-import wybs.util.AbstractBuildTask;
+import wycc.lang.Build;
+import wycc.lang.Build.SnapShot;
+import wycc.lang.Filter;
+import wycc.lang.SyntacticException;
+import wycc.lang.SyntacticItem;
+import wycc.util.Pair;
 import wyc.util.ErrorMessages;
-import wyfs.lang.Path;
 import wyil.lang.WyilFile;
 
-public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
+public class BoogieTask implements Build.Task {
+	private final Build.Meter meter = Build.NULL_METER;
 	/**
 	 * Handle for the boogie verifier, making sure to enable the array theory (as
 	 * this really helps!)
@@ -53,9 +49,13 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 	 * Determines whether or not to verify generate files with Boogie.
 	 */
 	private boolean verification = false;
+	/**
+	 * Determine the set of files which will be compiled by this task.
+	 */
+	private final Filter includes = Filter.fromString("**/*");
 
-	public BoogieCompileTask(Build.Project project, Path.Entry<BoogieFile> target, Path.Entry<WyilFile> source) {
-		super(project, target, Arrays.asList(source));
+	public BoogieTask() {
+
 	}
 
 	public void setVerification(boolean flag) {
@@ -76,16 +76,21 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 	}
 
 	@Override
-	public Function<Meter,Boolean> initialise() throws IOException {
-		// Extract target and source files for compilation. This is the component which
-		// requires I/O.
-		BoogieFile bf = target.read();
-		WyilFile wyf = sources.get(0).read();
-		// Construct the lambda for subsequent execution. This will eventually make its
-		// way into some kind of execution pool, possibly for concurrent execution with
-		// other tasks.
-		return (Meter meter) -> execute(meter, bf, wyf);
+	public Pair<SnapShot, Boolean> apply(SnapShot t) {
+		boolean b = true;
+		// Identify all Whiley intermediate files
+		List<WyilFile> sources = t.match(WyilFile.class, includes);
+		//
+		for (WyilFile src : sources) {
+			BoogieFile bin = new BoogieFile(src.getPath());
+			b &= compile(bin, src);
+			// Write target into snapshot
+			t = t.put(bin);
+		}
+		// Done
+		return new Pair<>(t, b);
 	}
+
 
 	/**
 	 * The business end of a compilation task. The intention is that this
@@ -96,9 +101,7 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 	 * @param sources --- The WyilFile(s) being translated.
 	 * @return
 	 */
-	public boolean execute(Build.Meter meter, BoogieFile target, WyilFile source) {
-		meter = meter.fork("BoogieCompiler");
-		//
+	public boolean compile(BoogieFile target, WyilFile source) {
 		BoogieCompiler bc = new BoogieCompiler(meter,target);
 		// Configure debug mode (if applicable)
 		bc.setMangling(!debug);
@@ -108,12 +111,12 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 		meter.done();
 		//
 		if (verification) {
-			String id = source.getEntry().id().toString();
+			String id = source.getPath().toString();
 			Boogie.Message[] errors = verifier.check(timeout * 1000, id, target);
 			//
 			if(errors == null) {
 				// A timeout occurred
-				throw new SyntacticException("Boogie timeout after " + timeout + "s", source.getEntry(), null);
+				throw new SyntacticException("Boogie timeout after " + timeout + "s", source, null);
 			} else if(verbose && errors.length > 0) {
 				System.out.println("=================================================");
 				System.out.println("Errors: " + id);
@@ -163,7 +166,7 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 						}
 						default: {
 							// Fall back
-							throw new SyntacticException(err.toString(), source.getEntry(), wyItem);
+							throw new SyntacticException(err.toString(), source, wyItem);
 						}
 					}
 				}

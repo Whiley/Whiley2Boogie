@@ -13,15 +13,14 @@
 // limitations under the License.
 package wyboogie;
 
-import wybs.lang.Build;
-import wybs.util.AbstractBuildRule;
-import wybs.util.AbstractCompilationUnit.Value;
+import wycc.lang.Build;
+import wycc.util.AbstractCompilationUnit.Value;
 import wycli.cfg.Configuration;
 import wycli.lang.Command;
-import wycli.lang.Module;
-import wyfs.lang.Content;
-import wyfs.lang.Path;
-import wyfs.util.Trie;
+import wycli.lang.Plugin;
+import wycc.lang.Content;
+import wycc.lang.Path;
+import wycc.util.Trie;
 import wyil.lang.WyilFile;
 
 import java.io.IOException;
@@ -30,9 +29,9 @@ import java.util.Collection;
 import java.util.List;
 
 import wyboogie.core.BoogieFile;
-import wyboogie.tasks.BoogieCompileTask;
+import wyboogie.tasks.BoogieTask;
 
-public class Activator implements Module.Activator {
+public class Activator implements Plugin.Activator {
 
 	public static Trie PKGNAME_CONFIG_OPTION = Trie.fromString("package/name");
 	public static Trie SOURCE_CONFIG_OPTION = Trie.fromString("build/whiley/target");
@@ -96,7 +95,7 @@ public class Activator implements Module.Activator {
 				protected void apply(List<Path.Entry<WyilFile>> matches, Collection<Build.Task> tasks)
 						throws IOException {
 					// Construct a new build task
-					BoogieCompileTask task = new BoogieCompileTask(project, binary, matches.get(0));
+					BoogieTask task = new BoogieTask(project, binary, matches.get(0));
 					// Configure task
 					task.setVerbose(verbose);
 					task.setVerification(verification);

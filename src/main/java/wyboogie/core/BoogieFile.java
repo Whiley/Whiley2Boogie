@@ -24,10 +24,12 @@ import java.util.Collections;
 import java.util.List;
 
 import wyboogie.io.BoogieFilePrinter;
-import wyfs.lang.Content;
-import wyfs.lang.Path;
+import wycc.lang.Build;
+import wycc.lang.Build.Artifact;
+import wycc.lang.Content;
+import wycc.lang.Path;
 
-public class BoogieFile {
+public class BoogieFile implements Build.Artifact {
 	// =========================================================================
 	// Content Type
 	// =========================================================================
@@ -37,23 +39,11 @@ public class BoogieFile {
 	 * extension is ".wyil" for WyilFiles.
 	 */
 	public static final Content.Type<BoogieFile> ContentType = new Content.Type<BoogieFile>() {
-		public Path.Entry<BoogieFile> accept(Path.Entry<?> e) {
-			if (e.contentType() == this) {
-				return (Path.Entry<BoogieFile>) e;
-			}
-			return null;
-		}
 
 		@Override
-		public BoogieFile read(Path.Entry<BoogieFile> e, InputStream input) throws IOException {
+		public BoogieFile read(Path path, InputStream input) throws IOException {
 			// FIXME: this is a bit of a kludge for now.
-			return new BoogieFile();
-		}
-
-		@Override
-		public BoogieFile read(Path.ID id, InputStream input) throws IOException {
-			// FIXME: this is a bit of a kludge for now.
-			return new BoogieFile();
+			return new BoogieFile(path);
 		}
 
 		@Override
@@ -70,19 +60,36 @@ public class BoogieFile {
 		public String getSuffix() {
 			return "bpl";
 		}
+
+		@Override
+		public boolean includes(Class<?> kind) {
+			return kind == BoogieFile.class;
+		}
 	};
 
+	private final Path path;
 	/**
 	 * The list of top-level declarations within this file.
 	 */
 	private List<Decl> declarations;
 
-	public BoogieFile() {
+	public BoogieFile(Path path) {
+		this.path = path;
 		this.declarations = new ArrayList<>();
 	}
 
 	public List<Decl> getDeclarations() {
 		return declarations;
+	}
+
+	@Override
+	public Path getPath() {
+		return path;
+	}
+
+	@Override
+	public wycc.lang.Content.Type<? extends Artifact> getContentType() {
+		return ContentType;
 	}
 
 	// =========================================================================
@@ -123,6 +130,7 @@ public class BoogieFile {
 			return null;
 		}
 
+		@Override
 		public Attribute[] getAttributes() {
 			return attributes;
 		}
@@ -764,10 +772,12 @@ public class BoogieFile {
 				this.rhs = rhs;
 			}
 
+			@Override
 			public Expr getLeftHandSide() {
 				return lhs;
 			}
 
+			@Override
 			public Expr getRightHandSide() {
 				return rhs;
 			}
@@ -783,10 +793,12 @@ public class BoogieFile {
 				this.rhs = rhs;
 			}
 
+			@Override
 			public Expr getLeftHandSide() {
 				return lhs;
 			}
 
+			@Override
 			public Expr getRightHandSide() {
 				return rhs;
 			}
@@ -802,10 +814,12 @@ public class BoogieFile {
 				this.rhs = rhs;
 			}
 
+			@Override
 			public Expr getLeftHandSide() {
 				return lhs;
 			}
 
+			@Override
 			public Expr getRightHandSide() {
 				return rhs;
 			}
@@ -821,10 +835,12 @@ public class BoogieFile {
 				this.rhs = rhs;
 			}
 
+			@Override
 			public Expr getLeftHandSide() {
 				return lhs;
 			}
 
+			@Override
 			public Expr getRightHandSide() {
 				return rhs;
 			}
@@ -840,10 +856,12 @@ public class BoogieFile {
 				this.rhs = rhs;
 			}
 
+			@Override
 			public Expr getLeftHandSide() {
 				return lhs;
 			}
 
+			@Override
 			public Expr getRightHandSide() {
 				return rhs;
 			}
@@ -859,10 +877,12 @@ public class BoogieFile {
 				this.rhs = rhs;
 			}
 
+			@Override
 			public Expr getLeftHandSide() {
 				return lhs;
 			}
 
+			@Override
 			public Expr getRightHandSide() {
 				return rhs;
 			}
@@ -878,10 +898,12 @@ public class BoogieFile {
 				this.rhs = rhs;
 			}
 
+			@Override
 			public Logical getLeftHandSide() {
 				return lhs;
 			}
 
+			@Override
 			public Logical getRightHandSide() {
 				return rhs;
 			}
@@ -897,14 +919,17 @@ public class BoogieFile {
 				this.rhs = rhs;
 			}
 
+			@Override
 			public Logical getLeftHandSide() {
 				return lhs;
 			}
 
+			@Override
 			public Logical getRightHandSide() {
 				return rhs;
 			}
 
+			@Override
 			public String toString() {
 				return "IMPLIES(" + lhs + "," + rhs + ")";
 			}
@@ -920,10 +945,12 @@ public class BoogieFile {
 				this.rhs = rhs;
 			}
 
+			@Override
 			public Expr getLeftHandSide() {
 				return lhs;
 			}
 
+			@Override
 			public Expr getRightHandSide() {
 				return rhs;
 			}
@@ -939,10 +966,12 @@ public class BoogieFile {
 				this.rhs = rhs;
 			}
 
+			@Override
 			public Expr getLeftHandSide() {
 				return lhs;
 			}
 
+			@Override
 			public Expr getRightHandSide() {
 				return rhs;
 			}
@@ -958,10 +987,12 @@ public class BoogieFile {
 				this.rhs = rhs;
 			}
 
+			@Override
 			public Expr getLeftHandSide() {
 				return lhs;
 			}
 
+			@Override
 			public Expr getRightHandSide() {
 				return rhs;
 			}
@@ -977,10 +1008,12 @@ public class BoogieFile {
 				this.rhs = rhs;
 			}
 
+			@Override
 			public Expr getLeftHandSide() {
 				return lhs;
 			}
 
+			@Override
 			public Expr getRightHandSide() {
 				return rhs;
 			}
@@ -996,10 +1029,12 @@ public class BoogieFile {
 				this.rhs = rhs;
 			}
 
+			@Override
 			public Expr getLeftHandSide() {
 				return lhs;
 			}
 
+			@Override
 			public Expr getRightHandSide() {
 				return rhs;
 			}
@@ -1015,10 +1050,12 @@ public class BoogieFile {
 				this.rhs = rhs;
 			}
 
+			@Override
 			public Expr getLeftHandSide() {
 				return lhs;
 			}
 
+			@Override
 			public Expr getRightHandSide() {
 				return rhs;
 			}
@@ -1048,6 +1085,7 @@ public class BoogieFile {
 				return value;
 			}
 
+			@Override
 			public String toString() {
 				return "INT(" + value + ")";
 			}
@@ -1084,6 +1122,7 @@ public class BoogieFile {
 				return index;
 			}
 
+			@Override
 			public String toString() {
 				return "GET(" + source + ", " + index + ")";
 			}
@@ -1113,6 +1152,7 @@ public class BoogieFile {
 				return value;
 			}
 
+			@Override
 			public String toString() {
 				return "PUT(" + source + ", " + index + "," + value + ")";
 			}
@@ -1136,6 +1176,7 @@ public class BoogieFile {
 				return arguments;
 			}
 
+			@Override
 			public String toString() {
 				return "FNCALL(" + name + "," + arguments.toString() + ")";
 			}
@@ -1148,6 +1189,7 @@ public class BoogieFile {
 				super(attributes);this.operand = operand;
 			}
 
+			@Override
 			public Expr getOperand() {
 				return operand;
 			}
@@ -1161,10 +1203,12 @@ public class BoogieFile {
 				this.operand = operand;
 			}
 
+			@Override
 			public Expr getOperand() {
 				return operand;
 			}
 
+			@Override
 			public String toString() {
 				return "OLD(" + operand + ")";
 			}
@@ -1177,10 +1221,12 @@ public class BoogieFile {
 				super(attributes); this.operand = operand;
 			}
 
+			@Override
 			public Logical getOperand() {
 				return operand;
 			}
 
+			@Override
 			public String toString() {
 				return "NOT(" + operand + ")";
 			}
@@ -1194,6 +1240,7 @@ public class BoogieFile {
 				this.operands = new ArrayList<>(operands);
 			}
 
+			@Override
 			public List<Logical> getOperands() {
 				return operands;
 			}
@@ -1207,6 +1254,7 @@ public class BoogieFile {
 				this.operands = new ArrayList<>(operands);
 			}
 
+			@Override
 			public List<Logical> getOperands() {
 				return operands;
 			}
@@ -1222,10 +1270,12 @@ public class BoogieFile {
 				this.body = body;
 			}
 
+			@Override
 			public List<Decl.Parameter> getParameters() {
 				return parameters;
 			}
 
+			@Override
 			public Logical getBody() {
 				return body;
 			}
@@ -1241,10 +1291,12 @@ public class BoogieFile {
 				this.body = body;
 			}
 
+			@Override
 			public List<Decl.Parameter> getParameters() {
 				return parameters;
 			}
 
+			@Override
 			public Logical getBody() {
 				return body;
 			}
@@ -1265,6 +1317,7 @@ public class BoogieFile {
 				return variable;
 			}
 
+			@Override
 			public String toString() {
 				return "VAR(" + variable + ")";
 			}
@@ -1742,4 +1795,5 @@ public class BoogieFile {
 	public static Expr.VariableAccess VAR(String name, Attribute... attributes) {
 		return new Expr.VariableAccess(name,attributes);
 	}
+
 }
