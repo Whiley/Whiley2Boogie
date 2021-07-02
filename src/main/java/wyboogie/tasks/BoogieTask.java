@@ -13,30 +13,37 @@
 // limitations under the License.
 package wyboogie.tasks;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.util.*;
-import java.util.function.Function;
+import java.util.Collections;
+import java.util.List;
 
 import wyboogie.core.BoogieFile;
 import wyboogie.util.Boogie;
-import wybs.lang.Build;
-import wybs.lang.Build.Meter;
-import wybs.lang.SyntacticException;
-import wybs.lang.SyntacticHeap;
-import wybs.lang.SyntacticItem;
-import wybs.util.AbstractBuildTask;
+import wycc.lang.Build;
+import wycc.lang.Build.Artifact;
+import wycc.lang.Build.SnapShot;
+import wycc.lang.Filter;
+import wycc.lang.Path;
+import wycc.lang.SyntacticException;
+import wycc.lang.SyntacticItem;
+import wycc.util.Pair;
 import wyc.util.ErrorMessages;
-import wyfs.lang.Path;
 import wyil.lang.WyilFile;
 
-public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
+public class BoogieTask implements Build.Task {
+	private final Build.Meter meter = Build.NULL_METER;
 	/**
 	 * Handle for the boogie verifier, making sure to enable the array theory (as
 	 * this really helps!)
 	 */
 	private final Boogie verifier = new Boogie().setArrayTheory();
+	/**
+	 * The source file that this task will compiler from.
+	 */
+	private final Path source;
+	/**
+	 * Identifier for target of this build task.
+	 */
+	private final Path target;
 	/**
 	 * Specify whether to print verbose progress messages or not
 	 */
@@ -52,53 +59,81 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 	/**
 	 * Determines whether or not to verify generate files with Boogie.
 	 */
-	private boolean verification = false;
+	private boolean verification = true;
+	/**
+	 * Determine the set of files which will be compiled by this task.
+	 */
+	private final Filter includes = Filter.fromString("**/*");
 
-	public BoogieCompileTask(Build.Project project, Path.Entry<BoogieFile> target, Path.Entry<WyilFile> source) {
-		super(project, target, Arrays.asList(source));
+	public BoogieTask(Path target, Path source) {
+		if(target == null) {
+			throw new IllegalArgumentException("invalid target");
+		} else if(source == null) {
+			throw new IllegalArgumentException("invalid source");
+		}
+		this.target = target;
+		this.source = source;
 	}
 
-	public void setVerification(boolean flag) {
+	public BoogieTask setVerification(boolean flag) {
 		this.verification = flag;
+		return this;
 	}
 
-	public void setVerbose(boolean flag) {
+	public BoogieTask setVerbose(boolean flag) {
 		this.verbose = flag;
+		return this;
 	}
 
-	public void setDebug(boolean flag) {
+	public BoogieTask setDebug(boolean flag) {
 		this.debug = flag;
+		return this;
 	}
 
-
-	public void setTimeout(int timeout) {
+	public BoogieTask setTimeout(int timeout) {
 		this.timeout = timeout;
+		return this;
 	}
 
 	@Override
-	public Function<Meter,Boolean> initialise() throws IOException {
-		// Extract target and source files for compilation. This is the component which
-		// requires I/O.
-		BoogieFile bf = target.read();
-		WyilFile wyf = sources.get(0).read();
-		// Construct the lambda for subsequent execution. This will eventually make its
-		// way into some kind of execution pool, possibly for concurrent execution with
-		// other tasks.
-		return (Meter meter) -> execute(meter, bf, wyf);
+	public Path getPath() {
+		return target;
 	}
+
+	@Override
+	public Type<? extends Artifact> getContentType() {
+		return BoogieFile.ContentType;
+	}
+
+	@Override
+	public List<? extends Artifact> getSourceArtifacts() {
+		return Collections.EMPTY_LIST;
+	}
+
+	@Override
+	public Pair<SnapShot, Boolean> apply(SnapShot snapshot) {
+		// Read out WyilFile being translated into Boogie.
+		WyilFile binary = snapshot.get(WyilFile.ContentType, source);
+		// Construct new Boogie file
+		Pair<BoogieFile,Boolean> r = compile(binary);
+		// Write target into snapshot
+		snapshot = snapshot.put(r.first());
+		// Done
+		return new Pair<>(snapshot, r.second());
+	}
+
 
 	/**
 	 * The business end of a compilation task. The intention is that this
 	 * computation can proceed without performing any blocking I/O. This means it
 	 * can be used in e.g. a forkjoin task safely.
 	 *
-	 * @param target  --- The Boogie being written.
-	 * @param sources --- The WyilFile(s) being translated.
+	 * @param source --- The WyilFile being translated.
 	 * @return
 	 */
-	public boolean execute(Build.Meter meter, BoogieFile target, WyilFile source) {
-		meter = meter.fork("BoogieCompiler");
-		//
+	public Pair<BoogieFile,Boolean> compile(WyilFile source) {
+		boolean result = true;
+		BoogieFile target = new BoogieFile(source.getPath());
 		BoogieCompiler bc = new BoogieCompiler(meter,target);
 		// Configure debug mode (if applicable)
 		bc.setMangling(!debug);
@@ -108,12 +143,12 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 		meter.done();
 		//
 		if (verification) {
-			String id = source.getEntry().id().toString();
+			String id = source.getPath().toString();
 			Boogie.Message[] errors = verifier.check(timeout * 1000, id, target);
 			//
 			if(errors == null) {
 				// A timeout occurred
-				throw new SyntacticException("Boogie timeout after " + timeout + "s", source.getEntry(), null);
+				throw new SyntacticException("Boogie timeout after " + timeout + "s", source, null);
 			} else if(verbose && errors.length > 0) {
 				System.out.println("=================================================");
 				System.out.println("Errors: " + id);
@@ -163,15 +198,14 @@ public class BoogieCompileTask extends AbstractBuildTask<WyilFile, BoogieFile> {
 						}
 						default: {
 							// Fall back
-							throw new SyntacticException(err.toString(), source.getEntry(), wyItem);
+							throw new SyntacticException(err.toString(), source, wyItem);
 						}
 					}
 				}
 			}
-			return errors != null && errors.length == 0;
+			result = errors != null && errors.length == 0;
 		}
 		//
-		return true;
+		return new Pair<>(target,result);
 	}
-
 }
