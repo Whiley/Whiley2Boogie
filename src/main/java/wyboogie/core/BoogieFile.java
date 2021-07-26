@@ -41,11 +41,10 @@ public class BoogieFile implements Build.Artifact {
 	public static final Content.Type<BoogieFile> ContentType = new Content.Type<BoogieFile>() {
 
 		@Override
-		public BoogieFile read(Path path, InputStream input) throws IOException {
+		public BoogieFile read(Path path, InputStream input, Registry registry) throws IOException {
 			// FIXME: this is a bit of a kludge for now.
 			return new BoogieFile(path);
 		}
-
 		@Override
 		public void write(OutputStream output, BoogieFile bf) throws IOException {
 			new BoogieFilePrinter(output).write(bf);
@@ -90,6 +89,11 @@ public class BoogieFile implements Build.Artifact {
 	@Override
 	public wycc.lang.Content.Type<? extends Artifact> getContentType() {
 		return ContentType;
+	}
+
+	@Override
+	public List<? extends Artifact> getSourceArtifacts() {
+		throw new UnsupportedOperationException();
 	}
 
 	// =========================================================================
@@ -1795,5 +1799,4 @@ public class BoogieFile implements Build.Artifact {
 	public static Expr.VariableAccess VAR(String name, Attribute... attributes) {
 		return new Expr.VariableAccess(name,attributes);
 	}
-
 }

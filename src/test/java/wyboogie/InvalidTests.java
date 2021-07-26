@@ -36,18 +36,18 @@ import org.junit.runners.Parameterized.Parameters;
 
 import wyboogie.core.BoogieFile;
 import wyboogie.tasks.BoogieTask;
-import wybs.lang.Build;
-import wybs.lang.SyntacticException;
-import wybs.util.Logger;
-import wybs.util.SequentialBuildProject;
+import wycc.lang.Build;
+import wycc.lang.SyntacticException;
+import wycc.util.Logger;
 
 import wyc.lang.WhileyFile;
 import wyc.task.CompileTask;
 import wyc.util.TestUtils;
-import wyfs.lang.Content;
-import wyfs.lang.Path;
-import wyfs.util.DirectoryRoot;
-import wyfs.util.Pair;
+import wycc.lang.Content;
+import wycc.lang.Path;
+import wycc.util.ByteRepository;
+import wycc.util.DirectoryRoot;
+import wycc.util.Pair;
 import wyil.lang.WyilFile;
 
 
@@ -88,7 +88,7 @@ public class InvalidTests {
  	protected void runTest(String name) throws IOException {
 		// Compile to Java Bytecode
 		Pair<Boolean, String> p = compileWhiley2Boogie(
-				WHILEY_SRC_DIR, // location of source directory
+				new File(WHILEY_SRC_DIR), // location of source directory
 				name); // name of test to compile
 		boolean r = p.first();
 		System.out.println(p.second());
@@ -122,60 +122,43 @@ public class InvalidTests {
 	 * @return
 	 * @throws IOException
 	 */
-	public static Pair<Boolean,String> compileWhiley2Boogie(String whileydir, String arg) throws IOException {
+	public static Pair<Boolean,String> compileWhiley2Boogie(File whileydir, String arg) throws IOException {
 		ByteArrayOutputStream syserr = new ByteArrayOutputStream();
 		ByteArrayOutputStream sysout = new ByteArrayOutputStream();
+		String filename = arg + ".whiley";
+		// Determine the ID of the test being compiler
+		Path path = Path.fromString(arg);
 		PrintStream psyserr = new PrintStream(syserr);
-		// Construct the project
-		DirectoryRoot root = new DirectoryRoot(whileydir, registry);
+		// Construct the directory root
+		DirectoryRoot root = new DirectoryRoot(registry, whileydir, f -> {
+			return f.getName().equals(filename);
+		});
 		//
 		boolean result = true;
 		//
 		try {
-			//
-			SequentialBuildProject project = new SequentialBuildProject(root);
-			// Identify source files and target files
-			Pair<Path.Entry<WhileyFile>,Path.Entry<WyilFile>> p = TestUtils.findSourceFiles(root,arg);
-			List<Path.Entry<WhileyFile>> sources = Arrays.asList(p.first());
-			Path.Entry<WyilFile> wyilTarget = p.second();
-			// Add Whiley => WyIL build rule
-			project.add(new Build.Rule() {
-				@Override
-				public void apply(Collection<Build.Task> tasks) throws IOException {
-					// Construct a new build task
-					CompileTask task = new CompileTask(project, Logger.NULL, root, wyilTarget, sources);
-					// Submit the task for execution
-					tasks.add(task);
-				}
-			});
-			// Construct an empty BoogieFile
-			Path.Entry<BoogieFile> bgTarget = root.create(wyilTarget.id(), BoogieFile.ContentType);
-			BoogieFile bgFile = new BoogieFile();
-			// Write out the Boogie file
-			bgTarget.write(bgFile);
-			// Add WyIL => Boogie Build Rule
-			project.add(new Build.Rule() {
-				@Override
-				public void apply(Collection<Build.Task> tasks) throws IOException {
-					// Construct a new build task
-					BoogieTask task = new BoogieTask(project, bgTarget, wyilTarget);
-					// Enable verification!
-					task.setVerification(true);
-					// Set longer timeout
-					task.setTimeout(TIMEOUT);
-					// Configure debugging
-					task.setDebug(DEBUG);
-					// Submit the task for execution
-					tasks.add(task);
-				}
-			});
-			project.refresh();
-			// Actually force the project to build
-			result = project.build(ForkJoinPool.commonPool(), Build.NULL_METER).get();
-			// Check whether any syntax error produced
-			result = !TestUtils.findSyntaxErrors(wyilTarget.read().getRootItem(), new BitSet());
-			// Print out any error messages
-			wycli.commands.Build.printSyntacticMarkers(psyserr, (List) sources, (Path.Entry) wyilTarget);
+			// Extract source file
+			WhileyFile source = root.get(WhileyFile.ContentType, path);
+			// Construct build repository
+			Build.Repository repository = new ByteRepository(registry, source);
+			// Apply Whiley Compiler to repository
+			repository.apply(s -> new CompileTask(path, source).apply(s).first());
+			// Apply Boogie Compiler to repository
+
+			// FIXME: this is broken because we ignore the boolean result for both the
+			// CompileTask above, and the BoogieTask below. This is not right. A better
+			// solution would be for test utils to provide a generic pipeline mechanism.
+
+			repository.apply(s -> new BoogieTask().apply(s).first());
+			result = false;
+			// Read out binary file from build repository
+			WyilFile target = repository.get(WyilFile.ContentType, path);
+			// Write binary file to directory
+			root.put(path, target);
+			// Check whether result valid (or not)
+			result = target.isValid();
+			// Print out syntactic markers
+			wycli.commands.BuildSystem.printSyntacticMarkers(psyserr, target, source);
 		} catch (SyntacticException e) {
 			// Print out the syntax error
 			e.outputSourceError(new PrintStream(syserr),false);

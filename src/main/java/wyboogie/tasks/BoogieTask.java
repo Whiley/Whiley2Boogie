@@ -13,13 +13,16 @@
 // limitations under the License.
 package wyboogie.tasks;
 
+import java.util.Collections;
 import java.util.List;
 
 import wyboogie.core.BoogieFile;
 import wyboogie.util.Boogie;
 import wycc.lang.Build;
+import wycc.lang.Build.Artifact;
 import wycc.lang.Build.SnapShot;
 import wycc.lang.Filter;
+import wycc.lang.Path;
 import wycc.lang.SyntacticException;
 import wycc.lang.SyntacticItem;
 import wycc.util.Pair;
@@ -58,6 +61,11 @@ public class BoogieTask implements Build.Task {
 
 	}
 
+	@Override
+	public Path getPath() {
+		throw new UnsupportedOperationException();
+	}
+
 	public void setVerification(boolean flag) {
 		this.verification = flag;
 	}
@@ -70,16 +78,25 @@ public class BoogieTask implements Build.Task {
 		this.debug = flag;
 	}
 
-
 	public void setTimeout(int timeout) {
 		this.timeout = timeout;
+	}
+
+	@Override
+	public Type<? extends Artifact> getContentType() {
+		return BoogieFile.ContentType;
+	}
+
+	@Override
+	public List<? extends Artifact> getSourceArtifacts() {
+		return Collections.EMPTY_LIST;
 	}
 
 	@Override
 	public Pair<SnapShot, Boolean> apply(SnapShot t) {
 		boolean b = true;
 		// Identify all Whiley intermediate files
-		List<WyilFile> sources = t.match(WyilFile.class, includes);
+		List<WyilFile> sources = t.getAll(WyilFile.ContentType, includes);
 		//
 		for (WyilFile src : sources) {
 			BoogieFile bin = new BoogieFile(src.getPath());
@@ -176,5 +193,4 @@ public class BoogieTask implements Build.Task {
 		//
 		return true;
 	}
-
 }

@@ -235,11 +235,11 @@ public class ValidTests {
 		//
 		try {
 			// Extract source file
-			WhileyFile source = root.get(WhileyFile.class, path);
+			WhileyFile source = root.get(WhileyFile.ContentType, path);
 			// Construct build repository
-			Build.Repository repository = new ByteRepository(source);
+			Build.Repository repository = new ByteRepository(registry, source);
 			// Apply Whiley Compiler to repository
-			repository.apply(s -> new CompileTask(path, Collections.EMPTY_LIST).apply(s).first());
+			repository.apply(s -> new CompileTask(path, source).apply(s).first());
 			// Apply Boogie Compiler to repository
 
 			// FIXME: this is broken because we ignore the boolean result for both the
@@ -248,13 +248,13 @@ public class ValidTests {
 
 			repository.apply(s -> new BoogieTask().apply(s).first());
 			// Read out binary file from build repository
-			WyilFile target = repository.get(WyilFile.class, path);
+			WyilFile target = repository.get(WyilFile.ContentType, path);
 			// Write binary file to directory
 			root.put(path, target);
 			// Check whether result valid (or not)
 			result = target.isValid();
 			// Print out syntactic markers
-			wycli.commands.Build.printSyntacticMarkers(psyserr, target, source);
+			wycli.commands.BuildSystem.printSyntacticMarkers(psyserr, target, source);
 		} catch (SyntacticException e) {
 			// Print out the syntax error
 			//e.outputSourceError(psyserr);
