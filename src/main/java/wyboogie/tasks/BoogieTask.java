@@ -37,6 +37,14 @@ public class BoogieTask implements Build.Task {
 	 */
 	private final Boogie verifier = new Boogie().setArrayTheory();
 	/**
+	 * The source file that this task will compiler from.
+	 */
+	private final Path source;
+	/**
+	 * Identifier for target of this build task.
+	 */
+	private final Path target;
+	/**
 	 * Specify whether to print verbose progress messages or not
 	 */
 	private boolean verbose = true;
@@ -51,35 +59,45 @@ public class BoogieTask implements Build.Task {
 	/**
 	 * Determines whether or not to verify generate files with Boogie.
 	 */
-	private boolean verification = false;
+	private boolean verification = true;
 	/**
 	 * Determine the set of files which will be compiled by this task.
 	 */
 	private final Filter includes = Filter.fromString("**/*");
 
-	public BoogieTask() {
+	public BoogieTask(Path target, Path source) {
+		if(target == null) {
+			throw new IllegalArgumentException("invalid target");
+		} else if(source == null) {
+			throw new IllegalArgumentException("invalid source");
+		}
+		this.target = target;
+		this.source = source;
+	}
 
+	public BoogieTask setVerification(boolean flag) {
+		this.verification = flag;
+		return this;
+	}
+
+	public BoogieTask setVerbose(boolean flag) {
+		this.verbose = flag;
+		return this;
+	}
+
+	public BoogieTask setDebug(boolean flag) {
+		this.debug = flag;
+		return this;
+	}
+
+	public BoogieTask setTimeout(int timeout) {
+		this.timeout = timeout;
+		return this;
 	}
 
 	@Override
 	public Path getPath() {
-		throw new UnsupportedOperationException();
-	}
-
-	public void setVerification(boolean flag) {
-		this.verification = flag;
-	}
-
-	public void setVerbose(boolean flag) {
-		this.verbose = flag;
-	}
-
-	public void setDebug(boolean flag) {
-		this.debug = flag;
-	}
-
-	public void setTimeout(int timeout) {
-		this.timeout = timeout;
+		return target;
 	}
 
 	@Override
@@ -93,19 +111,15 @@ public class BoogieTask implements Build.Task {
 	}
 
 	@Override
-	public Pair<SnapShot, Boolean> apply(SnapShot t) {
-		boolean b = true;
-		// Identify all Whiley intermediate files
-		List<WyilFile> sources = t.getAll(WyilFile.ContentType, includes);
-		//
-		for (WyilFile src : sources) {
-			BoogieFile bin = new BoogieFile(src.getPath());
-			b &= compile(bin, src);
-			// Write target into snapshot
-			t = t.put(bin);
-		}
+	public Pair<SnapShot, Boolean> apply(SnapShot snapshot) {
+		// Read out WyilFile being translated into Boogie.
+		WyilFile binary = snapshot.get(WyilFile.ContentType, source);
+		// Construct new Boogie file
+		Pair<BoogieFile,Boolean> r = compile(binary);
+		// Write target into snapshot
+		snapshot = snapshot.put(r.first());
 		// Done
-		return new Pair<>(t, b);
+		return new Pair<>(snapshot, r.second());
 	}
 
 
@@ -114,11 +128,12 @@ public class BoogieTask implements Build.Task {
 	 * computation can proceed without performing any blocking I/O. This means it
 	 * can be used in e.g. a forkjoin task safely.
 	 *
-	 * @param target  --- The Boogie being written.
-	 * @param sources --- The WyilFile(s) being translated.
+	 * @param source --- The WyilFile being translated.
 	 * @return
 	 */
-	public boolean compile(BoogieFile target, WyilFile source) {
+	public Pair<BoogieFile,Boolean> compile(WyilFile source) {
+		boolean result = true;
+		BoogieFile target = new BoogieFile(source.getPath());
 		BoogieCompiler bc = new BoogieCompiler(meter,target);
 		// Configure debug mode (if applicable)
 		bc.setMangling(!debug);
@@ -188,9 +203,9 @@ public class BoogieTask implements Build.Task {
 					}
 				}
 			}
-			return errors != null && errors.length == 0;
+			result = errors != null && errors.length == 0;
 		}
 		//
-		return true;
+		return new Pair<>(target,result);
 	}
 }

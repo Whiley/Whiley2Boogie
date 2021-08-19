@@ -149,7 +149,7 @@ public class InvalidTests {
 			// CompileTask above, and the BoogieTask below. This is not right. A better
 			// solution would be for test utils to provide a generic pipeline mechanism.
 
-			repository.apply(s -> new BoogieTask().apply(s).first());
+			repository.apply(s -> new BoogieTask(path,path).apply(s).first());
 			result = false;
 			// Read out binary file from build repository
 			WyilFile target = repository.get(WyilFile.ContentType, path);

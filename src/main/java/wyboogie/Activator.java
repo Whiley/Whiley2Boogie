@@ -63,8 +63,6 @@ public class Activator implements Plugin.Activator {
 		public Build.Task initialise(Path path, Command.Environment environment) throws IOException {
 			// Determine local configuration
 			Configuration config = environment.get(path);
-			// Get current repository snapshot
-			Build.SnapShot snapshot = environment.getRepository().last();
 			// Determine enclosing package name
 			Path pkg = Path.fromString(config.get(Value.UTF8.class, PACKAGE_NAME).unwrap());
 			// Identify directory where generated Boogie files are dumped.
@@ -79,31 +77,10 @@ public class Activator implements Plugin.Activator {
 			boolean debug = config.get(Value.Bool.class, BUILD_BOOGIE_DEBUG).unwrap();
 			// Determine timeout to use
 			BigInteger timeout = config.get(Value.Int.class, BUILD_BOOGIE_TIMEOUT).unwrap();
-			// Construct build task
-			Filter includes = source.append(Filter.EVERYTHING);
-			// Identify all Whiley source files
-			List<WyilFile> sources = snapshot.getAll(WyilFile.ContentType, includes);
 			// Register build target for this package
-			return new BoogieTask(target.append(pkg), sources);
+			return new BoogieTask(target.append(pkg), source.append(pkg)).setVerbose(verbose).setVerification(verification)
+					.setDebug(debug).setTimeout(timeout.intValue());
 		}
-
-//		private Path.Entry<BoogieFile> initialiseBinaryTarget(Path.Root binroot, Path.ID id) throws IOException {
-//			Path.Entry<BoogieFile> target;
-//			//
-//			if(binroot.exists(id, BoogieFile.ContentType)) {
-//				// Yes, it does so reuse it.
-//				target = binroot.get(id, BoogieFile.ContentType);
-//			} else {
-//				// No, it doesn't so create and initialise it
-//				target = binroot.create(id, BoogieFile.ContentType);
-//			}
-//			// Initialise with empty Boogie file
-//			BoogieFile jsf = new BoogieFile();
-//			// Write
-//			target.write(jsf);
-//			// Done
-//			return target;
-//		}
 	};
 
 	// =======================================================================
