@@ -13,21 +13,20 @@
 // limitations under the License.
 package wyboogie;
 
-import static org.junit.Assert.fail;
-
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ForkJoinPool;
+import java.util.function.Predicate;
+import java.util.stream.Stream;
 
-import org.junit.Assume;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
+import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import wyboogie.core.BoogieFile;
 import wyboogie.tasks.BoogieTask;
@@ -55,7 +54,6 @@ import wyil.lang.WyilFile;
  * @author David J. Pearce
  *
  */
-@RunWith(Parameterized.class)
 public class ValidTests {
 	/**
 	 * Configure Timeout to use for Boogie (in seconds)
@@ -69,12 +67,12 @@ public class ValidTests {
 	 * The directory containing the source files for each test case. Every test
 	 * corresponds to a file in this directory.
 	 */
-	public final static String WHILEY_SRC_DIR = "tests/valid".replace('/', File.separatorChar);
+	public final static java.nio.file.Path WHILEY_SRC_DIR = Paths.get("tests/valid");
 
 	/**
 	 * Ignored tests and a reason why we ignore them.
 	 */
-	public final static Map<String, String> IGNORED = new HashMap<>();
+	private final static Map<String, String> IGNORED= new HashMap<>();
 
 	static {
 		// ===================================================
@@ -123,8 +121,10 @@ public class ValidTests {
 	// Test Harness
 	// ======================================================================
 
- 	protected void runTest(String name) throws IOException {
-		File whileySrcDir = new File(WHILEY_SRC_DIR);
+	@ParameterizedTest
+	@MethodSource("data")
+ 	public void test(String name) throws IOException {
+		File whileySrcDir = WHILEY_SRC_DIR.toFile();
 		// Compile to Java Bytecode
 		Pair<Boolean, String> p = compileWhiley2Boogie(whileySrcDir, // location of source directory
 				name); // name of test to compile
@@ -153,74 +153,6 @@ public class ValidTests {
 	 * @throws IOException
 	 */
 	public static Pair<Boolean,String> compileWhiley2Boogie(File whileydir, String arg) throws IOException {
-//		ByteArrayOutputStream syserr = new ByteArrayOutputStream();
-//		ByteArrayOutputStream sysout = new ByteArrayOutputStream();
-//		PrintStream psyserr = new PrintStream(syserr);
-//		//
-//		boolean result = true;
-//		// Construct the project
-//		DirectoryRoot root = new DirectoryRoot(whileydir, registry);
-//		//
-//		try {
-//			SequentialBuildProject project = new SequentialBuildProject(root);
-//			// Identify source files and target files
-//			Pair<Path.Entry<WhileyFile>,Path.Entry<WyilFile>> p = TestUtils.findSourceFiles(root,arg);
-//			List<Path.Entry<WhileyFile>> sources = Arrays.asList(p.first());
-//			Path.Entry<WyilFile> wyilTarget = p.second();
-//			// Add Whiley => WyIL build rule
-//			project.add(new Build.Rule() {
-//				@Override
-//				public void apply(Collection<Build.Task> tasks) throws IOException {
-//					// Construct a new build task
-//					CompileTask task = new CompileTask(project, Logger.NULL, root, wyilTarget, sources);
-//					// Submit the task for execution
-//					tasks.add(task);
-//				}
-//			});
-//			// Construct an empty BoogieFile
-//			Path.Entry<BoogieFile> bgTarget = root.create(wyilTarget.id(), BoogieFile.ContentType);
-//			BoogieFile bgFile = new BoogieFile();
-//			// Write out the Boogie file
-//			bgTarget.write(bgFile);
-//			// Add WyIL => Boogie Build Rule
-//			project.add(new Build.Rule() {
-//				@Override
-//				public void apply(Collection<Build.Task> tasks) throws IOException {
-//					// Construct a new build task
-//					BoogieCompileTask task = new BoogieCompileTask(project, bgTarget, wyilTarget);
-//					// Set longer timeout
-//					task.setTimeout(TIMEOUT);
-//					// Set debug mode
-//					task.setDebug(DEBUG);
-//					// Enable verification!
-//					task.setVerification(true);
-//					// Submit the task for execution
-//					tasks.add(task);
-//				}
-//			});
-//			project.refresh();
-//			// Actually force the project to build
-//			result = project.build(ForkJoinPool.commonPool(), Build.NULL_METER).get();
-//			// Check whether any syntax error produced
-//			result = !TestUtils.findSyntaxErrors(wyilTarget.read().getRootItem(), new BitSet());
-//			// Print out any error messages
-//			wycli.commands.Build.printSyntacticMarkers(psyserr, (List) sources, (Path.Entry) wyilTarget);
-//		} catch (SyntacticException e) {
-//			// Print out the syntax error
-//			e.outputSourceError(new PrintStream(syserr),false);
-//			result = false;
-//		} catch (Exception e) {
-//			// Print out the syntax error
-//			e.printStackTrace(new PrintStream(syserr));
-//			result = false;
-//		} finally {
-//			root.flush();
-//		}
-//		// Convert bytes produced into resulting string.
-//		byte[] errBytes = syserr.toByteArray();
-//		byte[] outBytes = sysout.toByteArray();
-//		String output = new String(errBytes) + new String(outBytes);
-//		return new Pair<>(result, output);
 		String filename = arg + ".whiley";
 		ByteArrayOutputStream syserr = new ByteArrayOutputStream();
 		PrintStream psyserr = new PrintStream(syserr);
@@ -276,34 +208,27 @@ public class ValidTests {
 	}
 
 	// ======================================================================
-	// Tests
+	// Data sources
 	// ======================================================================
 
-	// Parameter to test case is the name of the current test.
-	// It will be passed to the constructor by JUnit.
-	private final String testName;
-	public ValidTests(String testName) {
-		this.testName = testName;
-	}
-
 	// Here we enumerate all available test cases.
-	@Parameters(name = "{0}")
-	public static Collection<Object[]> data() {
-		return TestUtils.findTestNames(WHILEY_SRC_DIR);
+	private static Stream<String> data() throws IOException {
+		return readTestFiles(WHILEY_SRC_DIR);
 	}
 
-	// Skip ignored tests
-	@Before
-	public void beforeMethod() {
-		String ignored = IGNORED.get(this.testName);
-		Assume.assumeTrue("Test " + this.testName + " skipped: " + ignored, ignored == null);
-	}
-
-	@Test
-	public void valid() throws IOException {
-		if (new File("../../running_on_travis").exists()) {
-			System.out.println(".");
-		}
-		runTest(this.testName);
+	public static Stream<String> readTestFiles(java.nio.file.Path dir) throws IOException {
+		ArrayList<String> testcases = new ArrayList<>();
+		//
+		Files.walk(dir,1).forEach(f -> {
+			if (f.toString().endsWith(".whiley")) {
+				// Determine the test name
+				String testname = f.getFileName().toString().replace(".whiley","");
+				testcases.add(testname);
+			}
+		});
+		// Sort the result by filename
+		Collections.sort(testcases);
+		//
+		return testcases.stream();
 	}
 }

@@ -13,26 +13,19 @@
 // limitations under the License.
 package wyboogie;
 
-import static org.junit.Assert.fail;
-
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.util.Arrays;
-import java.util.BitSet;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.*;
 import java.util.concurrent.ForkJoinPool;
+import java.util.stream.Stream;
 
-import org.junit.Assume;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
+import static org.junit.jupiter.api.Assertions.fail;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import wyboogie.core.BoogieFile;
 import wyboogie.tasks.BoogieTask;
@@ -51,7 +44,6 @@ import wycc.util.Pair;
 import wyil.lang.WyilFile;
 
 
-@RunWith(Parameterized.class)
 public class InvalidTests {
 	/**
 	 * Configure Timeout to use for Boogie (in seconds)
@@ -61,7 +53,7 @@ public class InvalidTests {
 	 * The directory containing the source files for each test case. Every test
 	 * corresponds to a file in this directory.
 	 */
-	public final static String WHILEY_SRC_DIR = "tests/invalid".replace('/', File.separatorChar);
+	public final static java.nio.file.Path WHILEY_SRC_DIR = Paths.get("tests/invalid");
 	/**
 	 * Configure debug mode which (when enabled) produces easier to read Boogie output.  This should not be enabled by default.
 	 */
@@ -85,16 +77,17 @@ public class InvalidTests {
 	// Test Harness
 	// ======================================================================
 
- 	protected void runTest(String name) throws IOException {
+	@ParameterizedTest
+	@MethodSource("data")
+ 	protected void test(String name) throws IOException {
 		// Compile to Java Bytecode
-		Pair<Boolean, String> p = compileWhiley2Boogie(
-				new File(WHILEY_SRC_DIR), // location of source directory
-				name); // name of test to compile
+		Pair<Boolean, String> p = compileWhiley2Boogie(name); // name of test to compile
 		boolean r = p.first();
 		System.out.println(p.second());
 		if (r) {
 			fail("Test should have failed to compile / verify!");
 		}
+		// FIXME: could put back error message regression check
 //		String output = p.second();
 //
 //		// Now, let's check the expected output against the file which
@@ -122,7 +115,7 @@ public class InvalidTests {
 	 * @return
 	 * @throws IOException
 	 */
-	public static Pair<Boolean,String> compileWhiley2Boogie(File whileydir, String arg) throws IOException {
+	public static Pair<Boolean,String> compileWhiley2Boogie(String arg) throws IOException {
 		ByteArrayOutputStream syserr = new ByteArrayOutputStream();
 		ByteArrayOutputStream sysout = new ByteArrayOutputStream();
 		String filename = arg + ".whiley";
@@ -130,7 +123,7 @@ public class InvalidTests {
 		Path path = Path.fromString(arg);
 		PrintStream psyserr = new PrintStream(syserr);
 		// Construct the directory root
-		DirectoryRoot root = new DirectoryRoot(registry, whileydir, f -> {
+		DirectoryRoot root = new DirectoryRoot(registry, WHILEY_SRC_DIR.toFile(), f -> {
 			return f.getName().equals(filename);
 		});
 		//
@@ -178,34 +171,27 @@ public class InvalidTests {
 	}
 
 	// ======================================================================
-	// Tests
+	// Data sources
 	// ======================================================================
 
-	// Parameter to test case is the name of the current test.
-	// It will be passed to the constructor by JUnit.
-	private final String testName;
-	public InvalidTests(String testName) {
-		this.testName = testName;
-	}
-
 	// Here we enumerate all available test cases.
-	@Parameters(name = "{0}")
-	public static Collection<Object[]> data() {
-		return TestUtils.findTestNames(WHILEY_SRC_DIR);
+	private static Stream<String> data() throws IOException {
+		return readTestFiles(WHILEY_SRC_DIR);
 	}
 
-	// Skip ignored tests
-	@Before
-	public void beforeMethod() {
-		String ignored = IGNORED.get(this.testName);
-		Assume.assumeTrue("Test " + this.testName + " skipped: " + ignored, ignored == null);
-	}
-
-	@Test
-	public void valid() throws IOException {
-		if (new File("../../running_on_travis").exists()) {
-			System.out.println(".");
-		}
-		runTest(this.testName);
+	public static Stream<String> readTestFiles(java.nio.file.Path dir) throws IOException {
+		ArrayList<String> testcases = new ArrayList<>();
+		//
+		Files.walk(dir,1).forEach(f -> {
+			if (f.toString().endsWith(".whiley")) {
+				// Determine the test name
+				String testname = f.getFileName().toString().replace(".whiley","");
+				testcases.add(testname);
+			}
+		});
+		// Sort the result by filename
+		Collections.sort(testcases);
+		//
+		return testcases.stream();
 	}
 }
