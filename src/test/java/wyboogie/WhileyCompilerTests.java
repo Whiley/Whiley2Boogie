@@ -125,11 +125,12 @@ public class WhileyCompilerTests {
 		// ==========================================================
 		IGNORED.put("Parsing_Invalid_1", "608");
 		IGNORED.put("Parsing_Invalid_2", "608");
-		// Access Static Variable from Type Invariant
-		IGNORED.put("Type_Invalid_11", "793");
 		// #885 --- Contractive Types and isVoid()
 		IGNORED.put("Type_Invalid_5", "885");
+		IGNORED.put("Type_Invalid_7", "??");
 		IGNORED.put("Type_Invalid_8", "??");
+		// Access Static Variable from Type Invariant
+		IGNORED.put("Type_Invalid_11", "793");
 		IGNORED.put("Reference_Invalid_2", "unclassified");
 		IGNORED.put("While_Invalid_25", "#956");
 	}
