@@ -15,7 +15,7 @@ package wyboogie.util;
 
 import wyboogie.core.BoogieFile;
 import wyboogie.core.BoogieFile.Expr;
-import wyfs.util.Pair;
+import wycc.util.Pair;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,7 +27,8 @@ public abstract class AbstractExpressionTransform<S> extends AbstractExpressionV
     public abstract S join(List<S> operands);
 
     // Integers
-    protected Pair<S,Expr> constructInteger(Expr.Integer expr) {
+    @Override
+	protected Pair<S,Expr> constructInteger(Expr.Integer expr) {
         return new Pair<>(null, expr);
     }
 
@@ -131,10 +132,11 @@ public abstract class AbstractExpressionTransform<S> extends AbstractExpressionV
     }
 
     // Logical
-    protected Pair<S,Expr> constructBoolean(Expr.Boolean expr) {
+    @Override
+	protected Pair<S,Expr> constructBoolean(Expr.Boolean expr) {
         return new Pair<>(null, expr);
     }
-    
+
     @Override
     protected Pair<S,Expr> constructLogicalAnd(Expr.LogicalAnd expr, List<Pair<S,Expr>> states) {
         S state = join(extractFirst(states));

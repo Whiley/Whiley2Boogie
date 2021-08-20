@@ -27,11 +27,11 @@ import wyboogie.core.BoogieFile.Stmt;
 import wyboogie.core.BoogieFile.LVal;
 
 import wyboogie.util.*;
-import wybs.lang.Build;
-import wybs.lang.Build.Meter;
-import wybs.lang.SyntacticItem;
-import wybs.util.AbstractCompilationUnit.Tuple;
-import wyfs.util.Pair;
+import wycc.lang.Build;
+import wycc.lang.Build.Meter;
+import wycc.lang.SyntacticItem;
+import wycc.util.AbstractCompilationUnit.Tuple;
+import wycc.util.Pair;
 import wyil.lang.WyilFile;
 import wyil.util.*;
 
@@ -448,15 +448,18 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Handle local variables
         new AbstractFold<Boolean>(meter) {
 
-            public Boolean bottom() {
+            @Override
+			public Boolean bottom() {
                 return false;
             }
 
-            public Boolean join(Boolean lhs, Boolean rhs) {
+            @Override
+			public Boolean join(Boolean lhs, Boolean rhs) {
                 return lhs || rhs;
             }
 
-            public Boolean join(List<Boolean> operands) {
+            @Override
+			public Boolean join(List<Boolean> operands) {
                 for (int i = 0; i != operands.size(); ++i) {
                     if (operands.get(i)) {
                         return true;
@@ -1965,7 +1968,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Flatten expression
         Pair<Stmt,Expr> r = new AbstractExpressionTransform<Stmt>() {
 
-            public Stmt join(Stmt lhs, Stmt rhs) {
+            @Override
+			public Stmt join(Stmt lhs, Stmt rhs) {
                 if (lhs == null) {
                     return rhs;
                 } else if (rhs == null) {
@@ -1975,7 +1979,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 }
             }
 
-            public Stmt join(List<Stmt> stmts) {
+            @Override
+			public Stmt join(List<Stmt> stmts) {
                 ArrayList<Stmt> r = new ArrayList<>();
                 for (Stmt s : stmts) {
                     if (s != null) {
@@ -4125,7 +4130,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             return items;
         }
 
-        public String toString() {
+        @Override
+		public String toString() {
             return items.toString();
         }
     }

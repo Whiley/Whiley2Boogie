@@ -1,11 +1,10 @@
 package wyboogie.util;
 
 import wyboogie.tasks.BoogieCompiler;
-import wybs.lang.SyntacticItem;
+import wycc.lang.SyntacticItem;
 import wyil.lang.WyilFile;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 

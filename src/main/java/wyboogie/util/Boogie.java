@@ -27,8 +27,7 @@ import java.util.regex.Pattern;
 
 import wyboogie.core.BoogieFile;
 import wyboogie.io.BoogieFilePrinter;
-import wybs.lang.SyntacticException;
-import wyfs.util.ArrayUtils;
+import wycc.util.ArrayUtils;
 
 /**
  * A wrapper for the "boogie" verifier.
