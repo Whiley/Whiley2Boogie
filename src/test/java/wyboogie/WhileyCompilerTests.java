@@ -54,7 +54,7 @@ import wyil.lang.WyilFile;
  * @author David J. Pearce
  *
  */
-public class ValidTests {
+public class WhileyCompilerTests {
 	/**
 	 * Configure Timeout to use for Boogie (in seconds)
 	 */
@@ -64,10 +64,15 @@ public class ValidTests {
 	 */
 	private final static boolean DEBUG = false;
 	/**
-	 * The directory containing the source files for each test case. Every test
+	 * The directory containing the valid source files for each test case. Every test
 	 * corresponds to a file in this directory.
 	 */
-	public final static java.nio.file.Path WHILEY_SRC_DIR = Paths.get("tests/valid");
+	public final static java.nio.file.Path VALID_SRC_DIR = Paths.get("tests/valid");
+	/**
+	 * The directory containing the invalid source files for each test case. Every test
+	 * corresponds to a file in this directory.
+	 */
+	public final static java.nio.file.Path INVALID_SRC_DIR = Paths.get("tests/invalid");
 
 	/**
 	 * Ignored tests and a reason why we ignore them.
@@ -83,9 +88,9 @@ public class ValidTests {
 		// already know they will not.
 		IGNORED.putAll(TestUtils.VALID_IGNORED);
 
-		// ===================================================
-		// Boogie problems
-		// ===================================================
+		// ==========================================================
+		// Valid Tests
+		// ==========================================================
 
 		// Not verifiable yet!  These are incomplete in some way which means they could not be verified.
 		IGNORED.put("Property_Valid_14","");
@@ -115,6 +120,18 @@ public class ValidTests {
 		IGNORED.put("Reference_Valid_29","#60");
 		IGNORED.put("Reference_Valid_33","#60");
 		IGNORED.put("Reference_Valid_39","#115");
+		// ==========================================================
+		// Invalid Tests
+		// ==========================================================
+		IGNORED.put("Parsing_Invalid_1", "608");
+		IGNORED.put("Parsing_Invalid_2", "608");
+		// Access Static Variable from Type Invariant
+		IGNORED.put("Type_Invalid_11", "793");
+		// #885 --- Contractive Types and isVoid()
+		IGNORED.put("Type_Invalid_5", "885");
+		IGNORED.put("Type_Invalid_8", "??");
+		IGNORED.put("Reference_Invalid_2", "unclassified");
+		IGNORED.put("While_Invalid_25", "#956");
 	}
 
 	// ======================================================================
@@ -122,18 +139,29 @@ public class ValidTests {
 	// ======================================================================
 
 	@ParameterizedTest
-	@MethodSource("data")
- 	public void test(String name) throws IOException {
-		File whileySrcDir = WHILEY_SRC_DIR.toFile();
+	@MethodSource("validSourceFiles")
+ 	public void testValid(String name) throws IOException {
 		// Compile to Java Bytecode
-		Pair<Boolean, String> p = compileWhiley2Boogie(whileySrcDir, // location of source directory
+		Pair<Boolean, String> p = compileWhiley2Boogie(VALID_SRC_DIR, // location of source directory
 				name); // name of test to compile
-
-		boolean r = p.first();
-
-		if (!r) {
+		// Check outcome was positive
+		if (!p.first()) {
 			System.out.println(p.second());
 			fail("Test failed to compile!");
+		}
+	}
+
+	@ParameterizedTest
+	@MethodSource("invalidSourceFiles")
+	public void testInvalid(String name) throws IOException {
+		File whileySrcDir = INVALID_SRC_DIR.toFile();
+		// Compile to Java Bytecode
+		Pair<Boolean, String> p = compileWhiley2Boogie(INVALID_SRC_DIR, // location of source directory
+				name); // name of test to compile
+		// Check outcome was negative
+		if (p.first()) {
+			System.out.println(p.second());
+			fail("Test should have failed to compile / verify!");
 		}
 	}
 
@@ -152,7 +180,7 @@ public class ValidTests {
 	 * @return
 	 * @throws IOException
 	 */
-	public static Pair<Boolean,String> compileWhiley2Boogie(File whileydir, String arg) throws IOException {
+	public static Pair<Boolean,String> compileWhiley2Boogie(java.nio.file.Path whileydir, String arg) throws IOException {
 		String filename = arg + ".whiley";
 		ByteArrayOutputStream syserr = new ByteArrayOutputStream();
 		PrintStream psyserr = new PrintStream(syserr);
@@ -161,7 +189,7 @@ public class ValidTests {
 		//
 		boolean result = true;
 		// Construct the directory root
-		DirectoryRoot root = new DirectoryRoot(registry, whileydir, f -> {
+		DirectoryRoot root = new DirectoryRoot(registry, whileydir.toFile(), f -> {
 			return f.getName().equals(filename);
 		});
 		//
@@ -181,8 +209,10 @@ public class ValidTests {
 			repository.apply(s -> new BoogieTask(path,path).apply(s).first());
 			// Read out binary file from build repository
 			WyilFile target = repository.get(WyilFile.ContentType, path);
+			BoogieFile boogie = repository.get(BoogieFile.ContentType, path);
 			// Write binary file to directory
 			root.put(path, target);
+			root.put(path, boogie);
 			// Check whether result valid (or not)
 			result = target.isValid();
 			// Print out syntactic markers
@@ -212,23 +242,32 @@ public class ValidTests {
 	// ======================================================================
 
 	// Here we enumerate all available test cases.
-	private static Stream<String> data() throws IOException {
-		return readTestFiles(WHILEY_SRC_DIR);
+	private static Stream<String> validSourceFiles() throws IOException {
+		return readTestFiles(VALID_SRC_DIR, f -> notIgnored(f));
 	}
-
-	public static Stream<String> readTestFiles(java.nio.file.Path dir) throws IOException {
+	private static Stream<String> invalidSourceFiles() throws IOException {
+		return readTestFiles(INVALID_SRC_DIR, f -> notIgnored(f));
+	}
+	public static Stream<String> readTestFiles(java.nio.file.Path dir, Predicate<java.nio.file.Path> filter) throws IOException {
 		ArrayList<String> testcases = new ArrayList<>();
 		//
 		Files.walk(dir,1).forEach(f -> {
-			if (f.toString().endsWith(".whiley")) {
+			if (f.toString().endsWith(".whiley") && filter.test(f)) {
 				// Determine the test name
-				String testname = f.getFileName().toString().replace(".whiley","");
-				testcases.add(testname);
+				testcases.add(extractTestName(f));
 			}
 		});
 		// Sort the result by filename
 		Collections.sort(testcases);
 		//
 		return testcases.stream();
+	}
+
+	public static boolean notIgnored(java.nio.file.Path f) {
+		return !IGNORED.containsKey(extractTestName(f));
+	}
+
+	private static String extractTestName(java.nio.file.Path f) {
+		return f.getFileName().toString().replace(".whiley","");
 	}
 }
