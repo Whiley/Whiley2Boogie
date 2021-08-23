@@ -1,4 +1,4 @@
-<project name="wy2b" default="build" xmlns:artifact="urn:maven-ant">
+<project name="wyboogie" default="build" xmlns:artifact="urn:maven-ant">
 
   <!-- ================================================================== -->
   <!-- Configuration -->
@@ -21,9 +21,7 @@
 
   <target name="compile" depends="setup">
     <javac includeantruntime="false"
-       debug="true"
 	   target="${JAVA_VERSION}"
- 	   source="${JAVA_VERSION}"
 	   srcdir="${JAVA_DIR}"
 	   destdir="${CLASS_DIR}">
       <classpath>
@@ -39,7 +37,6 @@
   <target name="compile-tests" depends="compile">
     <javac includeantruntime="false"
 	   target="${JAVA_VERSION}"
- 	   source="${JAVA_VERSION}"
 	   srcdir="${TEST_DIR}"
 	   destdir="${CLASS_DIR}">
       <classpath>
@@ -94,6 +91,58 @@
     <jar jarfile="${DOC_JAR}">
       <fileset dir="${DOC_DIR}" />
     </jar>    
+  </target>
+
+  <!-- ================================================================== -->
+  <!-- DEPLOY SNAPSHOT -->
+  <!-- ================================================================== -->
+
+  <target name="deploy-snapshot" depends="dist">
+    <artifact:mvn>
+      <arg value="org.apache.maven.plugins:maven-deploy-plugin:2.6:deploy-file" />
+      <arg value="-Durl=${SNAPSHOT_URL}" />
+      <arg value="-DrepositoryId=${SERVER_ID}" />
+      <arg value="-DpomFile=pom.xml" />
+      <arg value="-Dfile=${CLASS_JAR}" />
+    </artifact:mvn>
+  </target>
+
+  <!-- ================================================================== -->
+  <!-- DEPLOY -->
+  <!-- ================================================================== -->
+  
+  <target name="deploy" depends="dist">
+    <!-- sign and deploy the main artifact -->
+    <artifact:mvn>
+      <arg value="org.apache.maven.plugins:maven-gpg-plugin:1.3:sign-and-deploy-file" />
+      <arg value="-Durl=${STAGING_URL}" />
+      <arg value="-DrepositoryId=${SERVER_ID}" />
+      <arg value="-DpomFile=pom.xml" />
+      <arg value="-Dfile=${CLASS_JAR}" />
+      <arg value="-Pgpg"/>
+    </artifact:mvn>
+
+    <!-- sign and deploy the sources artifact -->
+    <artifact:mvn>
+      <arg value="org.apache.maven.plugins:maven-gpg-plugin:1.3:sign-and-deploy-file" />
+      <arg value="-Durl=${STAGING_URL}" />
+      <arg value="-DrepositoryId=${SERVER_ID}" />
+      <arg value="-DpomFile=pom.xml" />
+      <arg value="-Dfile=${CLASS_JAR}" />
+      <arg value="-Dclassifier=sources" />
+      <arg value="-Pgpg" />
+    </artifact:mvn>
+
+    <!-- sign and deploy the javadoc artifact -->
+    <artifact:mvn>
+      <arg value="org.apache.maven.plugins:maven-gpg-plugin:1.3:sign-and-deploy-file" />
+      <arg value="-Durl=${STAGING_URL}" />
+      <arg value="-DrepositoryId=${SERVER_ID}" />
+      <arg value="-DpomFile=pom.xml" />
+      <arg value="-Dfile=${CLASS_JAR}" />
+      <arg value="-Dclassifier=javadoc" />
+      <arg value="-Pgpg" />
+    </artifact:mvn>
   </target>
 
   <!-- ================================================================== -->

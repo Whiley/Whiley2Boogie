@@ -128,7 +128,7 @@ public class BoogieTask implements Build.Task {
 	 */
 	public Pair<BoogieFile,Boolean> compile(WyilFile source) {
 		boolean result = true;
-		BoogieFile target = new BoogieFile(source.getPath());
+		BoogieFile target = new BoogieFile(this.target);
 		BoogieCompiler bc = new BoogieCompiler(meter,target);
 		// Configure debug mode (if applicable)
 		bc.setMangling(!debug);
