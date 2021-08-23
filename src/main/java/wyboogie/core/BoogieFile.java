@@ -27,7 +27,7 @@ import wyboogie.io.BoogieFilePrinter;
 import wycc.lang.Build;
 import wycc.lang.Build.Artifact;
 import wycc.lang.Content;
-import wycc.lang.Path;
+import wycc.util.Trie;
 
 public class BoogieFile implements Build.Artifact {
 	// =========================================================================
@@ -41,7 +41,7 @@ public class BoogieFile implements Build.Artifact {
 	public static final Content.Type<BoogieFile> ContentType = new Content.Type<BoogieFile>() {
 
 		@Override
-		public BoogieFile read(Path path, InputStream input, Registry registry) throws IOException {
+		public BoogieFile read(Trie path, InputStream input, Registry registry) throws IOException {
 			// FIXME: this is a bit of a kludge for now.
 			return new BoogieFile(path);
 		}
@@ -59,20 +59,15 @@ public class BoogieFile implements Build.Artifact {
 		public String getSuffix() {
 			return "bpl";
 		}
-
-		@Override
-		public boolean includes(Class<?> kind) {
-			return kind == BoogieFile.class;
-		}
 	};
 
-	private final Path path;
+	private final Trie path;
 	/**
 	 * The list of top-level declarations within this file.
 	 */
 	private List<Decl> declarations;
 
-	public BoogieFile(Path path) {
+	public BoogieFile(Trie path) {
 		this.path = path;
 		this.declarations = new ArrayList<>();
 	}
@@ -82,7 +77,7 @@ public class BoogieFile implements Build.Artifact {
 	}
 
 	@Override
-	public Path getPath() {
+	public Trie getPath() {
 		return path;
 	}
 

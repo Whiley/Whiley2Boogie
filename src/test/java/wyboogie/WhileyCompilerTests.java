@@ -38,10 +38,10 @@ import wyc.lang.WhileyFile;
 import wyc.task.CompileTask;
 import wyc.util.TestUtils;
 import wycc.lang.Content;
-import wycc.lang.Path;
 import wycc.util.ByteRepository;
 import wycc.util.DirectoryRoot;
 import wycc.util.Pair;
+import wycc.util.Trie;
 import wyil.lang.WyilFile;
 
 /**
@@ -186,7 +186,7 @@ public class WhileyCompilerTests {
 		ByteArrayOutputStream syserr = new ByteArrayOutputStream();
 		PrintStream psyserr = new PrintStream(syserr);
 		// Determine the ID of the test being compiler
-		Path path = Path.fromString(arg);
+		Trie path = Trie.fromString(arg);
 		//
 		boolean result = true;
 		// Construct the directory root
@@ -217,7 +217,7 @@ public class WhileyCompilerTests {
 			// Check whether result valid (or not)
 			result = target.isValid();
 			// Print out syntactic markers
-			wycli.commands.BuildSystem.printSyntacticMarkers(psyserr, target, source);
+			wycli.commands.BuildCmd.printSyntacticMarkers(psyserr, target, source);
 		} catch (SyntacticException e) {
 			// Print out the syntax error
 			//e.outputSourceError(psyserr);
@@ -228,7 +228,7 @@ public class WhileyCompilerTests {
 			result = false;
 		} finally {
 			// Writeback any results
-			root.flush();
+			root.synchronise();
 		}
 		//
 		psyserr.flush();

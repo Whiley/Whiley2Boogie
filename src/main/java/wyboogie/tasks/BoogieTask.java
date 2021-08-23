@@ -21,11 +21,10 @@ import wyboogie.util.Boogie;
 import wycc.lang.Build;
 import wycc.lang.Build.Artifact;
 import wycc.lang.Build.SnapShot;
-import wycc.lang.Filter;
-import wycc.lang.Path;
 import wycc.lang.SyntacticException;
 import wycc.lang.SyntacticItem;
 import wycc.util.Pair;
+import wycc.util.Trie;
 import wyc.util.ErrorMessages;
 import wyil.lang.WyilFile;
 
@@ -39,11 +38,11 @@ public class BoogieTask implements Build.Task {
 	/**
 	 * The source file that this task will compiler from.
 	 */
-	private final Path source;
+	private final Trie source;
 	/**
 	 * Identifier for target of this build task.
 	 */
-	private final Path target;
+	private final Trie target;
 	/**
 	 * Specify whether to print verbose progress messages or not
 	 */
@@ -60,12 +59,8 @@ public class BoogieTask implements Build.Task {
 	 * Determines whether or not to verify generate files with Boogie.
 	 */
 	private boolean verification = true;
-	/**
-	 * Determine the set of files which will be compiled by this task.
-	 */
-	private final Filter includes = Filter.fromString("**/*");
 
-	public BoogieTask(Path target, Path source) {
+	public BoogieTask(Trie target, Trie source) {
 		if(target == null) {
 			throw new IllegalArgumentException("invalid target");
 		} else if(source == null) {
@@ -96,7 +91,7 @@ public class BoogieTask implements Build.Task {
 	}
 
 	@Override
-	public Path getPath() {
+	public Trie getPath() {
 		return target;
 	}
 

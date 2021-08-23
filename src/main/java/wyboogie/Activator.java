@@ -14,13 +14,12 @@
 package wyboogie;
 
 import wycc.lang.Build;
-import wycc.lang.Filter;
 import wycc.util.AbstractCompilationUnit.Value;
+import wycc.util.Trie;
 import wycli.cfg.Configuration;
 import wycli.lang.Command;
 import wycli.lang.Plugin;
 import wycc.lang.Content;
-import wycc.lang.Path;
 import wyil.lang.WyilFile;
 
 import java.io.IOException;
@@ -32,13 +31,13 @@ import wyboogie.tasks.BoogieTask;
 
 public class Activator implements Plugin.Activator {
 
-	public static Path PACKAGE_NAME = Path.fromString("package/name");
-	public static Path BUILD_WHILEY_TARGET = Path.fromString("build/whiley/target");
-	public static Path BUILD_BOOGIE_TARGET = Path.fromString("build/boogie/target");
-	public static Path BUILD_BOOGIE_VERIFY = Path.fromString("build/boogie/verify");
-	public static Path BUILD_BOOGIE_VERBOSE = Path.fromString("build/boogie/verbose");
-	public static Path BUILD_BOOGIE_DEBUG = Path.fromString("build/boogie/debug");
-	public static Path BUILD_BOOGIE_TIMEOUT = Path.fromString("build/boogie/timeout");
+	public static Trie PACKAGE_NAME = Trie.fromString("package/name");
+	public static Trie BUILD_WHILEY_TARGET = Trie.fromString("build/whiley/target");
+	public static Trie BUILD_BOOGIE_TARGET = Trie.fromString("build/boogie/target");
+	public static Trie BUILD_BOOGIE_VERIFY = Trie.fromString("build/boogie/verify");
+	public static Trie BUILD_BOOGIE_VERBOSE = Trie.fromString("build/boogie/verbose");
+	public static Trie BUILD_BOOGIE_DEBUG = Trie.fromString("build/boogie/debug");
+	public static Trie BUILD_BOOGIE_TIMEOUT = Trie.fromString("build/boogie/timeout");
 	private static Value.UTF8 TARGET_DEFAULT = new Value.UTF8("bin".getBytes());
 
 	public static Command.Platform BOOGIE_PLATFORM = new Command.Platform() {
@@ -60,15 +59,15 @@ public class Activator implements Plugin.Activator {
 		}
 
 		@Override
-		public Build.Task initialise(Path path, Command.Environment environment) throws IOException {
+		public Build.Task initialise(Trie path, Command.Environment environment) throws IOException {
 			// Determine local configuration
 			Configuration config = environment.get(path);
 			// Determine enclosing package name
-			Path pkg = Path.fromString(config.get(Value.UTF8.class, PACKAGE_NAME).unwrap());
+			Trie pkg = Trie.fromString(config.get(Value.UTF8.class, PACKAGE_NAME).unwrap());
 			// Identify directory where generated Boogie files are dumped.
-			Path source = Path.fromString(config.get(Value.UTF8.class, BUILD_WHILEY_TARGET).unwrap());
+			Trie source = Trie.fromString(config.get(Value.UTF8.class, BUILD_WHILEY_TARGET).unwrap());
 			// Specify directory where generated Boogie files are dumped.
-			Path target= Path.fromString(config.get(Value.UTF8.class, BUILD_BOOGIE_TARGET).unwrap());
+			Trie target= Trie.fromString(config.get(Value.UTF8.class, BUILD_BOOGIE_TARGET).unwrap());
 			// Determine whether verification enabled or not
 			boolean verification = config.get(Value.Bool.class, BUILD_BOOGIE_VERIFY).unwrap();
 			// Determine whether verbose output enabled or not
