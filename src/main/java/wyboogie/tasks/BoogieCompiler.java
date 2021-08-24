@@ -622,7 +622,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 if (!(ft instanceof WyilFile.Type.Property)) {
                     WyilFile.Type type = expr.getType();
                     if (type.shape() == 1) {
-                        // Construct temporary variable
+                        // Construct temporary variable.
                         decls.add(new Decl.Variable(TEMP(expr), constructType(ft.getReturn())));
                     } else {
                         for (int i = 0; i != type.shape(); ++i) {
@@ -1206,19 +1206,20 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             // procedure called, even if they are never used.
             List<LVal> lvals = new ArrayList<>();
             if (type.shape() == 1) {
-                lvals.add(VAR("m#" + expr.getIndex()));
+                lvals.add(VAR(TEMP(expr)));
             } else {
                 for (int i = 0; i != type.shape(); ++i) {
-                    lvals.add(VAR("m#" + expr.getIndex() + "#" + i));
+                    lvals.add(VAR(TEMP(expr,i)));
                 }
             }
             // Add method pointer
-            args.add(0, f1.second());
+            List<Expr> preargs = new ArrayList<>();
+            preargs.add(f1.second());
             // Add meta types arguments (if any)
-            int i = 2;
             for(WyilFile.Template.Variable hole : holes) {
-                args.add(i++,VAR(hole.getName().get()));
+				preargs.add(VAR(hole.getName().get()));
             }
+            args.addAll(0,preargs);
             // Determine the methods name
             String name = toLambdaMangle(ft);
             // Done
@@ -1773,14 +1774,16 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         String name = toLambdaMangle(ft);
         // Apply conversions to arguments as necessary
         arguments = cast(ft.getParameter(), expr.getArguments(), arguments);
-        // Add lambda value
-        arguments.add(0, source);
+        List<Expr> preamble = new ArrayList<>();
         // Add heap argument
-        arguments.add(0,HEAP);
+        preamble.add(HEAP);
+        // Add lambda value
+        preamble.add(source);
         // Add bindings
         for (WyilFile.Template.Variable hole : holes) {
-            arguments.add(VAR(hole.getName().get()));
+        	preamble.add(VAR(hole.getName().get()));
         }
+        arguments.addAll(0,preamble);
         //
         if (rt.shape() == 1) {
             return cast(rt, ftrt, INVOKE(name, arguments, ATTRIBUTE(expr)));
@@ -2725,7 +2728,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Add lambda reference parameter
         parameters.add(0, new Decl.Parameter("l", LAMBDA));
         {
-            int i = 2;
+            int i = 1;
             for (WyilFile.Template.Variable hole : holes) {
                 parameters.add(i++, new Decl.Parameter(hole.getName().get(), TYPE));
             }

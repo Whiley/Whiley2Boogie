@@ -25,6 +25,8 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
+
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
@@ -41,6 +43,7 @@ import wycc.lang.Content;
 import wycc.util.ByteRepository;
 import wycc.util.DirectoryRoot;
 import wycc.util.Pair;
+import wycc.util.Transactions;
 import wycc.util.Trie;
 import wyil.lang.WyilFile;
 
@@ -139,6 +142,12 @@ public class WhileyCompilerTests {
 	// Test Harness
 	// ======================================================================
 
+//	@Test
+//	public void debug() throws IOException {
+	    // For when you want to debug a specific test case.
+//		testValid("Lambda_Valid_29");
+//	}
+
 	@ParameterizedTest
 	@MethodSource("validSourceFiles")
  	public void testValid(String name) throws IOException {
@@ -193,29 +202,20 @@ public class WhileyCompilerTests {
 		DirectoryRoot root = new DirectoryRoot(registry, whileydir.toFile(), f -> {
 			return f.getName().equals(filename);
 		});
+		// Extract source file
+		WhileyFile source = root.get(WhileyFile.ContentType, path);
+		// Construct build repository
+		Build.Repository repository = new ByteRepository(registry, source);
 		//
 		try {
-			// Extract source file
-			WhileyFile source = root.get(WhileyFile.ContentType, path);
-			// Construct build repository
-			Build.Repository repository = new ByteRepository(registry, source);
 			// Apply Whiley Compiler to repository
-			repository.apply(s -> new CompileTask(path, source).apply(s).first());
-			// Apply Boogie Compiler to repository
-
-			// FIXME: this is broken because we ignore the boolean result for both the
-			// CompileTask above, and the BoogieTask below. This is not right. A better
-			// solution would be for test utils to provide a generic pipeline mechanism.
-
-			repository.apply(s -> new BoogieTask(path,path).apply(s).first());
+			result &= repository.apply(Transactions.create(new CompileTask(path, source), new BoogieTask(path, path)));
 			// Read out binary file from build repository
 			WyilFile target = repository.get(WyilFile.ContentType, path);
 			BoogieFile boogie = repository.get(BoogieFile.ContentType, path);
 			// Write binary file to directory
 			root.put(path, target);
 			root.put(path, boogie);
-			// Check whether result valid (or not)
-			result = target.isValid();
 			// Print out syntactic markers
 			wycli.commands.BuildCmd.printSyntacticMarkers(psyserr, target, source);
 		} catch (SyntacticException e) {
@@ -227,6 +227,7 @@ public class WhileyCompilerTests {
 			wyc.util.TestUtils.printStackTrace(psyserr, e);
 			result = false;
 		} finally {
+
 			// Writeback any results
 			root.synchronise();
 		}
