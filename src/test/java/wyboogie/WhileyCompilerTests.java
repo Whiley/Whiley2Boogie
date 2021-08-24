@@ -109,6 +109,7 @@ public class WhileyCompilerTests {
 		IGNORED.put("Lambda_Valid_24","#59");
 		IGNORED.put("Lambda_Valid_25","#59");
 		IGNORED.put("Lambda_Valid_26","#52");
+		IGNORED.put("Lambda_Valid_30","#123");
 		IGNORED.put("Process_Valid_9","#56");
 		IGNORED.put("Process_Valid_10","#56");
 		IGNORED.put("Property_Valid_17","#55");
