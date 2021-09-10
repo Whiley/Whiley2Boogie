@@ -247,14 +247,28 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         decls.addAll(constructProcedurePrototype(d, name, params, returns, requires, ensures));
         // Add any lambda's used within the method
         decls.addAll(constructLambdas(d));
-        // Add implementation (if one exists)
-        if(d.getBody().size() > 0) {
-            // Yes, this is not an external symbol
+        // Add implementation (if appropriate)
+        if(!isExternalOrUnsafe(d)) {
+            // Yes, this is neither an external symbol nor is it declared unsafe.
             decls.addAll(constructProcedureImplementation(d, name, params, returns, body));
         }
         // Done
         return new Decl.Sequence(decls);
     }
+
+    /**
+	 * Determine whether a given function or method requires its body to be checked
+	 * (i.e. translated into Boogie). If a method is declared as <code>native</code>
+	 * then there is no body to check! Otherwise, a method can be declared as
+	 * <code>unsafe</code> meaning it should be ommitted for verification.
+	 *
+	 * @param d
+	 * @return
+	 */
+	public static boolean isExternalOrUnsafe(WyilFile.Decl.FunctionOrMethod d) {
+		return d.getModifiers().match(WyilFile.Modifier.Native.class) != null
+				|| d.getModifiers().match(WyilFile.Modifier.Unsafe.class) != null;
+	}
 
     public List<Decl> constructProcedurePrototype(WyilFile.Decl.FunctionOrMethod d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, List<Expr.Logical> requires, List<Expr.Logical> ensures) {
         List<Expr.Logical> freeRequires = new ArrayList<>();
