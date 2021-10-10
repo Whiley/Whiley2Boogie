@@ -51,8 +51,12 @@ public class Boogie {
     /**
      * The following regex matches the error lines reported by Boogie.  The regex identifies the line number, column number and the message itself.
      */
-    private static final Pattern ERROR_MATCH = Pattern.compile(FILE_MATCH + "\\(([0-9]+),([0-9]+)\\): Error[ A-Z0-9]*: ([a-zA-Z. 0-9$#:\\(\\)]+)");
+    private static final Pattern ERROR_MATCH = Pattern.compile(FILE_MATCH + "\\(([0-9]+),([0-9]+)\\): Error[ A-Z0-9]*: ([a-zA-Z. 0-9$#:\\-\\(\\)]+)");
 
+    /**
+   	 * Match name resolution error
+   	 */
+    private static final Pattern NAME_RESOLUTION_MATCH = Pattern.compile("[0-9]+ name resolution errors detected in " + FILE_MATCH);
     /**
      * The following regex matches the start of an execution trace
      */
@@ -292,6 +296,8 @@ public class Boogie {
                     // Construct Error object
                     BoogieFile.Item item = m.get(line, col);
                     errors[i] = new Error(line, col, message, item);
+                } else if(NAME_RESOLUTION_MATCH.matcher(ith).matches()) {
+                	errors[i] = new Error(0,0,"name resolution error",null);
                 } else if(EXECUTION_TRACE_MATCH.matcher(ith).matches()) {
                     // Skip the execution trace
                     i = i + 1;
