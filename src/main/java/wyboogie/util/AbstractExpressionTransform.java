@@ -185,6 +185,16 @@ public abstract class AbstractExpressionTransform<S> extends AbstractExpressionV
             return new Pair<>(state,BoogieFile.OR(operands, expr.getAttributes()));
         }
     }
+
+    @Override
+    protected Pair<S, Expr> constructOld(Expr.Old expr, Pair<S, Expr> operand) {
+        if (expr.getOperand() == operand.second()) {
+            return new Pair<>(operand.first(), expr);
+        } else {
+            return new Pair<>(operand.first(), BoogieFile.OLD((Expr.Logical) operand.second(), expr.getAttributes()));
+        }
+    }
+
     @Override
     protected Pair<S,Expr> constructExistentialQuantifier(Expr.ExistentialQuantifier expr, Pair<S,Expr> body) {
         if(body.second() == expr.getBody()) {

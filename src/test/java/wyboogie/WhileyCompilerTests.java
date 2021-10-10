@@ -25,7 +25,7 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import jbfs.core.Build;
@@ -141,11 +141,11 @@ public class WhileyCompilerTests {
 	// Test Harness
 	// ======================================================================
 
-//	@Test
-//	public void debug() throws IOException {
-	    // For when you want to debug a specific test case.
-//		testValid("Lambda_Valid_29");
-//	}
+	@Test
+	public void debug() throws IOException {
+//	     For when you want to debug a specific test case.
+		testValid("Test_Valid_1");
+	}
 
 	@ParameterizedTest
 	@MethodSource("validSourceFiles")
