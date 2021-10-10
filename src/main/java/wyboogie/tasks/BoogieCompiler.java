@@ -1869,6 +1869,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     @Override
+    public Expr constructOld(WyilFile.Expr.Old expr, Expr operand) {
+        return OLD(operand);
+    }
+
+    @Override
     public Expr constructNotEqual(WyilFile.Expr.NotEqual expr, Expr lhs, Expr rhs) {
         WyilFile.Type lhsT = expr.getFirstOperand().getType();
         WyilFile.Type rhsT = expr.getSecondOperand().getType();
