@@ -24,10 +24,9 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
+import jbfs.util.ArrayUtils;
 import wyboogie.core.BoogieFile;
 import wyboogie.io.BoogieFilePrinter;
-import wycc.util.ArrayUtils;
 
 /**
  * A wrapper for the "boogie" verifier.

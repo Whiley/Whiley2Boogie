@@ -13,10 +13,8 @@
 // limitations under the License.
 package wyboogie.util;
 
-import wycc.lang.Build;
-import wycc.lang.SyntacticItem;
+import jbfs.core.Build;
 import wycc.util.AbstractCompilationUnit.Tuple;
-import wyil.lang.WyilFile;
 import wyil.lang.WyilFile.*;
 
 import java.util.ArrayList;

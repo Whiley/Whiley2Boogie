@@ -13,12 +13,12 @@
 // limitations under the License.
 package wyboogie.util;
 
-import wyboogie.core.BoogieFile;
-import wyboogie.core.BoogieFile.Expr;
-import wycc.util.Pair;
-
 import java.util.ArrayList;
 import java.util.List;
+import jbfs.util.Pair;
+import wyboogie.core.BoogieFile;
+import wyboogie.core.BoogieFile.Expr;
+
 
 public abstract class AbstractExpressionTransform<S> extends AbstractExpressionVisitor<Pair<S, Expr>, Pair<S, Expr>> {
 

@@ -16,15 +16,15 @@ package wyboogie.tasks;
 import java.util.Collections;
 import java.util.List;
 
+import jbfs.core.Build;
+import jbfs.core.Build.Artifact;
+import jbfs.core.Build.SnapShot;
+import jbfs.util.Pair;
+import jbfs.util.Trie;
 import wyboogie.core.BoogieFile;
 import wyboogie.util.Boogie;
-import wycc.lang.Build;
-import wycc.lang.Build.Artifact;
-import wycc.lang.Build.SnapShot;
 import wycc.lang.SyntacticException;
 import wycc.lang.SyntacticItem;
-import wycc.util.Pair;
-import wycc.util.Trie;
 import wyc.util.ErrorMessages;
 import wyil.lang.WyilFile;
 
