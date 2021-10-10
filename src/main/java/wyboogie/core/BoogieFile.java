@@ -24,10 +24,10 @@ import java.util.Collections;
 import java.util.List;
 
 import wyboogie.io.BoogieFilePrinter;
-import wycc.lang.Build;
-import wycc.lang.Build.Artifact;
-import wycc.lang.Content;
-import wycc.util.Trie;
+import jbfs.core.Build;
+import jbfs.core.Build.Artifact;
+import jbfs.core.Content;
+import jbfs.util.Trie;
 
 public class BoogieFile implements Build.Artifact {
 	// =========================================================================
@@ -82,7 +82,7 @@ public class BoogieFile implements Build.Artifact {
 	}
 
 	@Override
-	public wycc.lang.Content.Type<? extends Artifact> getContentType() {
+	public Content.Type<? extends Artifact> getContentType() {
 		return ContentType;
 	}
 

@@ -13,19 +13,15 @@
 // limitations under the License.
 package wyboogie;
 
-import wycc.lang.Build;
+import java.io.IOException;
+import java.math.BigInteger;
+import jbfs.core.Build;
+import jbfs.core.Content;
+import jbfs.util.Trie;
 import wycc.util.AbstractCompilationUnit.Value;
-import wycc.util.Trie;
 import wycli.cfg.Configuration;
 import wycli.lang.Command;
 import wycli.lang.Plugin;
-import wycc.lang.Content;
-import wyil.lang.WyilFile;
-
-import java.io.IOException;
-import java.math.BigInteger;
-import java.util.List;
-
 import wyboogie.core.BoogieFile;
 import wyboogie.tasks.BoogieTask;
 

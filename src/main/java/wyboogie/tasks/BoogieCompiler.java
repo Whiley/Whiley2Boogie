@@ -17,6 +17,12 @@ import java.math.BigInteger;
 import java.util.*;
 import java.util.function.Function;
 
+import jbfs.core.Build;
+import jbfs.core.Build.Meter;
+import jbfs.core.Content;
+import jbfs.util.Trie;
+import jbfs.util.Pair;
+
 import static wyboogie.core.BoogieFile.*;
 import static wyboogie.util.Util.*;
 
@@ -27,11 +33,8 @@ import wyboogie.core.BoogieFile.Stmt;
 import wyboogie.core.BoogieFile.LVal;
 
 import wyboogie.util.*;
-import wycc.lang.Build;
-import wycc.lang.Build.Meter;
 import wycc.lang.SyntacticItem;
 import wycc.util.AbstractCompilationUnit.Tuple;
-import wycc.util.Pair;
 import wyil.lang.WyilFile;
 import wyil.util.*;
 
@@ -2192,7 +2195,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 }
             }
 
-            @Override
+			@Override
             public Pair<Stmt, Expr> constructLogicalImplication(Expr.Implies expr, Pair<Stmt, Expr> lhs, Pair<Stmt, Expr> rhs) {
                 SyntacticItem wyItem = expr.getAttribute(SyntacticItem.class);
                 //
