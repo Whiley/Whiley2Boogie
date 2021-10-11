@@ -221,6 +221,20 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     @Override
+    public Decl constructVariant(WyilFile.Decl.Variant d, List clauses) {
+        ArrayList<Decl> decls = new ArrayList<>();
+        decls.addAll(constructCommentHeading("PROPERTY: " + d.getQualifiedName()));
+        // Apply name mangling
+        String name = toMangledName(d);
+        // Construct parameters
+        Pair<List<Decl.Parameter>, List<Expr.Logical>> parameters = constructParameters(d.getTemplate(), d.getParameters(), HEAP);
+        // FIXME: what to do with the type constraints?
+        decls.add(FUNCTION(name, append(HEAP_PARAM, parameters.first()), Type.Bool, AND(clauses)));
+        return new Decl.Sequence(decls);
+    }
+
+
+    @Override
     public Decl constructFunction(WyilFile.Decl.Function d, List<Expr> precondition, List<Expr> postcondition,
                                   Stmt body) {
         return constructFunctionOrMethod(d, precondition, postcondition, body);
@@ -1870,7 +1884,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Expr constructOld(WyilFile.Expr.Old expr, Expr operand) {
-        return OLD(operand);
+    	// Identify enclosing function/method to figure out names of returns.
+        WyilFile.Decl.Callable enclosing = expr.getAncestor(WyilFile.Decl.Variant.class);
+        if(enclosing != null) {
+        	return unbox(expr.getType(), GET(OLDHEAP, operand, ATTRIBUTE(expr)));
+        } else {
+        	return OLD(operand);
+        }
     }
 
     @Override
@@ -4260,8 +4280,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * The name used to represent the heap variable which is passed into a method.
      */
     private static Expr.VariableAccess HEAP = VAR("HEAP");
+    private static Expr.VariableAccess OLDHEAP = VAR("#HEAP");
     private static Expr OLD_HEAP = OLD(HEAP);
     private static Decl.Variable HEAP_PARAM = new Decl.Variable("HEAP",REFMAP);
-    private static Decl.Parameter NHEAP_PARAM = new Decl.Parameter("#HEAP",REFMAP);
     private static Expr.VariableAccess VOID = VAR("Void");
 }
