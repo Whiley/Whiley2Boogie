@@ -36,8 +36,8 @@ import jbfs.util.Pair;
 import jbfs.util.Transactions;
 import jbfs.util.Trie;
 import wyboogie.core.BoogieFile;
-import wyboogie.tasks.BoogieTask;
-
+import wyboogie.tasks.BoogieBuildTask;
+import wyboogie.tasks.BoogieVerifyTask;
 import wycc.lang.SyntacticException;
 
 import wyc.lang.WhileyFile;
@@ -56,6 +56,12 @@ import wyil.lang.WyilFile;
  *
  */
 public class WhileyCompilerTests {
+	public enum Error {
+		OK, // Test compiled and verified correctly
+		FAILED_COMPILE, // Test did not compile
+		FAILED_VERIFY, // Test failed boogie
+		EXCEPTION,	// internal failure
+	}
 	/**
 	 * Configure Timeout to use for Boogie (in seconds)
 	 */
@@ -121,6 +127,8 @@ public class WhileyCompilerTests {
 		IGNORED.put("Reference_Valid_24","#89");
 		IGNORED.put("Reference_Valid_29","#60");
 		IGNORED.put("Reference_Valid_33","#60");
+		IGNORED.put("Unsafe_Valid_4","#112");
+		IGNORED.put("Unsafe_Valid_5","#112");
 		IGNORED.put("Reference_Valid_39","#115");
 		// ==========================================================
 		// Invalid Tests
@@ -151,11 +159,10 @@ public class WhileyCompilerTests {
 	@MethodSource("validSourceFiles")
  	public void testValid(String name) throws IOException {
 		// Compile to Java Bytecode
-		Pair<Boolean, String> p = compileWhiley2Boogie(VALID_SRC_DIR, // location of source directory
+		Pair<Error, String> p = compileWhiley2Boogie(VALID_SRC_DIR, // location of source directory
 				name); // name of test to compile
 		// Check outcome was positive
-		if (!p.first()) {
-			System.out.println(p.second());
+		if (p.first() != Error.OK) {
 			fail("Test failed to compile!");
 		}
 	}
@@ -165,11 +172,13 @@ public class WhileyCompilerTests {
 	public void testInvalid(String name) throws IOException {
 		File whileySrcDir = INVALID_SRC_DIR.toFile();
 		// Compile to Java Bytecode
-		Pair<Boolean, String> p = compileWhiley2Boogie(INVALID_SRC_DIR, // location of source directory
+		Pair<Error, String> p = compileWhiley2Boogie(INVALID_SRC_DIR, // location of source directory
 				name); // name of test to compile
 		// Check outcome was negative
-		if (p.first()) {
-			System.out.println(p.second());
+		if(p.first() == Error.FAILED_COMPILE) {
+			// Ignore tests which fail because they cannot be compiled by the Whiley
+			// Compiler. We're only interested in tests which pass through to verification.
+		} else if (p.first() != Error.FAILED_VERIFY) {
 			fail("Test should have failed to compile / verify!");
 		}
 	}
@@ -189,14 +198,14 @@ public class WhileyCompilerTests {
 	 * @return
 	 * @throws IOException
 	 */
-	public static Pair<Boolean,String> compileWhiley2Boogie(java.nio.file.Path whileydir, String arg) throws IOException {
+	public static Pair<Error,String> compileWhiley2Boogie(java.nio.file.Path whileydir, String arg) throws IOException {
 		String filename = arg + ".whiley";
 		ByteArrayOutputStream syserr = new ByteArrayOutputStream();
 		PrintStream psyserr = new PrintStream(syserr);
 		// Determine the ID of the test being compiler
 		Trie path = Trie.fromString(arg);
 		//
-		boolean result = true;
+		Error result;
 		// Construct the directory root
 		DirectoryRoot root = new DirectoryRoot(registry, whileydir.toFile(), f -> {
 			return f.getName().equals(filename);
@@ -208,25 +217,34 @@ public class WhileyCompilerTests {
 		//
 		try {
 			// Apply Whiley Compiler to repository
-			result &= repository.apply(Transactions.create(new CompileTask(path, source), new BoogieTask(path, path)));
-			// Read out binary file from build repository
-			WyilFile target = repository.get(WyilFile.ContentType, path);
-			BoogieFile boogie = repository.get(BoogieFile.ContentType, path);
-			// Write binary file to directory
-			root.put(path, target);
-			root.put(path, boogie);
-			// Print out syntactic markers
-			wycli.commands.BuildCmd.printSyntacticMarkers(psyserr, target, source);
+			if(repository.apply(Transactions.create(new CompileTask(path, source)))) {
+				WyilFile target = repository.get(WyilFile.ContentType, path);
+				root.put(path, target);
+				if(repository.apply(Transactions.create(new BoogieBuildTask(path, path)))) {
+					BoogieFile boogie = repository.get(BoogieFile.ContentType, path);
+					root.put(path, boogie);
+					if(repository.apply(Transactions.create(new BoogieVerifyTask(path, path)))) {
+						result = Error.OK;
+					} else {
+	 					result = Error.FAILED_VERIFY;
+	 				}
+ 				} else {
+ 					throw new IllegalArgumentException("deadcode");
+ 				}
+				// Print out syntactic markers
+				wycli.commands.BuildCmd.printSyntacticMarkers(psyserr, target, source);
+			} else {
+				result = Error.FAILED_COMPILE;
+			}
 		} catch (SyntacticException e) {
 			// Print out the syntax error
-			//e.outputSourceError(psyserr);
-			result = false;
+			e.outputSourceError(psyserr);
+			result = Error.EXCEPTION;
 		} catch (Exception e) {
 			// Print out the syntax error
 			wyc.util.TestUtils.printStackTrace(psyserr, e);
-			result = false;
+			result = Error.EXCEPTION;
 		} finally {
-
 			// Writeback any results
 			root.synchronise();
 		}

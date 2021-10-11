@@ -15,15 +15,22 @@ package wyboogie;
 
 import java.io.IOException;
 import java.math.BigInteger;
+import java.util.Collections;
+import java.util.List;
+
 import jbfs.core.Build;
+import jbfs.core.Build.Artifact;
+import jbfs.core.Build.SnapShot;
 import jbfs.core.Content;
+import jbfs.util.Pair;
 import jbfs.util.Trie;
 import wycc.util.AbstractCompilationUnit.Value;
 import wycli.cfg.Configuration;
 import wycli.lang.Command;
 import wycli.lang.Plugin;
 import wyboogie.core.BoogieFile;
-import wyboogie.tasks.BoogieTask;
+import wyboogie.tasks.BoogieBuildTask;
+import wyboogie.tasks.BoogieVerifyTask;
 
 public class Activator implements Plugin.Activator {
 
@@ -61,9 +68,9 @@ public class Activator implements Plugin.Activator {
 			// Determine enclosing package name
 			Trie pkg = Trie.fromString(config.get(Value.UTF8.class, PACKAGE_NAME).unwrap());
 			// Identify directory where generated Boogie files are dumped.
-			Trie source = Trie.fromString(config.get(Value.UTF8.class, BUILD_WHILEY_TARGET).unwrap());
+			final Trie source = Trie.fromString(config.get(Value.UTF8.class, BUILD_WHILEY_TARGET).unwrap()).append(pkg);
 			// Specify directory where generated Boogie files are dumped.
-			Trie target= Trie.fromString(config.get(Value.UTF8.class, BUILD_BOOGIE_TARGET).unwrap());
+			final Trie target= Trie.fromString(config.get(Value.UTF8.class, BUILD_BOOGIE_TARGET).unwrap()).append(pkg);
 			// Determine whether verification enabled or not
 			boolean verification = config.get(Value.Bool.class, BUILD_BOOGIE_VERIFY).unwrap();
 			// Determine whether verbose output enabled or not
@@ -73,8 +80,37 @@ public class Activator implements Plugin.Activator {
 			// Determine timeout to use
 			BigInteger timeout = config.get(Value.Int.class, BUILD_BOOGIE_TIMEOUT).unwrap();
 			// Register build target for this package
-			return new BoogieTask(target.append(pkg), source.append(pkg)).setVerbose(verbose).setVerification(verification)
-					.setDebug(debug).setTimeout(timeout.intValue());
+			return new Build.Task() {
+
+				@Override
+				public Trie getPath() {
+					return target;
+				}
+
+				@Override
+				public Type<? extends Artifact> getContentType() {
+					return BoogieFile.ContentType;
+				}
+
+				@Override
+				public List<? extends Artifact> getSourceArtifacts() {
+					return Collections.EMPTY_LIST;
+				}
+
+				@Override
+				public Pair<SnapShot, Boolean> apply(SnapShot snapshot) {
+					BoogieBuildTask bt = new BoogieBuildTask(target, source).setDebug(debug);
+					Pair<SnapShot, Boolean> p = bt.apply(snapshot);
+					if (p.second() && verification) {
+						BoogieVerifyTask vt = new BoogieVerifyTask(target, source).setVerbose(verbose)
+								.setTimeout(timeout.intValueExact());
+						p = vt.apply(p.first());
+					}
+					//
+					return p;
+				}
+
+			};
 		}
 	};
 
