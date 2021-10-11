@@ -1,5 +1,4 @@
 method m(&(&int) p)
-ensures *p == old(*p)
 ensures **p == old(**p):
     skip
 
