@@ -61,6 +61,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      */
     private boolean structuredLoops = true;
 
+    /**
+	 * Very yucky hack for old expressions within pure contexts (e.g. within
+	 * variants).
+	 */
+    private boolean oldContext = false;
+
     public BoogieCompiler(Meter meter, BoogieFile target) {
         super(meter, subtyping);
         this.boogieFile = target;
@@ -223,13 +229,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     @Override
     public Decl constructVariant(WyilFile.Decl.Variant d, List clauses) {
         ArrayList<Decl> decls = new ArrayList<>();
-        decls.addAll(constructCommentHeading("PROPERTY: " + d.getQualifiedName()));
+        decls.addAll(constructCommentHeading("VARIANT: " + d.getQualifiedName()));
         // Apply name mangling
         String name = toMangledName(d);
         // Construct parameters
         Pair<List<Decl.Parameter>, List<Expr.Logical>> parameters = constructParameters(d.getTemplate(), d.getParameters(), HEAP);
         // FIXME: what to do with the type constraints?
-        decls.add(FUNCTION(name, append(HEAP_PARAM, parameters.first()), Type.Bool, AND(clauses)));
+		decls.add(FUNCTION(name, append(HEAP_PARAM, append(OHEAP_PARAM, parameters.first())), Type.Bool, AND(clauses)));
         return new Decl.Sequence(decls);
     }
 
@@ -1181,7 +1187,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             // "skip".
             stmts.add(ASSERT(CONST(true)));
         } else {
-            WyilFile.Type.Callable mt = (WyilFile.Type.Callable) ft;
+            WyilFile.Type.Callable mt = ft;
             // Extract template arguments
             Tuple<WyilFile.Type> binding = expr.getBinding().getArguments();
             // Extract declared return type
@@ -1404,14 +1410,14 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             }
             // Assert invariant on entry
             for (int i = 0; i != invariant.size(); ++i) {
-                stmts.add(ASSERT((Expr.Logical) invariant.get(i), ATTRIBUTE(WyilFile.STATIC_ENTER_LOOPINVARIANT_FAILURE)));
+                stmts.add(ASSERT(invariant.get(i), ATTRIBUTE(WyilFile.STATIC_ENTER_LOOPINVARIANT_FAILURE)));
             }
             stmts.add(LABEL(HEAD_LAB));
             // Havoc modified variables
             stmts.add(HAVOC(determineHavocs(stmt)));
             // Assume invariant
             for (int i = 0; i != invariant.size(); ++i) {
-                stmts.add(ASSUME((Expr.Logical) invariant.get(i)));
+                stmts.add(ASSUME(invariant.get(i)));
             }
             // Non-deterministic choice
             stmts.add(GOTO(Arrays.asList(BODY_LAB, EXIT_LAB)));
@@ -1422,7 +1428,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             stmts.add(body);
             // Assert invariant is restored
             for (int i = 0; i != invariant.size(); ++i) {
-                stmts.add(ASSERT((Expr.Logical) invariant.get(i), ATTRIBUTE(WyilFile.STATIC_RESTORE_LOOPINVARIANT_FAILURE)));
+                stmts.add(ASSERT(invariant.get(i), ATTRIBUTE(WyilFile.STATIC_RESTORE_LOOPINVARIANT_FAILURE)));
             }
             stmts.add(GOTO(HEAD_LAB));
             stmts.add(LABEL(EXIT_LAB));
@@ -1443,7 +1449,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Expr constructDereferenceLVal(WyilFile.Expr.Dereference expr, Expr operand) {
-        return GET(HEAP, operand, ATTRIBUTE(expr));
+    	if(oldContext) {
+    		return GET(OHEAP, operand, ATTRIBUTE(expr));
+    	} else {
+    		return GET(HEAP, operand, ATTRIBUTE(expr));
+    	}
     }
 
     @Override
@@ -1603,18 +1613,22 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Expr constructDereference(WyilFile.Expr.Dereference expr, Expr operand) {
-        return unbox(expr.getType(), GET(HEAP, operand, ATTRIBUTE(expr)));
+    	Expr H = oldContext ? OHEAP : HEAP;
+    	//
+    	return unbox(expr.getType(), GET(H, operand, ATTRIBUTE(expr)));
     }
 
     @Override
     public Expr constructFieldDereference(WyilFile.Expr.FieldDereference expr, Expr operand) {
+    	Expr H = oldContext ? OHEAP : HEAP;
+    	//
         Expr field = VAR("$" + expr.getField().get());
         // Extract the source reference type
         WyilFile.Type.Reference refT = expr.getOperand().getType().as(WyilFile.Type.Reference.class);
         // Extract the source record type
         WyilFile.Type.Record recT = refT.getElement().as(WyilFile.Type.Record.class);
         // Reconstruct source expression
-        Expr deref = unbox(recT, GET(HEAP, operand, ATTRIBUTE(expr)));
+        Expr deref = unbox(recT, GET(H, operand, ATTRIBUTE(expr)));
         //
         return unbox(expr.getType(), GET(deref, field, ATTRIBUTE(expr)));
     }
@@ -1760,6 +1774,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Expr constructInvoke(WyilFile.Expr.Invoke expr, List<Expr> arguments) {
+        // Identify enclosing function/method to figure out names of returns.
+        WyilFile.Decl.Callable enclosing = expr.getAncestor(WyilFile.Decl.FunctionOrMethod.class);
+        //
         ArrayList<Expr> templateArguments = new ArrayList<>();
         Tuple<WyilFile.Type> binding = expr.getBinding().getArguments();
         // Extract (concrete) type signature
@@ -1779,6 +1796,15 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         arguments.addAll(0, templateArguments);
         // Add heap argument
         arguments.add(0,HEAP);
+        //
+        if(expr.getLink().getTarget() instanceof WyilFile.Decl.Variant) {
+    		// Add old heap argument
+        	if(enclosing != null) {
+        		arguments.add(1,OLD_HEAP);
+        	} else {
+        		arguments.add(1,OHEAP);
+        	}
+        }
         //
         if (rt.shape() == 1) {
             return cast(rt, ftrt, INVOKE(name, arguments, ATTRIBUTE(expr)));
@@ -1887,7 +1913,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     	// Identify enclosing function/method to figure out names of returns.
         WyilFile.Decl.Callable enclosing = expr.getAncestor(WyilFile.Decl.Variant.class);
         if(enclosing != null) {
-        	return unbox(expr.getType(), GET(OLDHEAP, operand, ATTRIBUTE(expr)));
+        	oldContext = true;
+        	operand = super.visitExpression(expr.getOperand());
+        	oldContext = false;
+        	return operand;
         } else {
         	return OLD(operand);
         }
@@ -4280,8 +4309,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * The name used to represent the heap variable which is passed into a method.
      */
     private static Expr.VariableAccess HEAP = VAR("HEAP");
-    private static Expr.VariableAccess OLDHEAP = VAR("#HEAP");
+    private static Expr.VariableAccess OHEAP = VAR("#HEAP");
     private static Expr OLD_HEAP = OLD(HEAP);
     private static Decl.Variable HEAP_PARAM = new Decl.Variable("HEAP",REFMAP);
+    private static Decl.Variable OHEAP_PARAM = new Decl.Variable("#HEAP",REFMAP);
     private static Expr.VariableAccess VOID = VAR("Void");
 }
+
