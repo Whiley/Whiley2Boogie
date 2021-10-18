@@ -123,14 +123,14 @@ public class WhileyCompilerTests {
 		IGNORED.put("Requires_Valid_2","#79");
 		IGNORED.put("Reference_Valid_6","#56");
 		IGNORED.put("Reference_Valid_11","#61");
-		IGNORED.put("Reference_Valid_23","#60");
 		IGNORED.put("Reference_Valid_24","#89");
-		IGNORED.put("Reference_Valid_29","#60");
-		IGNORED.put("Reference_Valid_33","#60");
 		IGNORED.put("Unsafe_Valid_4","#112");
 		IGNORED.put("Unsafe_Valid_5","#112");
 		IGNORED.put("Reference_Valid_39","#115");
-		//
+		// Old stuff
+		IGNORED.put("Reference_Valid_23","#127");
+		IGNORED.put("Reference_Valid_29","#127");
+		IGNORED.put("Reference_Valid_33","#127");
 		IGNORED.put("Old_Valid_9","#128");
 		IGNORED.put("Old_Valid_10","#128");
 		IGNORED.put("Old_Valid_11","#127");
@@ -140,6 +140,7 @@ public class WhileyCompilerTests {
 		IGNORED.put("Old_Valid_19","#127");
 		IGNORED.put("Old_Valid_20","#127");
 		IGNORED.put("Old_Valid_21","#127");
+		IGNORED.put("Old_Valid_22","#127");
 		// ==========================================================
 		// Invalid Tests
 		// ==========================================================
