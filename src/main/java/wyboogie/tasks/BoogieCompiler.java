@@ -1613,18 +1613,22 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Expr constructDereference(WyilFile.Expr.Dereference expr, Expr operand) {
-        return unbox(expr.getType(), GET(HEAP, operand, ATTRIBUTE(expr)));
+    	Expr H = oldContext ? OHEAP : HEAP;
+    	//
+    	return unbox(expr.getType(), GET(H, operand, ATTRIBUTE(expr)));
     }
 
     @Override
     public Expr constructFieldDereference(WyilFile.Expr.FieldDereference expr, Expr operand) {
+    	Expr H = oldContext ? OHEAP : HEAP;
+    	//
         Expr field = VAR("$" + expr.getField().get());
         // Extract the source reference type
         WyilFile.Type.Reference refT = expr.getOperand().getType().as(WyilFile.Type.Reference.class);
         // Extract the source record type
         WyilFile.Type.Record recT = refT.getElement().as(WyilFile.Type.Record.class);
         // Reconstruct source expression
-        Expr deref = unbox(recT, GET(HEAP, operand, ATTRIBUTE(expr)));
+        Expr deref = unbox(recT, GET(H, operand, ATTRIBUTE(expr)));
         //
         return unbox(expr.getType(), GET(deref, field, ATTRIBUTE(expr)));
     }
