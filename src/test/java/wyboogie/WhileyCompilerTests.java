@@ -231,7 +231,8 @@ public class WhileyCompilerTests {
 			if(repository.apply(Transactions.create(new CompileTask(path, source)))) {
 				WyilFile target = repository.get(WyilFile.ContentType, path);
 				root.put(path, target);
-				if(repository.apply(Transactions.create(new BoogieBuildTask(path, path)))) {
+				BoogieBuildTask bt = new BoogieBuildTask(path, path).setDebug(DEBUG);
+				if(repository.apply(Transactions.create(bt))) {
 					BoogieFile boogie = repository.get(BoogieFile.ContentType, path);
 					root.put(path, boogie);
 					if(repository.apply(Transactions.create(new BoogieVerifyTask(path, path)))) {
