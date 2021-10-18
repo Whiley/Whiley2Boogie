@@ -174,6 +174,7 @@ public class WhileyCompilerTests {
 				name); // name of test to compile
 		// Check outcome was positive
 		if (p.first() != Error.OK) {
+			System.err.println(p.second());
 			fail("Test failed to compile!");
 		}
 	}
