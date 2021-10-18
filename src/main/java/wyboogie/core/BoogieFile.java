@@ -1194,7 +1194,7 @@ public class BoogieFile implements Build.Artifact {
 			}
 		}
 
-		public static class Old extends AbstractItem implements Expr, UnaryOperator {
+		public static class Old extends AbstractItem implements Logical, UnaryOperator {
 			private final Expr operand;
 
 			private Old(Expr operand, Attribute[] attributes) {

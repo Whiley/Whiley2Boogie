@@ -308,6 +308,7 @@ public abstract class AbstractFold<R> {
 			case EXPR_dereference:
 			case EXPR_fielddereference:
 			case EXPR_new:
+			case EXPR_old:
 			case EXPR_recordaccess:
 			case EXPR_recordborrow:
 			case EXPR_arraylength:
@@ -376,6 +377,8 @@ public abstract class AbstractFold<R> {
 				return visitFieldDereference((Expr.FieldDereference) expr);
 			case EXPR_new:
 				return visitNew((Expr.New) expr);
+			case EXPR_old:
+				return visitOld((Expr.Old) expr);
 			case EXPR_recordaccess:
 			case EXPR_recordborrow:
 				return visitRecordAccess((Expr.RecordAccess) expr);
@@ -688,6 +691,11 @@ public abstract class AbstractFold<R> {
 		return constructNew(expr,r);
 	}
 
+	public R visitOld(Expr.Old expr) {
+		R r = visitExpression(expr.getOperand());
+		return constructOld(expr,r);
+	}
+
 	public R visitNotEqual(Expr.NotEqual expr) {
 		R lhs = visitExpression(expr.getFirstOperand());
 		R rhs = visitExpression(expr.getSecondOperand());
@@ -872,6 +880,10 @@ public abstract class AbstractFold<R> {
 	}
 
 	public R constructNew(Expr.New expr, R operand) {
+		return operand;
+	}
+
+	public R constructOld(Expr.Old expr, R operand) {
 		return operand;
 	}
 

@@ -149,6 +149,11 @@ public abstract class AbstractExpressionFold<E> extends AbstractExpressionVisito
     }
 
     @Override
+    protected E constructOld(Expr.Old expr, E source) {
+        return source;
+    }
+
+    @Override
     protected E constructVariableAccess(Expr.VariableAccess expr) {
         return BOTTOM();
     }

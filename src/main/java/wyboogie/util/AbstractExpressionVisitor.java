@@ -86,6 +86,8 @@ public abstract class AbstractExpressionVisitor<E,L extends E> {
             return visitLogicalIff((Expr.Iff) expr);
         } else if(expr instanceof Expr.LogicalNot) {
             return visitLogicalNot((Expr.LogicalNot) expr);
+        } else if(expr instanceof Expr.Old) {
+            return visitOld((Expr.Old) expr);
         } else if(expr instanceof Expr.ExistentialQuantifier){
             return visitExistentialQuantifier((Expr.ExistentialQuantifier) expr);
         } else {
@@ -234,6 +236,11 @@ public abstract class AbstractExpressionVisitor<E,L extends E> {
         return constructNotEquals(expr,lhs,rhs);
     }
 
+    protected L visitOld(Expr.Old expr) {
+        E operand = visitExpression(expr.getOperand());
+        return constructOld(expr,operand);
+    }
+
     protected abstract E constructInteger(Expr.Integer expr);
     protected abstract E constructBytes(Expr.Bytes expr);
     protected abstract E constructDictionaryAccess(Expr.DictionaryAccess expr, E source, E index);
@@ -261,5 +268,6 @@ public abstract class AbstractExpressionVisitor<E,L extends E> {
     protected abstract L constructUniversalQuantifier(Expr.UniversalQuantifier expr, L body);
     protected abstract L constructInvoke(Expr.Invoke expr, List<E> operands);
     protected abstract L constructNotEquals(Expr.NotEquals expr, E lhs, E rhs);
+    protected abstract L constructOld(Expr.Old expr, E operandexpr);
     protected abstract L constructVariableAccess(Expr.VariableAccess expr);
 }
