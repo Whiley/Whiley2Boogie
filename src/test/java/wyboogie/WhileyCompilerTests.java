@@ -130,6 +130,16 @@ public class WhileyCompilerTests {
 		IGNORED.put("Unsafe_Valid_4","#112");
 		IGNORED.put("Unsafe_Valid_5","#112");
 		IGNORED.put("Reference_Valid_39","#115");
+		//
+		IGNORED.put("Old_Valid_9","#128");
+		IGNORED.put("Old_Valid_10","#128");
+		IGNORED.put("Old_Valid_11","#127");
+		IGNORED.put("Old_Valid_12","#127");
+		IGNORED.put("Old_Valid_17","#128");
+		IGNORED.put("Old_Valid_18","#128");
+		IGNORED.put("Old_Valid_19","#127");
+		IGNORED.put("Old_Valid_20","#127");
+		IGNORED.put("Old_Valid_21","#127");
 		// ==========================================================
 		// Invalid Tests
 		// ==========================================================
