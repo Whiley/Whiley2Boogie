@@ -271,7 +271,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Add any lambda's used within the method
         decls.addAll(constructLambdas(d));
         // Add implementation (if appropriate)
-        if(!isExternalOrUnsafe(d)) {
+        if(!isExternalOrUnsafe(d) && !isImported(d)) {
             // Yes, this is neither an external symbol nor is it declared unsafe.
             decls.addAll(constructProcedureImplementation(d, name, params, returns, body));
         }
@@ -291,6 +291,17 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	public static boolean isExternalOrUnsafe(WyilFile.Decl.FunctionOrMethod d) {
 		return d.getModifiers().match(WyilFile.Modifier.Native.class) != null
 				|| d.getModifiers().match(WyilFile.Modifier.Unsafe.class) != null;
+	}
+
+	/**
+	 * Determine whether a given function or method has been imported from an
+	 * external library. In such case, we do not attempt to verify the method.
+	 *
+	 * @param d
+	 * @return
+	 */
+	public static boolean isImported(WyilFile.Decl.FunctionOrMethod d) {
+		return d.getBody().size() == 0;
 	}
 
     public List<Decl> constructProcedurePrototype(WyilFile.Decl.FunctionOrMethod d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, List<Expr.Logical> requires, List<Expr.Logical> ensures) {
