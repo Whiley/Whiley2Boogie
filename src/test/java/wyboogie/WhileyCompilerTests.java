@@ -25,6 +25,7 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -160,6 +161,7 @@ public class WhileyCompilerTests {
 	// Test Harness
 	// ======================================================================
 
+	@Disabled
 	@Test
 	public void debug() throws IOException {
 //	     For when you want to debug a specific test case.
@@ -175,7 +177,7 @@ public class WhileyCompilerTests {
 		// Check outcome was positive
 		if (p.first() != Error.OK) {
 			System.err.println(p.second());
-			fail("Test failed to compile!");
+			fail("Test failed to compile! " + name);
 		}
 	}
 
@@ -191,7 +193,7 @@ public class WhileyCompilerTests {
 			// Ignore tests which fail because they cannot be compiled by the Whiley
 			// Compiler. We're only interested in tests which pass through to verification.
 		} else if (p.first() != Error.FAILED_VERIFY) {
-			fail("Test should have failed to compile / verify!");
+			fail("Test should have failed to compile / verify! " + name);
 		}
 	}
 
