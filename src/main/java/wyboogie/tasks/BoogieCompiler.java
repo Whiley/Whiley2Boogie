@@ -1091,7 +1091,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Stmt constructFor(WyilFile.Stmt.For stmt, Pair<Expr,Expr> range, List<Expr> _invariant, Stmt body) {
-        List<Expr.Logical> invariant = flatternAsLogical(_invariant);
+        List<Expr.Logical> invariant = (List) _invariant;
         boolean needContinueLabel = containsContinueOrBreak(stmt, false);
         boolean needBreakLabel = containsContinueOrBreak(stmt, true);
         boolean pure = isPure(stmt);
@@ -2072,7 +2072,9 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                         r.add(s);
                     }
                 }
-                if (r.size() == 1) {
+                if(r.size() == 0) {
+                	return null;
+                } else if (r.size() == 1) {
                     return r.get(0);
                 } else {
                     return SEQUENCE(r);

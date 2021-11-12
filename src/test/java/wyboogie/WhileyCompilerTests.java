@@ -155,6 +155,17 @@ public class WhileyCompilerTests {
 		IGNORED.put("Type_Invalid_11", "793");
 		IGNORED.put("Reference_Invalid_2", "unclassified");
 		IGNORED.put("While_Invalid_25", "#956");
+		// Unsafe
+		IGNORED.put("Unsafe_Invalid_4","??");
+		IGNORED.put("Unsafe_Invalid_5","??");
+		IGNORED.put("Unsafe_Invalid_6","??");
+		IGNORED.put("Unsafe_Invalid_7","??");
+		IGNORED.put("Unsafe_Invalid_8","??");
+		IGNORED.put("Unsafe_Invalid_9","??");
+		IGNORED.put("Unsafe_Invalid_10","??");
+		IGNORED.put("Unsafe_Invalid_11","??");
+		IGNORED.put("Unsafe_Invalid_12","??");
+
 	}
 
 	// ======================================================================

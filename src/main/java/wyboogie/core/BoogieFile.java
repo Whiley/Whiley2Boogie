@@ -38,7 +38,7 @@ public class BoogieFile implements Build.Artifact {
 	 * Responsible for identifying and reading/writing WyilFiles. The normal
 	 * extension is ".wyil" for WyilFiles.
 	 */
-	public static final Content.Type<BoogieFile> ContentType = new Content.Type<BoogieFile>() {
+	public static final Content.Type<BoogieFile> ContentType = new Content.Type<>() {
 
 		@Override
 		public BoogieFile read(Trie path, InputStream input, Registry registry) throws IOException {
