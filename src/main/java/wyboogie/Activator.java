@@ -90,7 +90,12 @@ public class Activator implements Plugin.Activator {
 			// Determine max number of cores for boogie
 			int vcsCores = config.get(Value.Int.class, BUILD_BOOGIE_VCSCORES).unwrap().intValueExact();
 			// Determine whether to use a log of the prove files
-			String proverLog = config.get(Value.UTF8.class, BUILD_BOOGIE_PROVERLOG).unwrap();
+			String proverLog;
+			if(config.hasKey(BUILD_BOOGIE_PROVERLOG)) {
+				proverLog = config.get(Value.UTF8.class, BUILD_BOOGIE_PROVERLOG).unwrap();
+			} else {
+				proverLog = null;
+			}
 			// Register build target for this package
 			return new Build.Task() {
 
