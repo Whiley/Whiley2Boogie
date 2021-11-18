@@ -41,6 +41,9 @@ public class Activator implements Plugin.Activator {
 	public static Trie BUILD_BOOGIE_VERBOSE = Trie.fromString("build/boogie/verbose");
 	public static Trie BUILD_BOOGIE_DEBUG = Trie.fromString("build/boogie/debug");
 	public static Trie BUILD_BOOGIE_TIMEOUT = Trie.fromString("build/boogie/timeout");
+	public static Trie BUILD_BOOGIE_USEARRAYTHEORY = Trie.fromString("build/boogie/useArrayTheory");
+	public static Trie BUILD_BOOGIE_VCSCORES = Trie.fromString("build/boogie/vcsCores");
+	public static Trie BUILD_BOOGIE_PROVERLOG = Trie.fromString("build/boogie/proverLog");
 	private static Value.UTF8 TARGET_DEFAULT = new Value.UTF8("bin".getBytes());
 
 	public static Command.Platform BOOGIE_PLATFORM = new Command.Platform() {
@@ -57,7 +60,10 @@ public class Activator implements Plugin.Activator {
 					Configuration.UNBOUND_BOOLEAN(BUILD_BOOGIE_VERIFY, "Enable verification of Whiley files using Boogie", new Value.Bool(true)),
 					Configuration.UNBOUND_BOOLEAN(BUILD_BOOGIE_VERBOSE, "Enable verbose output", new Value.Bool(false)),
 					Configuration.UNBOUND_BOOLEAN(BUILD_BOOGIE_DEBUG, "Enable debug mode", new Value.Bool(false)),
-					Configuration.UNBOUND_INTEGER(BUILD_BOOGIE_TIMEOUT, "Set timeout limit (s)", new Value.Int(10))
+					Configuration.UNBOUND_INTEGER(BUILD_BOOGIE_TIMEOUT, "Set timeout limit (s)", new Value.Int(10)),
+					Configuration.UNBOUND_BOOLEAN(BUILD_BOOGIE_USEARRAYTHEORY, "Enable Z3 Array Theory", new Value.Bool(true)),
+					Configuration.UNBOUND_INTEGER(BUILD_BOOGIE_VCSCORES, "Configure boogie /vcsCores", new Value.Int(1)),
+					Configuration.UNBOUND_STRING(BUILD_BOOGIE_PROVERLOG, "Configure boogie /proverLog", null)
 			);
 		}
 
@@ -78,7 +84,13 @@ public class Activator implements Plugin.Activator {
 			// Determine whether debug mode enabled or not
 			boolean debug = config.get(Value.Bool.class, BUILD_BOOGIE_DEBUG).unwrap();
 			// Determine timeout to use
-			BigInteger timeout = config.get(Value.Int.class, BUILD_BOOGIE_TIMEOUT).unwrap();
+			int timeout = config.get(Value.Int.class, BUILD_BOOGIE_TIMEOUT).unwrap().intValueExact();
+			// Determine whether to use array theory or not
+			boolean useArrayTheory = config.get(Value.Bool.class, BUILD_BOOGIE_USEARRAYTHEORY).unwrap();
+			// Determine max number of cores for boogie
+			int vcsCores = config.get(Value.Int.class, BUILD_BOOGIE_VCSCORES).unwrap().intValueExact();
+			// Determine whether to use a log of the prove files
+			String proverLog = config.get(Value.UTF8.class, BUILD_BOOGIE_PROVERLOG).unwrap();
 			// Register build target for this package
 			return new Build.Task() {
 
@@ -102,8 +114,8 @@ public class Activator implements Plugin.Activator {
 					BoogieBuildTask bt = new BoogieBuildTask(target, source).setDebug(debug);
 					Pair<SnapShot, Boolean> p = bt.apply(snapshot);
 					if (p.second() && verification) {
-						BoogieVerifyTask vt = new BoogieVerifyTask(target, source).setVerbose(verbose)
-								.setTimeout(timeout.intValueExact());
+						BoogieVerifyTask vt = new BoogieVerifyTask(target, source, environment.getLogger()).setVerbose(verbose)
+								.setTimeout(timeout).setArrayTheory(useArrayTheory).setVcsCores(vcsCores).setProverLog(proverLog);
 						p = vt.apply(p.first());
 					}
 					//

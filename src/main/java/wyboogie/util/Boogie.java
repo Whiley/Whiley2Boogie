@@ -27,6 +27,7 @@ import java.util.regex.Pattern;
 import jbfs.util.ArrayUtils;
 import wyboogie.core.BoogieFile;
 import wyboogie.io.BoogieFilePrinter;
+import wycc.util.Logger;
 
 /**
  * A wrapper for the "boogie" verifier.
@@ -75,17 +76,27 @@ public class Boogie {
     private final String boogieCmd;
 
     /**
+	 * Logger for useful stuff
+	 */
+	private final Logger logger;
+
+    /**
      * Record command-line options.
      */
     public final Map<String, String> options;
 
     public Boogie() {
-        this(BOOGIE_COMMAND);
+        this(BOOGIE_COMMAND, Logger.NULL);
     }
 
-    public Boogie(String command) {
+    public Boogie(Logger logger) {
+        this(BOOGIE_COMMAND, logger);
+    }
+
+    public Boogie(String command, Logger logger) {
         this.boogieCmd = command;
         this.options = new HashMap<>();
+        this.logger = logger;
     }
 
     /**
@@ -113,6 +124,31 @@ public class Boogie {
         options.put("useArrayTheory", null);
         return this;
     }
+
+    public void setBoogieOption(String key, boolean flag) {
+    	if (flag) {
+			options.put(key, null);
+		} else {
+			options.remove(key);
+		}
+    }
+
+    public void setBoogieOption(String key, String value) {
+    	if (value != null) {
+			options.put(key, value);
+		} else {
+			options.remove(key);
+		}
+    }
+
+    public void setBoogieOption(String key, double d) {
+		options.put(key, Double.toString(d));
+    }
+
+    public void setBoogieOption(String key, int n) {
+		options.put(key, Integer.toString(n));
+    }
+
 
     /**
      * Check a given filename
@@ -148,6 +184,7 @@ public class Boogie {
                 }
             }
             command.add(filename);
+			logger.logTimedMessage("Boogie command: " + command, 0, 0);
             // ===================================================
             // Construct the process
             // ===================================================
@@ -273,12 +310,13 @@ public class Boogie {
      * @param output
      * @return
      */
-    private static Message[] parseErrors(String output, MappablePrintWriter.Mapping<BoogieFile.Item> m) {
+    private Message[] parseErrors(String output, MappablePrintWriter.Mapping<BoogieFile.Item> m) {
         String[] lines = output.split("\n");
         Message[] errors = new Message[lines.length];
         for (int i = 0; i != lines.length; ++i) {
             // Decode boogie error line
             String ith = lines[i].trim();  // discards carriage returns
+			logger.logTimedMessage("Boogie> " + ith, 0, 0);
             if (ith.startsWith("Fatal Error:")) {
                 errors[i] = new FatalError();
                 break;

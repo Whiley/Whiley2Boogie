@@ -14,7 +14,9 @@
 package wyboogie.tasks;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import jbfs.core.Build;
 import jbfs.core.Build.Artifact;
@@ -25,15 +27,15 @@ import wyboogie.core.BoogieFile;
 import wyboogie.util.Boogie;
 import wycc.lang.SyntacticException;
 import wycc.lang.SyntacticItem;
+import wycc.util.Logger;
 import wyc.util.ErrorMessages;
 import wyil.lang.WyilFile;
 
 public class BoogieVerifyTask implements Build.Task {
 	/**
-	 * Handle for the boogie verifier, making sure to enable the array theory (as
-	 * this really helps!)
+	 * Handle for the boogie verifier.
 	 */
-	private final Boogie verifier = new Boogie().setArrayTheory();
+	private final Boogie verifier;
 	/**
 	 * The source file that this task will compiler from.
 	 */
@@ -42,6 +44,10 @@ public class BoogieVerifyTask implements Build.Task {
 	 * Identifier for target of this build task.
 	 */
 	private final Trie target;
+	/**
+	 * Logger for useful stuff
+	 */
+	private final Logger logger;
 	/**
 	 * Specify whether to print verbose progress messages or not
 	 */
@@ -52,6 +58,10 @@ public class BoogieVerifyTask implements Build.Task {
 	private int timeout = 10;
 
 	public BoogieVerifyTask(Trie target, Trie source) {
+		this(target, source, Logger.NULL);
+	}
+
+	public BoogieVerifyTask(Trie target, Trie source, Logger logger) {
 		if(target == null) {
 			throw new IllegalArgumentException("invalid target");
 		} else if(source == null) {
@@ -59,6 +69,8 @@ public class BoogieVerifyTask implements Build.Task {
 		}
 		this.target = target;
 		this.source = source;
+		this.logger = logger;
+		this.verifier = new Boogie(logger);
 	}
 
 	public BoogieVerifyTask setVerbose(boolean flag) {
@@ -68,6 +80,41 @@ public class BoogieVerifyTask implements Build.Task {
 
 	public BoogieVerifyTask setTimeout(int timeout) {
 		this.timeout = timeout;
+		return this;
+	}
+
+	public BoogieVerifyTask setArrayTheory(boolean flag) {
+		verifier.setBoogieOption("useArrayTheory",flag);
+		return this;
+	}
+
+	public BoogieVerifyTask setVcsCores(int n) {
+		verifier.setBoogieOption("vcsCores",n);
+		return this;
+	}
+
+	public BoogieVerifyTask setVcsMaxCost(int n) {
+		verifier.setBoogieOption("vcsMaxCost",n);
+		return this;
+	}
+
+	public BoogieVerifyTask setVcsMaxSplits(int n) {
+		verifier.setBoogieOption("vcsMaxSplits",n);
+		return this;
+	}
+
+	public BoogieVerifyTask setVcsMaxKeepGoingSplits(int n) {
+		verifier.setBoogieOption("vcsMaxKeepGoingSplits",n);
+		return this;
+	}
+
+	public BoogieVerifyTask setVcsLoad(double n) {
+		verifier.setBoogieOption("vcsLoad",n);
+		return this;
+	}
+
+	public BoogieVerifyTask setProverLog(String logfile) {
+		verifier.setBoogieOption("proverLog", logfile);
 		return this;
 	}
 
