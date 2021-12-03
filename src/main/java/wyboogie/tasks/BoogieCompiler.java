@@ -214,15 +214,24 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     @Override
-    public Decl constructProperty(WyilFile.Decl.Property d, List clauses) {
+    public Decl constructProperty(WyilFile.Decl.Property d, Expr body) {
         ArrayList<Decl> decls = new ArrayList<>();
         decls.addAll(constructCommentHeading("PROPERTY: " + d.getQualifiedName()));
         // Apply name mangling
         String name = toMangledName(d);
         // Construct parameters
-        Pair<List<Decl.Parameter>, List<Expr.Logical>> parameters = constructParameters(d.getTemplate(), d.getParameters(), HEAP);
+        Pair<List<Decl.Parameter>, List<Expr.Logical>> parametersAndConstraints = constructParameters(d.getTemplate(), d.getParameters(), HEAP);
+        Pair<List<Decl.Parameter>, List<Expr.Logical>> returnsAndConstraints = constructParameters(null, d.getReturns(), HEAP);
+        // Extract parameter and returns
+        List<Decl.Parameter> parameters = parametersAndConstraints.first();
+        List<Decl.Parameter> returns = returnsAndConstraints.first();
+        //
+        if(returns.size() > 1) {
+        	throw new UnsupportedOperationException("implement support for tuple returns");
+        }
+        Type type = returns.get(0).getType();
         // FIXME: what to do with the type constraints?
-        decls.add(FUNCTION(name, append(HEAP_PARAM, parameters.first()), Type.Bool, AND(clauses)));
+        decls.add(FUNCTION(name, append(HEAP_PARAM, parameters), type, body));
         return new Decl.Sequence(decls);
     }
 
