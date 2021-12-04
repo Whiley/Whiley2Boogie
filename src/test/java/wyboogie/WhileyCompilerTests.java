@@ -128,6 +128,7 @@ public class WhileyCompilerTests {
 		IGNORED.put("Unsafe_Valid_4","#112");
 		IGNORED.put("Unsafe_Valid_5","#112");
 		IGNORED.put("Reference_Valid_39","#115");
+		IGNORED.put("Reference_Valid_42","");
 		// Old stuff
 		IGNORED.put("Reference_Valid_23","#127");
 		IGNORED.put("Reference_Valid_29","#127");
