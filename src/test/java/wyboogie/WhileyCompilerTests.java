@@ -249,7 +249,8 @@ public class WhileyCompilerTests {
 				if(repository.apply(Transactions.create(bt))) {
 					BoogieFile boogie = repository.get(BoogieFile.ContentType, path);
 					root.put(path, boogie);
-					if(repository.apply(Transactions.create(new BoogieVerifyTask(path, path)))) {
+					BoogieVerifyTask vt = new BoogieVerifyTask(path, path).setArrayTheory(true);
+					if(repository.apply(Transactions.create(vt))) {
 						result = Error.OK;
 					} else {
 	 					result = Error.FAILED_VERIFY;
