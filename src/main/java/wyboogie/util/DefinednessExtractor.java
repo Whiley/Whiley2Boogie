@@ -1,7 +1,7 @@
 package wyboogie.util;
 
 import wyboogie.tasks.BoogieCompiler;
-import wycc.lang.SyntacticItem;
+import wycc.lang.Syntactic;
 import wyil.lang.WyilFile;
 
 import java.util.ArrayList;
@@ -75,7 +75,7 @@ public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Asser
             // Map over existing operands
             rs.addAll(map(ith, s -> {
                 Expr.Logical c = s.getCondition();
-                SyntacticItem item = s.getAttribute(SyntacticItem.class);
+                Syntactic.Item item = s.getAttribute(Syntactic.Item.class);
                 Integer errcode = s.getAttribute(Integer.class);
                 return ASSERT(IMPLIES(w, c, expr.getAttributes()), ATTRIBUTE(errcode));
             }));
@@ -95,7 +95,7 @@ public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Asser
             // Map over existing operands
             rs.addAll(map(ith,s -> {
                 Expr.Logical c = s.getCondition();
-                SyntacticItem item = s.getAttribute(SyntacticItem.class);
+                Syntactic.Item item = s.getAttribute(Syntactic.Item.class);
                 Integer errcode = s.getAttribute(Integer.class);
                 return ASSERT(OR(w, c, expr.getAttributes()), ATTRIBUTE(errcode));
             }));
@@ -134,7 +134,7 @@ public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Asser
 
     @Override
     public List<Stmt.Assert> constructDictionaryAccess(Expr.DictionaryAccess expr, List<Stmt.Assert> source, List<Stmt.Assert> index) {
-        SyntacticItem wyItem = expr.getAttribute(SyntacticItem.class);
+        Syntactic.Item wyItem = expr.getAttribute(Syntactic.Item.class);
         // Combine assertions from operands
         List<Stmt.Assert> result = append(source, index);
         // Check whether this is associated with an array access

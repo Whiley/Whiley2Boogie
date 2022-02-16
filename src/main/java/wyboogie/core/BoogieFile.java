@@ -13,82 +13,22 @@
 // limitations under the License.
 package wyboogie.core;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import wycc.util.Trie;
 
-import wyboogie.io.BoogieFilePrinter;
-import jbfs.core.Build;
-import jbfs.core.Build.Artifact;
-import jbfs.core.Content;
-import jbfs.util.Trie;
-
-public class BoogieFile implements Build.Artifact {
-	// =========================================================================
-	// Content Type
-	// =========================================================================
-
-	/**
-	 * Responsible for identifying and reading/writing WyilFiles. The normal
-	 * extension is ".wyil" for WyilFiles.
-	 */
-	public static final Content.Type<BoogieFile> ContentType = new Content.Type<BoogieFile>() {
-
-		@Override
-		public BoogieFile read(Trie path, InputStream input, Registry registry) throws IOException {
-			// FIXME: this is a bit of a kludge for now.
-			return new BoogieFile(path);
-		}
-		@Override
-		public void write(OutputStream output, BoogieFile bf) throws IOException {
-			new BoogieFilePrinter(output).write(bf);
-		}
-
-		@Override
-		public String toString() {
-			return "Content-Type: boogie";
-		}
-
-		@Override
-		public String getSuffix() {
-			return "bpl";
-		}
-	};
-
-	private final Trie path;
+public class BoogieFile {
 	/**
 	 * The list of top-level declarations within this file.
 	 */
-	private List<Decl> declarations;
-
-	public BoogieFile(Trie path) {
-		this.path = path;
-		this.declarations = new ArrayList<>();
-	}
+	private List<Decl> declarations = new ArrayList<>();
 
 	public List<Decl> getDeclarations() {
 		return declarations;
-	}
-
-	@Override
-	public Trie getPath() {
-		return path;
-	}
-
-	@Override
-	public Content.Type<? extends Artifact> getContentType() {
-		return ContentType;
-	}
-
-	@Override
-	public List<? extends Artifact> getSourceArtifacts() {
-		throw new UnsupportedOperationException();
 	}
 
 	// =========================================================================
