@@ -13,38 +13,23 @@
 // limitations under the License.
 package wyboogie;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.nio.file.Path;
 import java.io.IOException;
-import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.Assert.fail;
 
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
-import jbfs.core.Build;
-import jbfs.core.Content;
-import jbfs.util.ByteRepository;
-import jbfs.util.DirectoryRoot;
-import jbfs.util.Pair;
-import jbfs.util.Transactions;
-import jbfs.util.Trie;
-import wyboogie.core.BoogieFile;
-import wyboogie.tasks.BoogieBuildTask;
-import wyboogie.tasks.BoogieVerifyTask;
-import wycc.lang.SyntacticException;
-
-import wyc.lang.WhileyFile;
-import wyc.task.CompileTask;
+import wycc.util.Trie;
 import wyc.util.TestUtils;
-import wyil.lang.WyilFile;
 
 /**
  * Run through all valid test cases with verification enabled. Since every test
@@ -75,12 +60,12 @@ public class WhileyCompilerTests {
 	 * The directory containing the valid source files for each test case. Every test
 	 * corresponds to a file in this directory.
 	 */
-	public final static java.nio.file.Path VALID_SRC_DIR = Paths.get("tests/valid");
+	public final static Path VALID_SRC_DIR = Paths.get("tests/valid");
 	/**
 	 * The directory containing the invalid source files for each test case. Every test
 	 * corresponds to a file in this directory.
 	 */
-	public final static java.nio.file.Path INVALID_SRC_DIR = Paths.get("tests/invalid");
+	public final static Path INVALID_SRC_DIR = Paths.get("tests/invalid");
 
 	/**
 	 * Ignored tests and a reason why we ignore them.
@@ -177,42 +162,35 @@ public class WhileyCompilerTests {
 	@Test
 	public void debug() throws IOException {
 //	     For when you want to debug a specific test case.
-		testValid("Test_Valid_1");
+		//testValid("Test_Valid_1");
 	}
 
 	@ParameterizedTest
 	@MethodSource("validSourceFiles")
- 	public void testValid(String name) throws IOException {
+ 	public void testValid(Trie name) throws IOException {
 		// Compile to Java Bytecode
-		Pair<Error, String> p = compileWhiley2Boogie(VALID_SRC_DIR, // location of source directory
+		Error e = compileWhiley2Boogie(VALID_SRC_DIR, // location of source directory
 				name); // name of test to compile
 		// Check outcome was positive
-		if (p.first() != Error.OK) {
-			System.err.println(p.second());
+		if (e != Error.OK) {
 			fail("Test failed to compile! " + name);
 		}
 	}
 
 	@ParameterizedTest
 	@MethodSource("invalidSourceFiles")
-	public void testInvalid(String name) throws IOException {
-		File whileySrcDir = INVALID_SRC_DIR.toFile();
+	public void testInvalid(Trie name) throws IOException {
 		// Compile to Java Bytecode
-		Pair<Error, String> p = compileWhiley2Boogie(INVALID_SRC_DIR, // location of source directory
+		Error e = compileWhiley2Boogie(INVALID_SRC_DIR, // location of source directory
 				name); // name of test to compile
 		// Check outcome was negative
-		if(p.first() == Error.FAILED_COMPILE) {
+		if(e == Error.FAILED_COMPILE) {
 			// Ignore tests which fail because they cannot be compiled by the Whiley
 			// Compiler. We're only interested in tests which pass through to verification.
-		} else if (p.first() != Error.FAILED_VERIFY) {
+		} else if (e != Error.FAILED_VERIFY) {
 			fail("Test should have failed to compile / verify! " + name);
 		}
 	}
-
- 	/**
- 	 * A simple default registry which knows about whiley files and wyil files.
- 	 */
- 	private static final Content.Registry registry = new TestUtils.Registry();
 
  	/**
 	 * Run the Whiley Compiler with the given list of arguments to produce a
@@ -224,64 +202,23 @@ public class WhileyCompilerTests {
 	 * @return
 	 * @throws IOException
 	 */
-	public static Pair<Error,String> compileWhiley2Boogie(java.nio.file.Path whileydir, String arg) throws IOException {
-		String filename = arg + ".whiley";
-		ByteArrayOutputStream syserr = new ByteArrayOutputStream();
-		PrintStream psyserr = new PrintStream(syserr);
-		// Determine the ID of the test being compiler
-		Trie path = Trie.fromString(arg);
-		//
-		Error result;
-		// Construct the directory root
-		DirectoryRoot root = new DirectoryRoot(registry, whileydir.toFile(), f -> {
-			return f.getName().equals(filename);
-		});
-		// Extract source file
-		WhileyFile source = root.get(WhileyFile.ContentType, path);
-		// Construct build repository
-		Build.Repository repository = new ByteRepository(registry, source);
-		//
-		try {
-			// Apply Whiley Compiler to repository
-			if(repository.apply(Transactions.create(new CompileTask(path, source)))) {
-				WyilFile target = repository.get(WyilFile.ContentType, path);
-				root.put(path, target);
-				BoogieBuildTask bt = new BoogieBuildTask(path, path).setDebug(DEBUG);
-				if(repository.apply(Transactions.create(bt))) {
-					BoogieFile boogie = repository.get(BoogieFile.ContentType, path);
-					root.put(path, boogie);
-					BoogieVerifyTask vt = new BoogieVerifyTask(path, path).setArrayTheory(true);
-					if(repository.apply(Transactions.create(vt))) {
-						result = Error.OK;
-					} else {
-	 					result = Error.FAILED_VERIFY;
-	 				}
- 				} else {
- 					throw new IllegalArgumentException("deadcode");
- 				}
-				// Print out syntactic markers
-				wycli.commands.BuildCmd.printSyntacticMarkers(psyserr, target, source);
-			} else {
-				result = Error.FAILED_COMPILE;
-			}
-		} catch (SyntacticException e) {
-			// Print out the syntax error
-			e.outputSourceError(psyserr);
-			result = Error.EXCEPTION;
-		} catch (Exception e) {
-			// Print out the syntax error
-			wyc.util.TestUtils.printStackTrace(psyserr, e);
-			result = Error.EXCEPTION;
-		} finally {
-			// Writeback any results
-			root.synchronise();
+	public static Error compileWhiley2Boogie(Path whileyDir, Trie path) throws IOException {
+		File whileySrcDir = whileyDir.toFile();
+		// Configure and run Whiley compiler.
+		boolean r = new wyc.Compiler().setWhileyDir(whileySrcDir).setWyilDir(whileySrcDir).setTarget(path)
+				.addSource(path).run();
+		if (!r) {
+			return Error.FAILED_COMPILE;
 		}
-		//
-		psyserr.flush();
-		// Convert bytes produced into resulting string.
-		byte[] errBytes = syserr.toByteArray();
-		String output = new String(errBytes);
-		return new Pair<>(result, output);
+		// Configure and run JavaScript backend.
+		r = new Main().setWyilDir(whileySrcDir).setBplDir(whileySrcDir).setTarget(path).addSource(path)
+				.setTimeout(TIMEOUT).setBoogieOption("useArrayTheory", true).run();
+		if(!r) {
+			return Error.FAILED_VERIFY;
+		} else {
+			//
+			return Error.OK;
+		}
 	}
 
 	// ======================================================================
@@ -289,14 +226,14 @@ public class WhileyCompilerTests {
 	// ======================================================================
 
 	// Here we enumerate all available test cases.
-	private static Stream<String> validSourceFiles() throws IOException {
+	private static Stream<Trie> validSourceFiles() throws IOException {
 		return readTestFiles(VALID_SRC_DIR, f -> notIgnored(f));
 	}
-	private static Stream<String> invalidSourceFiles() throws IOException {
+	private static Stream<Trie> invalidSourceFiles() throws IOException {
 		return readTestFiles(INVALID_SRC_DIR, f -> notIgnored(f));
 	}
-	public static Stream<String> readTestFiles(java.nio.file.Path dir, Predicate<java.nio.file.Path> filter) throws IOException {
-		ArrayList<String> testcases = new ArrayList<>();
+	public static Stream<Trie> readTestFiles(java.nio.file.Path dir, Predicate<java.nio.file.Path> filter) throws IOException {
+		ArrayList<Trie> testcases = new ArrayList<>();
 		//
 		Files.walk(dir,1).forEach(f -> {
 			if (f.toString().endsWith(".whiley") && filter.test(f)) {
@@ -311,10 +248,10 @@ public class WhileyCompilerTests {
 	}
 
 	public static boolean notIgnored(java.nio.file.Path f) {
-		return !IGNORED.containsKey(extractTestName(f));
+		return !IGNORED.containsKey(extractTestName(f).toString());
 	}
 
-	private static String extractTestName(java.nio.file.Path f) {
-		return f.getFileName().toString().replace(".whiley","");
+	private static Trie extractTestName(java.nio.file.Path f) {
+		return Trie.fromString(f.getFileName().toString().replace(".whiley",""));
 	}
 }

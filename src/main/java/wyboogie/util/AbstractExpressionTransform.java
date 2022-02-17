@@ -15,7 +15,7 @@ package wyboogie.util;
 
 import java.util.ArrayList;
 import java.util.List;
-import jbfs.util.Pair;
+import wycc.util.Pair;
 import wyboogie.core.BoogieFile;
 import wyboogie.core.BoogieFile.Expr;
 

@@ -13,7 +13,6 @@
 // limitations under the License.
 package wyboogie.util;
 
-import jbfs.core.Build;
 import wycc.util.AbstractCompilationUnit.Tuple;
 import wyil.lang.WyilFile.*;
 
@@ -32,15 +31,8 @@ import static wyil.lang.WyilFile.*;
  *
  */
 public abstract class AbstractFold<R> {
-	protected final Build.Meter meter;
-
-	public AbstractFold(Build.Meter meter) {
-		this.meter = meter;
-	}
-
 
 	public R visitStatement(Stmt stmt) {
-		meter.step("statement");
 		switch (stmt.getOpcode()) {
 			case STMT_assert:
 				return visitAssert((Stmt.Assert) stmt);
@@ -281,7 +273,6 @@ public abstract class AbstractFold<R> {
 	}
 
 	public R visitExpression(Expr expr) {
-		meter.step("expression");
 		switch (expr.getOpcode()) {
 			// Terminals
 			case EXPR_constant:
