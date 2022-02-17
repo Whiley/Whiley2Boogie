@@ -45,7 +45,7 @@ public class BoogieBuildTask {
 	/**
 	 * Specify whether to print verbose progress messages or not
 	 */
-	private boolean verbose = true;
+	private boolean verbose = false;
 	/**
 	 * Specify whether to enable actual verification or not.
 	 */

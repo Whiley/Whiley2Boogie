@@ -26,6 +26,8 @@ import java.util.Map;
 import wyboogie.core.BoogieFile;
 import wyboogie.io.BoogieFilePrinter;
 import wyboogie.tasks.BoogieBuildTask;
+import wyc.lang.WhileyFile;
+import wycc.lang.Syntactic;
 import wycc.util.Logger;
 import wycc.util.OptArg;
 import wycc.util.Trie;
@@ -53,10 +55,6 @@ public class Main {
 	 * Determine target filename.
 	 */
 	private Trie target = Trie.fromString("main");
-	/**
-	 * Brief output messages
-	 */
-	private boolean brief = false;
 	/**
 	 * WyIL dependencies to include during compilation.
 	 */
@@ -130,7 +128,7 @@ public class Main {
 		// Print out syntactic markers
 		for(WyilFile binary : task.getSources()) {
 			valid &= binary.isValid();
-			//wyc.Compiler.printSyntacticMarkers(out, binary, brief);
+			wyc.Compiler.printBriefSyntacticMarkers(out, binary);
 		}
 		// Write out binary target
 		writeBoogieFile(this.target, target, bpldir);
