@@ -79,6 +79,10 @@ public class BoogieBuildTask {
 		return this;
 	}
 
+	public List<WyilFile> getSources() {
+		return this.sources;
+	}
+
 	public BoogieBuildTask setVerbose(boolean flag) {
 		this.verbose = flag;
 		return this;

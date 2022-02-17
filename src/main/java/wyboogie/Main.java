@@ -16,6 +16,7 @@ package wyboogie;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -33,6 +34,10 @@ import wyil.lang.WyilFile;
 public class Main {
 	private final BoogieBuildTask task = new BoogieBuildTask(Logger.NULL);
 	/**
+	 * The output stream from this compiler.
+	 */
+	private PrintStream out = System.out;
+	/**
 	 * Destination directory of Wyil files.
 	 */
 	private File wyildir = new File(".");
@@ -48,6 +53,10 @@ public class Main {
 	 * Determine target filename.
 	 */
 	private Trie target = Trie.fromString("main");
+	/**
+	 * Brief output messages
+	 */
+	private boolean brief = false;
 	/**
 	 * WyIL dependencies to include during compilation.
 	 */
@@ -117,10 +126,16 @@ public class Main {
 		}
 		// Run the compiler
 		BoogieFile target = task.run();
+		boolean valid = true;
+		// Print out syntactic markers
+		for(WyilFile binary : task.getSources()) {
+			valid &= binary.isValid();
+			//wyc.Compiler.printSyntacticMarkers(out, binary, brief);
+		}
 		// Write out binary target
 		writeBoogieFile(this.target, target, bpldir);
-		// Unsure how it can fail!
-		return true;
+		//
+		return valid;
 	}
 
 	/**
@@ -172,7 +187,7 @@ public class Main {
 	 * @throws IOException
 	 */
 	public static void writeBoogieFile(Trie target, BoogieFile wf, File dir) throws IOException {
-		String filename = target.toNativeString() + ".js";
+		String filename = target.toNativeString() + ".bpl";
 		try (FileOutputStream fout = new FileOutputStream(new File(dir, filename))) {
 			new BoogieFilePrinter(fout).write(wf);
 			fout.flush();
