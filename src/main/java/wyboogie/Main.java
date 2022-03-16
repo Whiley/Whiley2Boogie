@@ -87,6 +87,14 @@ public class Main {
 
 	public Main setVerbose(boolean flag) {
 		this.task.setVerbose(flag);
+		if(flag) {
+			this.task.setLogger(new Logger.Default(out));
+		}
+		return this;
+	}
+
+	public Main setVerify(boolean flag) {
+		this.task.setVerify(flag);
 		return this;
 	}
 
@@ -107,6 +115,11 @@ public class Main {
 
 	public Main setBoogieOption(String key, int n) {
 		task.setBoogieOption(key, n);
+		return this;
+	}
+
+	public Main setBoogieOption(String key, String s) {
+		task.setBoogieOption(key, s);
 		return this;
 	}
 
@@ -142,13 +155,16 @@ public class Main {
 	private static final OptArg[] OPTIONS = {
 			// Standard options
 			new OptArg("verbose","v","set verbose output"),
+			new OptArg("debug","d","set debug mode"),
+			new OptArg("timeout", "t", OptArg.INT, "set boogie timeout (s)", 10),
+			new OptArg("noverify","v","don't verify generated Boogie"),
 			new OptArg("output","o",OptArg.STRING,"set output file","main"),
 			new OptArg("wyildir", OptArg.FILEDIR, "Specify where to place binary (WyIL) files", new File(".")),
 			new OptArg("bpldir", OptArg.FILEDIR, "Specify where to place Boogie files", new File(".")),
 			new OptArg("whileypath", OptArg.FILELIST, "Specify additional dependencies", new ArrayList<>()),
-			new OptArg("debug","d","set debug mode"),
-			new OptArg("timeout", "t", OptArg.INT, "set boogie timeout (s)", 10),
 			new OptArg("useArrayTheory","u","use Boogie array theory"),
+			new OptArg("proverLog", OptArg.FILE, "Specify log file for theorem prover"),
+			new OptArg("proverName", OptArg.FILE, "Specify name of theorem prover (e.g. z3, cvc5, etc)")
 	};
 
 	public static void main(String[] _args) throws IOException {
@@ -161,12 +177,21 @@ public class Main {
 		File bpldir = (File) options.get("bpldir");
 		ArrayList<File> whileypath = (ArrayList<File>) options.get("whileypath");
 		boolean debug = options.containsKey("debug");
+		boolean verify = !options.containsKey("noverify");
 		int timeout = (Integer) options.get("timeout");
 		boolean useArrayTheory = options.containsKey("useArrayTheory");
 		// Construct Main object
 		Main main = new Main().setVerbose(verbose).setWyilDir(wyildir).setBplDir(bpldir).setTarget(target)
-				.setWhileyPath(whileypath).setDebug(debug).setTimeout(timeout)
+				.setWhileyPath(whileypath).setDebug(debug).setTimeout(timeout).setVerify(verify)
 				.setBoogieOption("useArrayTheory", useArrayTheory);
+		// Configure prover log (if requested)
+		if(options.containsKey("proverLog")) {
+			main = main.setBoogieOption("proverLog", options.get("proverLog").toString());
+		}
+		// Configure alternative prover (if requested)
+		if(options.containsKey("proverName")) {
+			main = main.setBoogieOption("proverOpt", "PROVER_NAME=" + options.get("proverName").toString());
+		}
 		// Add source files
 		for (String s : args) {
 			main.addSource(Trie.fromString(s));
