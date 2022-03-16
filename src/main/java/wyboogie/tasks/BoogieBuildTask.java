@@ -64,6 +64,11 @@ public class BoogieBuildTask {
 		return this;
 	}
 
+	public BoogieBuildTask setLogger(Logger logger) {
+		this.verifier.setLogger(logger);
+		return this;
+	}
+
 	public BoogieBuildTask setTarget(Trie target) {
 		this.target = target;
 		return this;
@@ -100,6 +105,11 @@ public class BoogieBuildTask {
 
 	public BoogieBuildTask setBoogieOption(String key, int n) {
 		verifier.setBoogieOption(key, n);
+		return this;
+	}
+
+	public BoogieBuildTask setBoogieOption(String key, String s) {
+		verifier.setBoogieOption(key, s);
 		return this;
 	}
 

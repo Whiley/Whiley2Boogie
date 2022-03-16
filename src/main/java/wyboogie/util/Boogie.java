@@ -78,7 +78,7 @@ public class Boogie {
     /**
 	 * Logger for useful stuff
 	 */
-	private final Logger logger;
+	private Logger logger;
 
     /**
      * Record command-line options.
@@ -97,6 +97,10 @@ public class Boogie {
         this.boogieCmd = command;
         this.options = new HashMap<>();
         this.logger = logger;
+    }
+
+    public void setLogger(Logger logger) {
+    	this.logger = logger;
     }
 
     /**

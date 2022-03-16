@@ -57,6 +57,12 @@ public class WhileyCompilerTests {
 	 */
 	private final static boolean DEBUG = false;
 	/**
+	 * Configure Boogie to use an alternative SMT solver. This should be
+	 * <code>null</code> in the general case, as this signals boogie to use the
+	 * default (i.e. Z3). However, for debugging, you can override it.
+	 */
+	private final static String PROVER_PATH = null;
+	/**
 	 * The directory containing the valid source files for each test case. Every test
 	 * corresponds to a file in this directory.
 	 */
@@ -211,8 +217,12 @@ public class WhileyCompilerTests {
 			return Error.FAILED_COMPILE;
 		}
 		// Configure and run JavaScript backend.
-		r = new Main().setWyilDir(whileySrcDir).setBplDir(whileySrcDir).setTarget(path).addSource(path)
-				.setTimeout(TIMEOUT).setBoogieOption("useArrayTheory", true).run();
+		Main m = new Main().setWyilDir(whileySrcDir).setBplDir(whileySrcDir).setTarget(path).addSource(path)
+				.setTimeout(TIMEOUT).setBoogieOption("useArrayTheory", true).setDebug(DEBUG).setVerbose(DEBUG);
+		if(PROVER_PATH != null) {
+			m.setBoogieOption("proverOpt", "PROVER_PATH=\"" + PROVER_PATH + "\"");
+		}
+		r = m.run();
 		if(!r) {
 			return Error.FAILED_VERIFY;
 		} else {

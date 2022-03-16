@@ -87,6 +87,9 @@ public class Main {
 
 	public Main setVerbose(boolean flag) {
 		this.task.setVerbose(flag);
+		if(flag) {
+			this.task.setLogger(new Logger.Default(out));
+		}
 		return this;
 	}
 
@@ -107,6 +110,11 @@ public class Main {
 
 	public Main setBoogieOption(String key, int n) {
 		task.setBoogieOption(key, n);
+		return this;
+	}
+
+	public Main setBoogieOption(String key, String s) {
+		task.setBoogieOption(key, s);
 		return this;
 	}
 
@@ -149,6 +157,7 @@ public class Main {
 			new OptArg("debug","d","set debug mode"),
 			new OptArg("timeout", "t", OptArg.INT, "set boogie timeout (s)", 10),
 			new OptArg("useArrayTheory","u","use Boogie array theory"),
+			new OptArg("proverPath", OptArg.FILE, "Specify path to prover executable (e.g. z3, cvc5, etc)")
 	};
 
 	public static void main(String[] _args) throws IOException {
@@ -167,6 +176,10 @@ public class Main {
 		Main main = new Main().setVerbose(verbose).setWyilDir(wyildir).setBplDir(bpldir).setTarget(target)
 				.setWhileyPath(whileypath).setDebug(debug).setTimeout(timeout)
 				.setBoogieOption("useArrayTheory", useArrayTheory);
+		// Configure alternative prover (if requested)
+		if(options.containsKey("proverPath")) {
+			main = main.setBoogieOption("proverOpt", "PROVER_PATH=\"" + options.get("proverPath").toString() + "\"");
+		}
 		// Add source files
 		for (String s : args) {
 			main.addSource(Trie.fromString(s));
