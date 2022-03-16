@@ -64,6 +64,11 @@ public class BoogieBuildTask {
 		return this;
 	}
 
+	public BoogieBuildTask setVerify(boolean flag) {
+		this.verify = flag;
+		return this;
+	}
+
 	public BoogieBuildTask setLogger(Logger logger) {
 		this.verifier.setLogger(logger);
 		return this;

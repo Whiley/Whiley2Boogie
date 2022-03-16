@@ -61,7 +61,7 @@ public class WhileyCompilerTests {
 	 * <code>null</code> in the general case, as this signals boogie to use the
 	 * default (i.e. Z3). However, for debugging, you can override it.
 	 */
-	private final static String PROVER_PATH = null;
+	private final static String PROVER_NAME = null;
 	/**
 	 * The directory containing the valid source files for each test case. Every test
 	 * corresponds to a file in this directory.
@@ -219,8 +219,8 @@ public class WhileyCompilerTests {
 		// Configure and run JavaScript backend.
 		Main m = new Main().setWyilDir(whileySrcDir).setBplDir(whileySrcDir).setTarget(path).addSource(path)
 				.setTimeout(TIMEOUT).setBoogieOption("useArrayTheory", true).setDebug(DEBUG).setVerbose(DEBUG);
-		if(PROVER_PATH != null) {
-			m.setBoogieOption("proverOpt", "PROVER_PATH=\"" + PROVER_PATH + "\"");
+		if(PROVER_NAME != null) {
+			m.setBoogieOption("proverOpt", "PROVER_NAME=" + PROVER_NAME);
 		}
 		r = m.run();
 		if(!r) {
