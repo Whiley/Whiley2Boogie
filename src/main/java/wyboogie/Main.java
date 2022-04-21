@@ -141,7 +141,7 @@ public class Main {
 		// Print out syntactic markers
 		for(WyilFile binary : task.getSources()) {
 			valid &= binary.isValid();
-			wyc.Compiler.printBriefSyntacticMarkers(out, binary);
+			wyc.Compiler.printSyntacticMarkers(out, binary);
 		}
 		// Write out binary target
 		writeBoogieFile(this.target, target, bpldir);
