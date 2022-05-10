@@ -1,5 +1,5 @@
 original.name="StaticVar_Valid_11"
-boogie.verify.ignore=true
+boogie.ignore=true
 Whiley2Boogie.issue=138
 ======
 >>> main.whiley

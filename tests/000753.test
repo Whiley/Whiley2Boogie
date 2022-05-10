@@ -1,5 +1,5 @@
 original.name="Unsafe_Valid_5"
-boogie.verify.ignore=true
+boogie.ignore=true
 ======
 >>> main.whiley
 unsafe function f(int x) -> (int r):

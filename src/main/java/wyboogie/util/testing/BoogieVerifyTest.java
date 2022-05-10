@@ -66,9 +66,9 @@ public class BoogieVerifyTest implements TestStage {
 
 	@Override
 	public Result apply(Trie path, Path dir, Map<Trie, TextFile> state, TestFile tf) throws IOException {
-		boolean ignored = tf.get(Boolean.class, "boogie.verify.ignore").orElse(false);
+		boolean ignored = tf.get(Boolean.class, "boogie.ignore").orElse(false);
 		String unit = tf.get(String.class, "main.file").orElse("main");
-		int timeout = tf.get(Integer.class, "boogie.verify.timeout").orElse(this.timeout);
+		int timeout = tf.get(Integer.class, "boogie.timeout").orElse(this.timeout);
 		//
 		MailBox.Buffered<SyntaxError> handler = new MailBox.Buffered<>();
 		try {
@@ -86,8 +86,13 @@ public class BoogieVerifyTest implements TestStage {
 			//
 			return new TestStage.Result(ignored, markers);
 		} catch (Syntactic.Exception e) {
-			TestFile.Error err = WhileyCompileTest.toError(state,e);
-			return new TestStage.Result(ignored,new TestFile.Error[] {err});
+			if(e.getElement() != null) {
+				TestFile.Error err = WhileyCompileTest.toError(state,e);
+				return new TestStage.Result(ignored,new TestFile.Error[] {err});
+			} else {
+				TestFile.Coordinate c = new TestFile.Coordinate(0, new TestFile.Range(0, 0));
+				return new Result(ignored, new Error(WyilFile.INTERNAL_FAILURE, Trie.fromString(unit), c));
+			}
 		} catch(Throwable e) {
 			TestFile.Coordinate c = new TestFile.Coordinate(0, new TestFile.Range(0, 0));
 			return new Result(ignored, new Error(WyilFile.INTERNAL_FAILURE, Trie.fromString(unit), c));
