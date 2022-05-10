@@ -26,15 +26,20 @@ import java.util.Map;
 import wyboogie.core.BoogieFile;
 import wyboogie.io.BoogieFilePrinter;
 import wyboogie.tasks.BoogieBuildTask;
-import wyc.lang.WhileyFile;
-import wycc.lang.Syntactic;
 import wycc.util.Logger;
+import wycc.util.MailBox;
 import wycc.util.OptArg;
 import wycc.util.Trie;
 import wyil.lang.WyilFile;
+import wyil.lang.WyilFile.Attr.SyntaxError;
 
 public class Main {
 	private final BoogieBuildTask task = new BoogieBuildTask(Logger.NULL);
+	/**
+	 * The outgoing mailbox for this compiler. Essentially, all generated syntax
+	 * errors are sent here.
+	 */
+	private MailBox<SyntaxError> mailbox = new wyc.Compiler.PrintStreamErrorHandler(System.out);
 	/**
 	 * The output stream from this compiler.
 	 */
@@ -59,6 +64,11 @@ public class Main {
 	 * WyIL dependencies to include during compilation.
 	 */
 	private List<File> whileypath = Collections.EMPTY_LIST;
+
+	public Main setErrorHandler(MailBox<SyntaxError> mailbox) {
+		this.mailbox = mailbox;
+		return this;
+	}
 
 	public Main addSource(Trie source) {
 		this.sources.add(source);
@@ -138,10 +148,10 @@ public class Main {
 		// Run the compiler
 		BoogieFile target = task.run();
 		boolean valid = true;
-		// Print out syntactic markers
+		// Write out syntactic markers
 		for(WyilFile binary : task.getSources()) {
 			valid &= binary.isValid();
-			wyc.Compiler.printSyntacticMarkers(out, binary);
+			wyc.Compiler.writeSyntacticMarkers(mailbox,binary);
 		}
 		// Write out binary target
 		writeBoogieFile(this.target, target, bpldir);

@@ -28,8 +28,9 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+
+import wyc.util.testing.Util;
 import wycc.util.Trie;
-import wyc.util.TestUtils;
 
 /**
  * Run through all valid test cases with verification enabled. Since every test
@@ -85,7 +86,7 @@ public class WhileyCompilerTests {
 		// Bring over all the currently failing tests for the compiler. There's
 		// absolutely no point trying to see whether these work or not, since we
 		// already know they will not.
-		IGNORED.putAll(TestUtils.VALID_IGNORED);
+		IGNORED.putAll(Util.VALID_IGNORED);
 
 		// ==========================================================
 		// Valid Tests
@@ -134,6 +135,11 @@ public class WhileyCompilerTests {
 		IGNORED.put("Old_Valid_20","#127");
 		IGNORED.put("Old_Valid_21","#127");
 		IGNORED.put("Old_Valid_22","#127");
+		//
+		IGNORED.put("StaticVar_Valid_11", "#138");
+		IGNORED.put("StaticVar_Valid_12", "#138");
+		IGNORED.put("StaticVar_Valid_13", "#138");
+		IGNORED.put("StaticVar_Valid_14", "#138");
 		// ==========================================================
 		// Invalid Tests
 		// ==========================================================
