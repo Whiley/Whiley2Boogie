@@ -33,13 +33,7 @@ import wyboogie.util.*;
 import wycc.lang.Syntactic;
 import wycc.util.AbstractCompilationUnit.Tuple;
 import wyil.lang.WyilFile;
-import wyil.lang.WyilFile.Decl.Variant;
-import wyil.lang.WyilFile.Expr.LogicalAnd;
-import wyil.lang.WyilFile.Expr.LogicalOr;
 import wyil.lang.WyilFile.Expr.StaticVariableAccess;
-import wyil.lang.WyilFile.Stmt.Assign;
-import wyil.lang.WyilFile.Stmt.DoWhile;
-import wyil.lang.WyilFile.Stmt.While;
 import wyil.util.*;
 
 public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
@@ -1511,7 +1505,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructStaticVariableAccessLVal(StaticVariableAccess expr) {
-		throw new IllegalArgumentException("IMPLEMENT ME");
+		throw new Syntactic.Exception("implement me", expr.getHeap(), expr);
 	}
 
     @Override
@@ -3712,7 +3706,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         //Expr.Logical used = constructDynamicFrame(fvs, r, OHEAP, stmt);
         Expr.Logical used = within(r, fvs, OHEAP, stmt);
         // For any reference not used in the loop, either it was unnallocated or its contents are unchanged.
-        frame.add(FORALL("r", REF, OR(used, EQ(GET(OHEAP, r), VOID), EQ(GET(OHEAP, r), GET(HEAP, r)))));
+		frame.add(
+				FORALL("r", REF, OR(used, EQ(GET(OHEAP, r), VOID), EQ(GET(OHEAP, r), GET(HEAP, r))), ATTRIBUTE(stmt)));
         // Add additional type constraints for modified references
         frame.addAll(0, constructTypeConstraints(fvs, HEAP));
         // Done

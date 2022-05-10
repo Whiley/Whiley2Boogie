@@ -25,8 +25,10 @@ import wycc.util.TextFile;
 import wycc.util.Trie;
 import wycc.util.testing.TestFile;
 import wycc.util.testing.TestFile.Error;
+import wycc.util.testing.TestStage.Result;
 import wycc.util.testing.TestStage;
 import wyc.util.testing.WhileyCompileTest;
+import wyil.lang.WyilFile;
 import wyil.lang.WyilFile.Attr.SyntaxError;
 
 public class BoogieVerifyTest implements TestStage {
@@ -65,6 +67,9 @@ public class BoogieVerifyTest implements TestStage {
 	@Override
 	public Result apply(Trie path, Path dir, Map<Trie, TextFile> state, TestFile tf) throws IOException {
 		boolean ignored = tf.get(Boolean.class, "boogie.verify.ignore").orElse(false);
+		String unit = tf.get(String.class, "main.file").orElse("main");
+		int timeout = tf.get(Integer.class, "boogie.verify.timeout").orElse(this.timeout);
+		//
 		MailBox.Buffered<SyntaxError> handler = new MailBox.Buffered<>();
 		try {
 			// Configure and run JavaScript backend.
@@ -83,6 +88,9 @@ public class BoogieVerifyTest implements TestStage {
 		} catch (Syntactic.Exception e) {
 			TestFile.Error err = WhileyCompileTest.toError(state,e);
 			return new TestStage.Result(ignored,new TestFile.Error[] {err});
+		} catch(Throwable e) {
+			TestFile.Coordinate c = new TestFile.Coordinate(0, new TestFile.Range(0, 0));
+			return new Result(ignored, new Error(WyilFile.INTERNAL_FAILURE, Trie.fromString(unit), c));
 		}
 	}
 

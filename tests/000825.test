@@ -1,4 +1,5 @@
 original.name="While_Valid_71"
+boogie.verify.timeout=60
 ======
 >>> main.whiley
 property dup(int[] xs, int n) -> (bool r):
