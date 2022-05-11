@@ -13,24 +13,25 @@
 // limitations under the License.
 package wyboogie;
 
-import java.io.File;
 import java.nio.file.Path;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.*;
-import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.fail;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import wyc.util.testing.Util;
+import wyboogie.util.testing.BoogieVerifyTest;
+import wyc.util.testing.WhileyCompileTest;
 import wycc.util.Trie;
+import wycc.util.testing.TestManager;
+import wycc.util.testing.TestManager.Result;
 
 /**
  * Run through all valid test cases with verification enabled. Since every test
@@ -64,176 +65,28 @@ public class WhileyCompilerTests {
 	 */
 	private final static String PROVER_NAME = null;
 	/**
-	 * The directory containing the valid source files for each test case. Every test
-	 * corresponds to a file in this directory.
+	 * The directory containing the test files.
 	 */
-	public final static Path VALID_SRC_DIR = Paths.get("tests/valid");
-	/**
-	 * The directory containing the invalid source files for each test case. Every test
-	 * corresponds to a file in this directory.
-	 */
-	public final static Path INVALID_SRC_DIR = Paths.get("tests/invalid");
+	public final static Path WHILEY_SRC_DIR = Path.of("tests");
 
-	/**
-	 * Ignored tests and a reason why we ignore them.
-	 */
-	private final static Map<String, String> IGNORED= new HashMap<>();
-
-	static {
-		// ===================================================
-		// WyC problems
-		// ===================================================
-		// Bring over all the currently failing tests for the compiler. There's
-		// absolutely no point trying to see whether these work or not, since we
-		// already know they will not.
-		IGNORED.putAll(Util.VALID_IGNORED);
-
-		// ==========================================================
-		// Valid Tests
-		// ==========================================================
-
-		// Not verifiable yet!  These are incomplete in some way which means they could not be verified.
-		IGNORED.put("Property_Valid_14","");
-		IGNORED.put("Property_Valid_16","");
-		IGNORED.put("While_Valid_71","");
-		IGNORED.put("Reference_Valid_25",""); // needs old syntax
-		IGNORED.put("Reference_Valid_26",""); // needs old syntax
-		IGNORED.put("Reference_Valid_30",""); // needs old syntax
-		IGNORED.put("Reference_Valid_31",""); // needs old syntax
-		// Known issues.  These are known problems with issues raised on github.
-		IGNORED.put("ConstrainedList_Valid_18","#26");
-		IGNORED.put("Lambda_Valid_13","#52");
-		IGNORED.put("Lambda_Valid_24","#59");
-		IGNORED.put("Lambda_Valid_25","#59");
-		IGNORED.put("Lambda_Valid_26","#52");
-		IGNORED.put("Lambda_Valid_30","#123");
-		IGNORED.put("Process_Valid_9","#56");
-		IGNORED.put("Process_Valid_10","#56");
-		IGNORED.put("Property_Valid_17","#55");
-		IGNORED.put("RecursiveType_Valid_7","#98");
-		IGNORED.put("RecursiveType_Valid_19","#79");
-		IGNORED.put("RecursiveType_Valid_20","#79");
-		IGNORED.put("Requires_Valid_2","#79");
-		IGNORED.put("Reference_Valid_6","#56");
-		IGNORED.put("Reference_Valid_11","#61");
-		IGNORED.put("Reference_Valid_24","#89");
-		IGNORED.put("Unsafe_Valid_4","#112");
-		IGNORED.put("Unsafe_Valid_5","#112");
-		IGNORED.put("Reference_Valid_39","#115");
-		IGNORED.put("Reference_Valid_42","");
-		// Old stuff
-		IGNORED.put("Reference_Valid_23","#127");
-		IGNORED.put("Reference_Valid_29","#127");
-		IGNORED.put("Reference_Valid_33","#127");
-		IGNORED.put("Old_Valid_9","#128");
-		IGNORED.put("Old_Valid_10","#128");
-		IGNORED.put("Old_Valid_11","#127");
-		IGNORED.put("Old_Valid_12","#127");
-		IGNORED.put("Old_Valid_17","#128");
-		IGNORED.put("Old_Valid_18","#128");
-		IGNORED.put("Old_Valid_19","#127");
-		IGNORED.put("Old_Valid_20","#127");
-		IGNORED.put("Old_Valid_21","#127");
-		IGNORED.put("Old_Valid_22","#127");
-		//
-		IGNORED.put("StaticVar_Valid_11", "#138");
-		IGNORED.put("StaticVar_Valid_12", "#138");
-		IGNORED.put("StaticVar_Valid_13", "#138");
-		IGNORED.put("StaticVar_Valid_14", "#138");
-		// ==========================================================
-		// Invalid Tests
-		// ==========================================================
-		IGNORED.put("Parsing_Invalid_1", "608");
-		IGNORED.put("Parsing_Invalid_2", "608");
-		// #885 --- Contractive Types and isVoid()
-		IGNORED.put("Type_Invalid_5", "885");
-		IGNORED.put("Type_Invalid_7", "??");
-		IGNORED.put("Type_Invalid_8", "??");
-		// Access Static Variable from Type Invariant
-		IGNORED.put("Type_Invalid_11", "793");
-		IGNORED.put("Reference_Invalid_2", "unclassified");
-		IGNORED.put("While_Invalid_25", "#956");
-		// Unsafe
-		IGNORED.put("Unsafe_Invalid_4","??");
-		IGNORED.put("Unsafe_Invalid_5","??");
-		IGNORED.put("Unsafe_Invalid_6","??");
-		IGNORED.put("Unsafe_Invalid_7","??");
-		IGNORED.put("Unsafe_Invalid_8","??");
-		IGNORED.put("Unsafe_Invalid_9","??");
-		IGNORED.put("Unsafe_Invalid_10","??");
-		IGNORED.put("Unsafe_Invalid_11","??");
-		IGNORED.put("Unsafe_Invalid_12","??");
-
-	}
+	public final static TestManager manager = new TestManager(WHILEY_SRC_DIR, new WhileyCompileTest(),
+			new BoogieVerifyTest().setTimeout(TIMEOUT).setDebug(DEBUG).setProverName(PROVER_NAME));
 
 	// ======================================================================
 	// Test Harness
 	// ======================================================================
 
-	@Disabled
-	@Test
-	public void debug() throws IOException {
-//	     For when you want to debug a specific test case.
-		//testValid("Test_Valid_1");
-	}
-
 	@ParameterizedTest
-	@MethodSource("validSourceFiles")
- 	public void testValid(Trie name) throws IOException {
-		// Compile to Java Bytecode
-		Error e = compileWhiley2Boogie(VALID_SRC_DIR, // location of source directory
-				name); // name of test to compile
-		// Check outcome was positive
-		if (e != Error.OK) {
-			fail("Test failed to compile! " + name);
-		}
-	}
-
-	@ParameterizedTest
-	@MethodSource("invalidSourceFiles")
-	public void testInvalid(Trie name) throws IOException {
-		// Compile to Java Bytecode
-		Error e = compileWhiley2Boogie(INVALID_SRC_DIR, // location of source directory
-				name); // name of test to compile
-		// Check outcome was negative
-		if(e == Error.FAILED_COMPILE) {
-			// Ignore tests which fail because they cannot be compiled by the Whiley
-			// Compiler. We're only interested in tests which pass through to verification.
-		} else if (e != Error.FAILED_VERIFY) {
-			fail("Test should have failed to compile / verify! " + name);
-		}
-	}
-
- 	/**
-	 * Run the Whiley Compiler with the given list of arguments to produce a
-	 * Boogie source file. This will then need to be checked separately.
-	 *
-	 * @param arg
-	 *            --- list of command-line arguments to provide to the Whiley
-	 *            Compiler.
-	 * @return
-	 * @throws IOException
-	 */
-	public static Error compileWhiley2Boogie(Path whileyDir, Trie path) throws IOException {
-		File whileySrcDir = whileyDir.toFile();
-		// Configure and run Whiley compiler.
-		boolean r = new wyc.Compiler().setWhileyDir(whileySrcDir).setWyilDir(whileySrcDir).setTarget(path)
-				.addSource(path).run();
-		if (!r) {
-			return Error.FAILED_COMPILE;
-		}
-		// Configure and run JavaScript backend.
-		Main m = new Main().setWyilDir(whileySrcDir).setBplDir(whileySrcDir).setTarget(path).addSource(path)
-				.setTimeout(TIMEOUT).setBoogieOption("useArrayTheory", true).setDebug(DEBUG).setVerbose(DEBUG);
-		if(PROVER_NAME != null) {
-			m.setBoogieOption("proverOpt", "PROVER_NAME=" + PROVER_NAME);
-		}
-		r = m.run();
-		if(!r) {
-			return Error.FAILED_VERIFY;
-		} else {
-			//
-			return Error.OK;
+	@MethodSource("sourceFiles")
+ 	public void test(Trie path) throws IOException {
+		TestManager.Result r = manager.run(path);
+		//
+		if(r == Result.IGNORED) {
+			Assumptions.assumeTrue(false, "Test " + path + " skipped");
+		} else if(r == Result.FAILURE) {
+			fail("test failure for reasons unknown");
+		} else if(r == Result.INVALIDIGNORED) {
+			fail("test should not be marked as ignored");
 		}
 	}
 
@@ -242,17 +95,15 @@ public class WhileyCompilerTests {
 	// ======================================================================
 
 	// Here we enumerate all available test cases.
-	private static Stream<Trie> validSourceFiles() throws IOException {
-		return readTestFiles(VALID_SRC_DIR, f -> notIgnored(f));
+	private static Stream<Trie> sourceFiles() throws IOException {
+		return readTestFiles(WHILEY_SRC_DIR);
 	}
-	private static Stream<Trie> invalidSourceFiles() throws IOException {
-		return readTestFiles(INVALID_SRC_DIR, f -> notIgnored(f));
-	}
-	public static Stream<Trie> readTestFiles(java.nio.file.Path dir, Predicate<java.nio.file.Path> filter) throws IOException {
+
+	public static Stream<Trie> readTestFiles(java.nio.file.Path dir) throws IOException {
 		ArrayList<Trie> testcases = new ArrayList<>();
 		//
 		Files.walk(dir,1).forEach(f -> {
-			if (f.toString().endsWith(".whiley") && filter.test(f)) {
+			if (f.toString().endsWith(".test")) {
 				// Determine the test name
 				testcases.add(extractTestName(f));
 			}
@@ -263,11 +114,8 @@ public class WhileyCompilerTests {
 		return testcases.stream();
 	}
 
-	public static boolean notIgnored(java.nio.file.Path f) {
-		return !IGNORED.containsKey(extractTestName(f).toString());
-	}
 
 	private static Trie extractTestName(java.nio.file.Path f) {
-		return Trie.fromString(f.getFileName().toString().replace(".whiley",""));
+		return Trie.fromString(f.getFileName().toString().replace(".test",""));
 	}
 }
