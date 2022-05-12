@@ -153,6 +153,28 @@ public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Asser
         return result;
     }
 
+    @SuppressWarnings("unchecked")
+	@Override
+    public List<Stmt.Assert> constructDictionaryUpdate(Expr.DictionaryUpdate expr, List<Stmt.Assert> source, List<Stmt.Assert> index, List<Stmt.Assert> value) {
+        Syntactic.Item wyItem = expr.getAttribute(Syntactic.Item.class);
+        // Combine assertions from operands
+        List<Stmt.Assert> result = append(source, index, value);
+        // Check whether this is associated with an array access
+        if (wyItem instanceof WyilFile.Expr.ArrayUpdate) {
+            WyilFile.Expr.ArrayUpdate a = (WyilFile.Expr.ArrayUpdate) wyItem;
+            // Reconstruct source as expression
+            Expr src = bc.reconstructExpression(a.getFirstOperand());
+            // Reconstruct index as expression
+            Expr idx = bc.reconstructExpression(a.getSecondOperand());
+            // Add check that index is not negative
+            result.add(ASSERT(LTEQ(CONST(0), idx, idx.getAttributes()), ATTRIBUTE(WyilFile.STATIC_BELOWBOUNDS_INDEX_FAILURE)));
+            // Add check that index below length
+            result.add(ASSERT(LT(idx, INVOKE("Array#Length", src), idx.getAttributes()), ATTRIBUTE(WyilFile.STATIC_ABOVEBOUNDS_INDEX_FAILURE)));
+        }
+        // Done
+        return result;
+    }
+
     @Override
     public List<Stmt.Assert> constructIntegerDivision(Expr.IntegerDivision expr, List<Stmt.Assert> lhs, List<Stmt.Assert> rhs) {
         List<Stmt.Assert> result = append(lhs, rhs);

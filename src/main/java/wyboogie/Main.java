@@ -64,6 +64,10 @@ public class Main {
 	 * WyIL dependencies to include during compilation.
 	 */
 	private List<File> whileypath = Collections.EMPTY_LIST;
+	/**
+	 * Specify whether to enable actual verification or not.
+	 */
+	private boolean verify = true;
 
 	public Main setErrorHandler(MailBox<SyntaxError> mailbox) {
 		this.mailbox = mailbox;
@@ -104,7 +108,7 @@ public class Main {
 	}
 
 	public Main setVerify(boolean flag) {
-		this.task.setVerify(flag);
+		this.verify = flag;
 		return this;
 	}
 
@@ -146,17 +150,22 @@ public class Main {
 			task.addSources(deps);
 		}
 		// Run the compiler
-		BoogieFile target = task.run();
-		boolean valid = true;
-		// Write out syntactic markers
-		for(WyilFile binary : task.getSources()) {
-			valid &= binary.isValid();
-			wyc.Compiler.writeSyntacticMarkers(mailbox,binary);
+		BoogieFile target = task.build();
+		try {
+			if(verify) {
+				task.verify(target);
+			}
+			boolean valid = true;
+			// Write out syntactic markers
+			for(WyilFile binary : task.getSources()) {
+				valid &= binary.isValid();
+				wyc.Compiler.writeSyntacticMarkers(mailbox,binary);
+			}
+			return valid;
+		} finally {
+			// Write out binary target
+			writeBoogieFile(this.target, target, bpldir);
 		}
-		// Write out binary target
-		writeBoogieFile(this.target, target, bpldir);
-		//
-		return valid;
 	}
 
 	/**

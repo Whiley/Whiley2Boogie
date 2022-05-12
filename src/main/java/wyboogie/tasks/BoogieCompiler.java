@@ -1513,6 +1513,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         return unbox(expr.getType(), GET(source, index, ATTRIBUTE(expr)));
     }
 
+	@Override
+	public Expr constructArrayUpdate(WyilFile.Expr.ArrayUpdate expr, Expr source, Expr index, Expr value) {
+		value = box(expr.getThirdOperand().getType(), value);
+		return PUT(source, index, value, ATTRIBUTE(expr));
+	}
+
     @Override
     public Expr constructArrayLength(WyilFile.Expr.ArrayLength expr, Expr source) {
         return INVOKE("Array#Length", Arrays.asList(source), ATTRIBUTE(expr));
@@ -1994,6 +2000,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         //
         return rec;
     }
+
+	@Override
+	public Expr constructRecordUpdate(WyilFile.Expr.RecordUpdate expr, Expr source, Expr value) {
+		Expr field = VAR("$" + expr.getField().get());
+		value = box(expr.getSecondOperand().getType(), value);
+		return PUT(source, field, value, ATTRIBUTE(expr));
+	}
 
     @Override
     public Expr constructTupleInitialiser(WyilFile.Expr.TupleInitialiser expr, List<Expr> operands) {
