@@ -94,6 +94,7 @@ public class BoogieVerifyTest implements TestStage {
 				return new Result(ignored, new Error(WyilFile.INTERNAL_FAILURE, Trie.fromString(unit), c));
 			}
 		} catch(Throwable e) {
+			e.printStackTrace();
 			TestFile.Coordinate c = new TestFile.Coordinate(0, new TestFile.Range(0, 0));
 			return new Result(ignored, new Error(WyilFile.INTERNAL_FAILURE, Trie.fromString(unit), c));
 		}

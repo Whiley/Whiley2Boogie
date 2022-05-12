@@ -17,6 +17,7 @@ import java.nio.file.Path;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.fail;
@@ -26,6 +27,7 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import wyboogie.util.testing.BoogieVerifyTest;
 import wyc.util.testing.WhileyCompileTest;
@@ -90,20 +92,38 @@ public class WhileyCompilerTests {
 		}
 	}
 
+	// Here we enumerate all available test cases.
+	private static Stream<Trie> sourceFiles() throws IOException {
+		return readTestFiles(WHILEY_SRC_DIR, n -> true);
+	}
+
+	// ======================================================================
+	// Debugging
+	// ======================================================================
+
+	@ParameterizedTest
+	@MethodSource("debugFiles")
+	public void debugTest(Trie path) throws IOException {
+		// Enable debugging
+		manager.setDebug(true);
+		// Run the test
+		test(path);
+	}
+
+	// Here we enumerate all available test cases.
+	private static Stream<Trie> debugFiles() throws IOException {
+		return readTestFiles(WHILEY_SRC_DIR, atleast(999999));
+	}
+
 	// ======================================================================
 	// Data sources
 	// ======================================================================
 
-	// Here we enumerate all available test cases.
-	private static Stream<Trie> sourceFiles() throws IOException {
-		return readTestFiles(WHILEY_SRC_DIR);
-	}
-
-	public static Stream<Trie> readTestFiles(java.nio.file.Path dir) throws IOException {
+	public static Stream<Trie> readTestFiles(java.nio.file.Path dir, Predicate<String> filter) throws IOException {
 		ArrayList<Trie> testcases = new ArrayList<>();
 		//
 		Files.walk(dir,1).forEach(f -> {
-			if (f.toString().endsWith(".test")) {
+			if (f.toString().endsWith(".test") && filter.test(f.getFileName().toString())) {
 				// Determine the test name
 				testcases.add(extractTestName(f));
 			}
@@ -114,6 +134,13 @@ public class WhileyCompilerTests {
 		return testcases.stream();
 	}
 
+	private static Predicate<String> atleast(int testNumber) {
+		return n -> Integer.parseInt(n.replace(".test", "")) >= testNumber;
+	}
+
+	private static Predicate<String> atmost(int testNumber) {
+		return n -> Integer.parseInt(n.replace(".test", "")) <= testNumber;
+	}
 
 	private static Trie extractTestName(java.nio.file.Path f) {
 		return Trie.fromString(f.getFileName().toString().replace(".test",""));

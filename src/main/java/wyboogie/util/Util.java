@@ -103,7 +103,7 @@ public class Util {
      * @param <T>
      * @return
      */
-    public static <T> List<T> append(List<T>... lists) {
+	public static <T> List<T> append(List<T>... lists) {
         ArrayList<T> result = new ArrayList<>();
         for(int i=0;i!=lists.length;++i) {
             result.addAll(lists[i]);

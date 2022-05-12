@@ -47,10 +47,6 @@ public class BoogieBuildTask {
 	 */
 	private boolean verbose = false;
 	/**
-	 * Specify whether to enable actual verification or not.
-	 */
-	private boolean verify = true;
-	/**
 	 * Boogie process timeout (in seconds)
 	 */
 	private int timeout = 10;
@@ -61,11 +57,6 @@ public class BoogieBuildTask {
 
 	public BoogieBuildTask setDebug(boolean flag) {
 		this.debug = flag;
-		return this;
-	}
-
-	public BoogieBuildTask setVerify(boolean flag) {
-		this.verify = flag;
 		return this;
 	}
 
@@ -118,7 +109,7 @@ public class BoogieBuildTask {
 		return this;
 	}
 
-	public BoogieFile run() {
+	public BoogieFile build() {
 		// Construct initial (empty) Boogie file
 		BoogieFile target = new BoogieFile();
 		// Process source files one by one
@@ -129,15 +120,10 @@ public class BoogieBuildTask {
 			// Run the translation!
 			bc.visitModule(i);
 		}
-		// Verify the target (if applicable)
-		if(verify) {
-			verify(target);
-		}
-		//
 		return target;
 	}
 
-	private boolean verify(BoogieFile target) {
+	public boolean verify(BoogieFile target) {
 		Boogie.Message[] errors = verifier.check(timeout * 1000, this.target.toString(), target);
 		//
 		if(errors == null) {
