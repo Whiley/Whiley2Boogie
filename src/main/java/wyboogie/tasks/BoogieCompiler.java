@@ -1657,7 +1657,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Expr constructCast(WyilFile.Expr.Cast expr, Expr operand) {
-        return cast(expr.getType(), expr.getOperand().getType(), operand);
+        Expr e = cast(expr.getType(), expr.getOperand().getType(), operand);
+		// TODO: this is a bit of a kludge. The generate cast uses attributes from the
+		// operand, where as we want to have the attribute refer to the cast itself. A
+		// better solution would be to add an extra argument to cast.
+        e.getAttributes()[0] = ATTRIBUTE(expr);
+        return e;
     }
 
     @Override
@@ -3182,7 +3187,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @param argument The argument being tested.
      * @return
      */
-    private Expr.Logical constructTypeTest(WyilFile.Type to, WyilFile.Type from, Expr argument, Expr heap, Syntactic.Item item) {
+    public Expr.Logical constructTypeTest(WyilFile.Type to, WyilFile.Type from, Expr argument, Expr heap, Syntactic.Item item) {
         switch (to.getOpcode()) {
             case WyilFile.TYPE_any:
                 return NEQ(box(from, argument), VOID, ATTRIBUTE(item));
@@ -3228,7 +3233,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @param item
      * @return
      */
-    private Expr.Logical constructTypeTest(WyilFile.Type type, Expr argument, Expr heap, Syntactic.Item item) {
+    public Expr.Logical constructTypeTest(WyilFile.Type type, Expr argument, Expr heap, Syntactic.Item item) {
          switch (type.getOpcode()) {
              case WyilFile.TYPE_bool:
              case WyilFile.TYPE_byte:
@@ -4428,7 +4433,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     /**
      * The name used to represent the heap variable which is passed into a method.
      */
-    private static Expr.VariableAccess HEAP = VAR("HEAP");
+    public static Expr.VariableAccess HEAP = VAR("HEAP");
     private static Expr.VariableAccess OHEAP = VAR("#HEAP");
     private static Expr OLD_HEAP = OLD(HEAP);
     private static Decl.Variable HEAP_PARAM = new Decl.Variable("HEAP",REFMAP);

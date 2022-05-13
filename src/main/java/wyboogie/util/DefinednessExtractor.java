@@ -197,11 +197,18 @@ public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Asser
 
     @Override
     public List<Stmt.Assert> constructInvoke(Expr.Invoke expr, List<List<Stmt.Assert>> preconditions) {
+        Syntactic.Item wyItem = expr.getAttribute(Syntactic.Item.class);
         List<Stmt.Assert> rs = flattern(preconditions, l -> l);
         // Special case!
         if (expr.getName().equals("Array#Generator")) {
             Expr len = expr.getArguments().get(1);
             rs.add(ASSERT(LTEQ(CONST(0), len, len.getAttributes()), ATTRIBUTE(WyilFile.STATIC_NEGATIVE_LENGTH_FAILURE)));
+        } else if(wyItem instanceof WyilFile.Expr.Cast) {
+        	WyilFile.Expr.Cast c = (WyilFile.Expr.Cast) wyItem;
+        	Expr arg = bc.reconstructExpression(c.getOperand());
+        	//Expr arg = expr.getArguments().get(0);
+        	Expr.Logical test = bc.constructTypeTest(c.getType(), c.getOperand().getType(), arg, BoogieCompiler.HEAP, wyItem);
+        	rs.add(ASSERT(test, ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
         }
         return rs;
     }
