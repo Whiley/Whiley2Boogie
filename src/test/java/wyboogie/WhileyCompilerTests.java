@@ -80,7 +80,7 @@ public class WhileyCompilerTests {
 
 	@ParameterizedTest
 	@MethodSource("sourceFiles")
- 	public void test(Trie path) throws IOException {
+ 	public void mainTests(Trie path) throws IOException {
 		TestManager.Result r = manager.run(path);
 		//
 		if(r == Result.IGNORED) {
@@ -103,16 +103,17 @@ public class WhileyCompilerTests {
 
 	@ParameterizedTest
 	@MethodSource("debugFiles")
-	public void debugTest(Trie path) throws IOException {
+	public void debugTests(Trie path) throws IOException {
 		// Enable debugging
 		manager.setDebug(true);
 		// Run the test
-		test(path);
+		mainTests(path);
 	}
 
 	// Here we enumerate all available test cases.
 	private static Stream<Trie> debugFiles() throws IOException {
-		return readTestFiles(WHILEY_SRC_DIR, atleast(999999));
+		return readTestFiles(WHILEY_SRC_DIR, in(190,1163,1164,1418));
+//		return readTestFiles(WHILEY_SRC_DIR, atleast(99999));
 	}
 
 	// ======================================================================
@@ -132,6 +133,22 @@ public class WhileyCompilerTests {
 		Collections.sort(testcases);
 		//
 		return testcases.stream();
+	}
+
+	private static Predicate<String> in(int... tests) {
+		return n -> {
+			int t = Integer.parseInt(n.replace(".test", ""));
+			for(int i=0;i!=tests.length;++i) {
+				if(t == tests[i]) {
+					return true;
+				}
+			}
+			return false;
+		};
+	}
+
+	private static Predicate<String> equals(int testNumber) {
+		return n -> Integer.parseInt(n.replace(".test", "")) == testNumber;
 	}
 
 	private static Predicate<String> atleast(int testNumber) {
