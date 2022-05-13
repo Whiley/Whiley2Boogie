@@ -13,6 +13,7 @@
 // limitations under the License.
 package wyboogie.tasks;
 
+import java.lang.reflect.Modifier;
 import java.math.BigInteger;
 import java.util.*;
 import java.util.function.Function;
@@ -27,6 +28,7 @@ import wyboogie.core.BoogieFile;
 import wyboogie.core.BoogieFile.Decl;
 import wyboogie.core.BoogieFile.Expr;
 import wyboogie.core.BoogieFile.Stmt;
+import wyboogie.core.BoogieFile.Decl.Variable;
 import wyboogie.core.BoogieFile.LVal;
 
 import wyboogie.util.*;
@@ -178,10 +180,16 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Apply name mangling
         String name = toMangledName(d);
         // Final static variables declared as constants with corresponding axiom
-        decls.add(new Decl.Constant(name, type));
+        if(isFinal(d)) {
+        	decls.add(new Decl.Constant(name, type));
+        } else {
+        	decls.add(new Decl.Variable(name, type));
+        }
         if (initialiser != null) {
             Expr rhs = cast(d.getType(), d.getInitialiser().getType(), initialiser);
-            decls.add(new Decl.Axiom(EQ(VAR(name), rhs)));
+            if(isFinal(d)) {
+                decls.add(new Decl.Axiom(EQ(VAR(name), rhs)));
+            }
             // Add type invariant guarantee
             decls.add(new Decl.Axiom(IMPLIES(GT(VAR("Context#Level"), CONST(1)), constructTypeTest(d.getType(), VAR(name), EMPTY_HEAPVAR, d))));
             decls.addAll(constructStaticVariableCheck(d));
@@ -1021,10 +1029,17 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 return ASSIGN(HEAP, PUT(HEAP, src, rhs));
             }
             case WyilFile.EXPR_variablecopy:
-            case WyilFile.EXPR_variablemove: {
+            case WyilFile.EXPR_variablemove:{
                 WyilFile.Expr.VariableAccess expr = (WyilFile.Expr.VariableAccess) lval;
                 WyilFile.Decl.Variable decl = expr.getVariableDeclaration();
-                String name = toVariableName(expr.getVariableDeclaration());
+                String name = toVariableName(decl);
+                // NOTE: the manner in which the following cast is applied seems odd to me, and is an artifact of how WyC is currently typing assignments.
+                return ASSIGN(VAR(name), cast(decl.getType(), expr.getType(), rhs));
+            }
+            case WyilFile.EXPR_staticvariable: {
+                WyilFile.Expr.StaticVariableAccess expr = (WyilFile.Expr.StaticVariableAccess) lval;
+                WyilFile.Decl.StaticVariable decl = expr.getLink().getTarget();
+                String name = toMangledName(expr.getLink().getTarget());
                 // NOTE: the manner in which the following cast is applied seems odd to me, and is an artifact of how WyC is currently typing assignments.
                 return ASSIGN(VAR(name), cast(decl.getType(), expr.getType(), rhs));
             }
@@ -1505,7 +1520,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
 	@Override
 	public Expr constructStaticVariableAccessLVal(StaticVariableAccess expr) {
-		throw new Syntactic.Exception("implement me", expr.getHeap(), expr);
+		 // Determine mangled name of this variable
+		String name = toMangledName(expr.getLink().getTarget());
+        //
+        return VAR(name, ATTRIBUTE(expr));
 	}
 
     @Override
@@ -4084,6 +4102,10 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             case WyilFile.EXPR_variablemove: {
                 WyilFile.Expr.VariableAccess e = (WyilFile.Expr.VariableAccess) lval;
                 return e.getVariableDeclaration();
+            }
+            case WyilFile.EXPR_staticvariable: {
+                WyilFile.Expr.StaticVariableAccess e = (WyilFile.Expr.StaticVariableAccess) lval;
+                return e.getLink().getTarget();
             }
             default:
                 throw new IllegalArgumentException("invalid lval: " + lval);
