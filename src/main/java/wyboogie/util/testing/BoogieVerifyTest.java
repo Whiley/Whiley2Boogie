@@ -86,6 +86,7 @@ public class BoogieVerifyTest implements TestStage {
 			//
 			return new TestStage.Result(ignored, markers);
 		} catch (Syntactic.Exception e) {
+			e.printStackTrace();
 			if(e.getElement() != null) {
 				TestFile.Error err = WhileyCompileTest.toError(state,e);
 				return new TestStage.Result(ignored,new TestFile.Error[] {err});

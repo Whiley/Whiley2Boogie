@@ -177,6 +177,7 @@ public class BoogieBuildTask {
 					break;
 				}
 				default: {
+					System.out.println("GOT: " + err.toString());
 					// Fall back
 					throw new Syntactic.Exception(err.toString(), wyItem.getHeap(), wyItem);
 				}
