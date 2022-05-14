@@ -1177,6 +1177,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Add all assertions and side effects
         stmts.addAll(lhs.first());
         stmts.addAll(rhs.first());
+		stmts.add(ASSERT(LTEQ(lhs.second(), rhs.second()), ATTRIBUTE(stmt.getVariable().getInitialiser()),
+				ATTRIBUTE(WyilFile.STATIC_NEGATIVE_RANGE_FAILURE)));
         // Extract loop contents so it can be appended later
         ArrayList<Stmt> loopBody = new ArrayList<>();
         loopBody.add(body);
