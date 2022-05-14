@@ -203,11 +203,12 @@ public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Asser
         if (expr.getName().equals("Array#Generator")) {
             Expr len = expr.getArguments().get(1);
             rs.add(ASSERT(LTEQ(CONST(0), len, len.getAttributes()), ATTRIBUTE(WyilFile.STATIC_NEGATIVE_LENGTH_FAILURE)));
-        } else if(wyItem instanceof WyilFile.Expr.Cast) {
+        }
+        else if(wyItem instanceof WyilFile.Expr.Cast) {
         	WyilFile.Expr.Cast c = (WyilFile.Expr.Cast) wyItem;
-        	Expr arg = bc.reconstructExpression(c.getOperand());
-        	//Expr arg = expr.getArguments().get(0);
-        	Expr.Logical test = bc.constructTypeTest(c.getType(), c.getOperand().getType(), arg, BoogieCompiler.HEAP, wyItem);
+//        	Expr arg = bc.reconstructExpression(c.getOperand());
+//        	Expr arg = expr.getArguments().get(1);
+        	Expr.Logical test = bc.constructTypeTest(c.getType(), expr, BoogieCompiler.HEAP, wyItem);
         	rs.add(ASSERT(test, ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
         }
         return rs;
