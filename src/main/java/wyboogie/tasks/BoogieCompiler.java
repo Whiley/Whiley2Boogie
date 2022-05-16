@@ -340,6 +340,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             	String vName = toMangledName(v);
             	modifies.add(vName);
 				freeRequires.add(constructTypeTest(v.getType(), VAR(vName), HEAP, d));
+				freeEnsures.add(constructTypeTest(v.getType(), VAR(vName), HEAP, d));
             }
         } else {
             ArrayList<Decl.Parameter> f_params = new ArrayList<>(params);
