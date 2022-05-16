@@ -610,9 +610,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             @Override
             public Boolean constructFor(WyilFile.Stmt.For stmt, Boolean var, List<Boolean> invariants, Boolean body) {
                 WyilFile.Decl.StaticVariable v = stmt.getVariable();
+            	WyilFile.Expr.ArrayRange range = (WyilFile.Expr.ArrayRange) v.getInitialiser();
                 String name = toVariableName(v);
                 Type type = constructType(v.getType());
                 decls.add(new Decl.Variable(name, type));
+				decls.add(new Decl.Variable(TEMP(range.getFirstOperand()), Type.Int));
+				decls.add(new Decl.Variable(TEMP(range.getSecondOperand()), Type.Int));
                 //
                 if(!isPure(stmt)) {
                     // Loop modifies heap in some way.  Hence, need to store a copy of HEAP at beginning of loop which
@@ -1162,6 +1165,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 
     @Override
     public Stmt constructFor(WyilFile.Stmt.For stmt, Pair<Expr,Expr> range, List<Expr> _invariant, Stmt body) {
+    	WyilFile.Expr.ArrayRange wyRange = (WyilFile.Expr.ArrayRange) stmt.getVariable().getInitialiser();
         List<Expr.Logical> invariant = (List) _invariant;
         boolean needContinueLabel = containsContinueOrBreak(stmt, false);
         boolean needBreakLabel = containsContinueOrBreak(stmt, true);
@@ -1175,21 +1179,27 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Flattern (potentiall impure) condition
         Pair<List<Stmt>,Expr> lhs = flatternImpureExpression(range.first());
         Pair<List<Stmt>,Expr> rhs = flatternImpureExpression(range.second());
-        // Add all assertions and side effects
+        String nLhs = TEMP(wyRange.getFirstOperand());
+        String nRhs = TEMP(wyRange.getSecondOperand());
+        Expr.VariableAccess vLhs = VAR(nLhs);
+        Expr.VariableAccess vRhs = VAR(nRhs);
         stmts.addAll(lhs.first());
         stmts.addAll(rhs.first());
-		stmts.add(ASSERT(LTEQ(lhs.second(), rhs.second()), ATTRIBUTE(stmt.getVariable().getInitialiser()),
+        stmts.add(ASSIGN(vLhs,lhs.second()));
+        stmts.add(ASSIGN(vRhs,rhs.second()));
+        // Add all assertions and side effects
+		stmts.add(ASSERT(LTEQ(vLhs, vRhs), ATTRIBUTE(stmt.getVariable().getInitialiser()),
 				ATTRIBUTE(WyilFile.STATIC_NEGATIVE_RANGE_FAILURE)));
         // Extract loop contents so it can be appended later
         ArrayList<Stmt> loopBody = new ArrayList<>();
         loopBody.add(body);
         // Initialise index variable with first value from range
-        stmts.add(ASSIGN(var, lhs.second()));
-        Expr condition = LT(var, rhs.second());
+        stmts.add(ASSIGN(var, vLhs));
+        Expr condition = LT(var, vRhs);
         // Add variable increment for completeness
         loopBody.add(ASSIGN(var, ADD(var, CONST(1))));
         // Update invariant
-        invariant.add(0, AND(LTEQ(lhs.second(), var), LTEQ(var, rhs.second()),ATTRIBUTE(stmt.getVariable().getInitialiser())));
+        invariant.add(0, AND(LTEQ(vLhs, var), LTEQ(var, vRhs),ATTRIBUTE(stmt.getVariable().getInitialiser())));
         // Preprepend the necessary definedness checks
         invariant = flatternAsLogical(invariant);
         // Add any type constraints arising
