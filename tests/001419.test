@@ -26,14 +26,12 @@ E718 main.whiley 6,7:10
 >>> main.whiley 10:10
    assert x == 0
 ---
-E705 main.whiley 10,10:15
 E722 main.whiley 10,10:15
 =====
 >>> main.whiley 10:11
    assert x >= -128 && x <= 126
 ---
 E722 main.whiley 10,10:30
-E705 main.whiley 10,10:30
 =====
 >>> main.whiley 10:11
    assert x >= -128 && x <= 127

@@ -31,6 +31,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import wyboogie.util.testing.BoogieVerifyTest;
 import wyc.util.testing.WhileyCompileTest;
+import wyc.util.testing.WhileyExecuteTest;
 import wycc.util.Trie;
 import wycc.util.testing.TestManager;
 import wycc.util.testing.TestManager.Result;
@@ -72,6 +73,7 @@ public class WhileyCompilerTests {
 	public final static Path WHILEY_SRC_DIR = Path.of("tests");
 
 	public final static TestManager manager = new TestManager(WHILEY_SRC_DIR, new WhileyCompileTest(),
+			new WhileyExecuteTest(),
 			new BoogieVerifyTest().setTimeout(TIMEOUT).setDebug(DEBUG).setProverName(PROVER_NAME));
 
 	// ======================================================================
@@ -112,7 +114,7 @@ public class WhileyCompilerTests {
 
 	// Here we enumerate all available test cases.
 	private static Stream<Trie> debugFiles() throws IOException {
-		return readTestFiles(WHILEY_SRC_DIR, in(1419,1420,1421,1422));
+		return readTestFiles(WHILEY_SRC_DIR, in(1425));
 //		return readTestFiles(WHILEY_SRC_DIR, atleast(99999));
 	}
 

@@ -32,13 +32,11 @@ E718 main.whiley 6,8:16
 >>> main.whiley 10:10
    assert xs[0] == 0
 ---
-E708 main.whiley 10,13
 E725 main.whiley 10,13
 =====
 >>> main.whiley 10:11
    assert xs[0] >= 0 && xs[0] <= 254
 ---
-E708 main.whiley 10,13
 E725 main.whiley 10,13
 =====
 >>> main.whiley 10:11
