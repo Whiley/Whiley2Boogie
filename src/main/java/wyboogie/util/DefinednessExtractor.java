@@ -125,11 +125,26 @@ public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Asser
     }
 
     private List<Stmt.Assert> constructQuantifier(Expr.Quantifier expr, List<Stmt.Assert> body) {
-        return map(body, s -> {
-            Integer errcode = s.getAttribute(Integer.class);
-            Expr.Logical c = s.getCondition();
-            return ASSERT(FORALL(expr.getParameters(), c, expr.getAttributes()), ATTRIBUTE(errcode));
-        });
+    	Syntactic.Item wyItem = expr.getAttribute(Syntactic.Item.class);
+		ArrayList<Stmt.Assert> xs = new ArrayList<>();
+		//
+    	if(wyItem instanceof WyilFile.Expr.Quantifier) {
+    		WyilFile.Expr.Quantifier item = (WyilFile.Expr.Quantifier) wyItem;
+    		WyilFile.Tuple<WyilFile.Decl.StaticVariable> params = item.getParameters();
+    		for (int i = 0; i != params.size(); ++i) {
+    			WyilFile.Decl.StaticVariable v = params.get(i);
+    			WyilFile.Expr.ArrayRange r = (WyilFile.Expr.ArrayRange) v.getInitialiser();
+    			Expr start = bc.reconstructExpression(r.getFirstOperand());
+    			Expr end = bc.reconstructExpression(r.getSecondOperand());
+    			xs.add(ASSERT(LTEQ(start, end), ATTRIBUTE(r), ATTRIBUTE(WyilFile.STATIC_NEGATIVE_RANGE_FAILURE)));
+    		}
+    	}
+    	List<Stmt.Assert> ys = map(body, s -> {
+    		Integer errcode = s.getAttribute(Integer.class);
+    		Expr.Logical c = s.getCondition();
+    		return ASSERT(FORALL(expr.getParameters(), c, expr.getAttributes()), ATTRIBUTE(errcode));
+    	});
+    	return append(xs,ys);
     }
 
     @Override
