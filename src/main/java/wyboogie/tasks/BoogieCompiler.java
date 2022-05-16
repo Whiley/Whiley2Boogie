@@ -1313,7 +1313,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         //
         args = f2.second();
         // Apply conversions to arguments as necessary
-        //args = cast(ft.getParameter(), expr.getArguments(), args);
+        args = cast(ft.getParameter(), expr.getArguments(), args);
         //
         if (ft instanceof WyilFile.Type.Property) {
             // NOTE: this case arises when for a property invocation which discards the

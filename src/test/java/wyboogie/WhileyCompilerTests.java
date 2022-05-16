@@ -114,7 +114,7 @@ public class WhileyCompilerTests {
 
 	// Here we enumerate all available test cases.
 	private static Stream<Trie> debugFiles() throws IOException {
-		return readTestFiles(WHILEY_SRC_DIR, in(1425));
+		return readTestFiles(WHILEY_SRC_DIR, in(272,273));
 //		return readTestFiles(WHILEY_SRC_DIR, atleast(99999));
 	}
 
