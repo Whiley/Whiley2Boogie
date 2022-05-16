@@ -73,7 +73,7 @@ public class WhileyCompilerTests {
 	public final static Path WHILEY_SRC_DIR = Path.of("tests");
 
 	public final static TestManager manager = new TestManager(WHILEY_SRC_DIR, new WhileyCompileTest(),
-//			new WhileyExecuteTest(),
+			new WhileyExecuteTest(),
 			new BoogieVerifyTest().setTimeout(TIMEOUT).setDebug(DEBUG).setProverName(PROVER_NAME));
 
 	// ======================================================================

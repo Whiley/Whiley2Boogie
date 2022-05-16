@@ -111,5 +111,8 @@ public class BoogieVerifyTest implements TestStage {
 		return MIN_VERIFICATION_ERROR <= m && m <= MAX_VERIFICATION_ERROR;
 	}
 
-
+	@Override
+	public boolean required() {
+		return false;
+	}
 }
