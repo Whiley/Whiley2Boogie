@@ -217,6 +217,9 @@ public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Asser
         if (expr.getName().equals("Array#Generator")) {
             Expr len = expr.getArguments().get(1);
             rs.add(ASSERT(LTEQ(CONST(0), len, len.getAttributes()), ATTRIBUTE(WyilFile.STATIC_NEGATIVE_LENGTH_FAILURE)));
+        } else if(expr.getName().equals("Int#pow")) {
+        	Expr e = expr.getArguments().get(1);
+			rs.add(ASSERT(LTEQ(CONST(0), e, e.getAttributes()), ATTRIBUTE(WyilFile.STATIC_NEGATIVE_EXPONENT_FAILURE)));
         }
         return rs;
     }

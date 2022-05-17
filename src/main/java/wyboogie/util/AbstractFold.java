@@ -318,6 +318,7 @@ public abstract class AbstractFold<R> {
 			case EXPR_integermultiplication:
 			case EXPR_integerdivision:
 			case EXPR_integerremainder:
+			case EXPR_integerexponent:
 			case EXPR_bitwiseshl:
 			case EXPR_bitwiseshr:
 			case EXPR_arrayaccess:
@@ -409,6 +410,8 @@ public abstract class AbstractFold<R> {
 				return visitIntegerDivision((Expr.IntegerDivision) expr);
 			case EXPR_integerremainder:
 				return visitIntegerRemainder((Expr.IntegerRemainder) expr);
+			case EXPR_integerexponent:
+				return visitIntegerExponent((Expr.IntegerExponent) expr);
 			case EXPR_bitwiseshl:
 				return visitBitwiseShiftLeft((Expr.BitwiseShiftLeft) expr);
 			case EXPR_bitwiseshr:
@@ -609,6 +612,12 @@ public abstract class AbstractFold<R> {
 		R lhs = visitExpression(expr.getFirstOperand());
 		R rhs = visitExpression(expr.getSecondOperand());
 		return constructIntegerRemainder(expr,lhs,rhs);
+	}
+
+	public R visitIntegerExponent(Expr.IntegerExponent expr) {
+		R lhs = visitExpression(expr.getFirstOperand());
+		R rhs = visitExpression(expr.getSecondOperand());
+		return constructIntegerExponent(expr,lhs,rhs);
 	}
 
 	public R visitIs(Expr.Is expr) {
@@ -819,6 +828,10 @@ public abstract class AbstractFold<R> {
 	}
 
 	public R constructIntegerRemainder(Expr.IntegerRemainder expr, R lhs, R rhs) {
+		return join(lhs,rhs);
+	}
+
+	public R constructIntegerExponent(Expr.IntegerExponent expr, R lhs, R rhs) {
 		return join(lhs,rhs);
 	}
 

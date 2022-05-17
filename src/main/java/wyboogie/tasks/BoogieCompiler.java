@@ -1819,6 +1819,19 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         return REM(lhs, rhs, ATTRIBUTE(expr));
     }
 
+	@Override
+	public Expr constructIntegerExponent(WyilFile.Expr.IntegerExponent expr, Expr lhs, Expr rhs) {
+//        return REM(lhs, rhs, ATTRIBUTE(expr));
+		if(lhs instanceof Expr.Integer && rhs instanceof Expr.Integer) {
+			BigInteger l = ((Expr.Integer) lhs).getValue();
+			BigInteger r = ((Expr.Integer) rhs).getValue();
+			if (r.bitLength() < 32 && r.intValueExact() >= 0) {
+				return CONST(l.pow(r.intValueExact()), lhs.getAttributes());
+			}
+		}
+		return INVOKE("Int#pow", lhs, rhs, ATTRIBUTE(expr));
+	}
+
     @Override
     public Expr constructIs(WyilFile.Expr.Is expr, Expr operand) {
         return constructTypeTest(expr.getTestType(), expr.getOperand().getType(), operand, HEAP, expr);
@@ -2670,12 +2683,21 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @return
      */
     private List<Decl> constructIntAxioms(WyilFile wf) {
+        final Expr n = VAR("n");
+        final Expr m = VAR("m");
+
         ArrayList<Decl> decls = new ArrayList<>();
         decls.addAll(constructCommentSubheading("Integers"));
         decls.add(FUNCTION("Int#box", Type.Int, ANY));
         decls.add(FUNCTION("Int#unbox", ANY, Type.Int));
+		decls.add(FUNCTION("Int#undef", Arrays.asList(), Type.Int));
         decls.add(FUNCTION("Int#is", new Decl.Parameter("v", ANY), Type.Bool,
                 EXISTS("i", Type.Int, EQ(INVOKE("Int#box", VAR("i")), VAR("v")))));
+
+		Expr body = IFELSE(GT(m, CONST(0)), MUL(n, INVOKE("Int#pow", n, SUB(m, CONST(1)))), INVOKE("Int#undef"));
+		body = IFELSE(AND(NEQ(n, CONST(0)), EQ(m, CONST(0))), CONST(1), body);
+		decls.add(FUNCTION("Int#pow",
+				Arrays.asList(new Decl.Parameter("n", Type.Int), new Decl.Parameter("m", Type.Int)), Type.Int, body));
         // Establish connection between box and unbox
         decls.add(new Decl.Axiom(
                 FORALL("i", Type.Int, EQ(INVOKE("Int#unbox", INVOKE("Int#box", VAR("i"))), VAR("i")))));

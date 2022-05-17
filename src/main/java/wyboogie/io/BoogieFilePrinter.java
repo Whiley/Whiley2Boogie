@@ -500,6 +500,8 @@ public class BoogieFilePrinter {
 			writeNegation((Expr.Negation) e);
 		} else if(e instanceof Expr.VariableAccess) {
 			writeVariableAccess((Expr.VariableAccess) e);
+		} else if(e instanceof Expr.IfElse) {
+			writeIfElse((Expr.IfElse) e);
 		} else {
 			throw new IllegalArgumentException("unknown expression encountered (" + e.getClass().getName() + ")");
 		}
@@ -694,6 +696,17 @@ public class BoogieFilePrinter {
 	}
 	private void writeVariableAccess(Expr.VariableAccess e) {
 		out.print(e.getVariable(),e);
+	}
+
+	private void writeIfElse(Expr.IfElse e) {
+		out.print("if ",e);
+		writeExpression(e.getCondition());
+		out.print(" then ",e);
+		writeExpression(e.getTrueBranch());
+		out.println();
+		out.tab(1);
+		out.print("else ",e);
+		writeExpression(e.getFalseBranch());
 	}
 
 	private void writeType(Type t) {
