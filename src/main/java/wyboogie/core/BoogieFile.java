@@ -1242,6 +1242,7 @@ public class BoogieFile {
 		}
 
 		public static class VariableAccess extends AbstractItem implements Logical,  LVal {
+
 			private final String variable;
 
 			private VariableAccess(String var, Attribute[] attributes) {
@@ -1259,6 +1260,31 @@ public class BoogieFile {
 			@Override
 			public String toString() {
 				return "VAR(" + variable + ")";
+			}
+		}
+
+		public static class IfElse extends AbstractItem implements Expr {
+			private final Expr.Logical condition;
+			private final Expr trueBranch;
+			private final Expr falseBranch;
+
+			private IfElse(Expr.Logical condition, Expr trueBranch, Expr falseBranch, Attribute... attributes) {
+				super(attributes);
+				this.condition = condition;
+				this.trueBranch = trueBranch;
+				this.falseBranch = falseBranch;
+			}
+
+			public Expr.Logical getCondition() {
+				return condition;
+			}
+
+			public Expr getTrueBranch() {
+				return trueBranch;
+			}
+
+			public Expr getFalseBranch() {
+				return falseBranch;
 			}
 		}
 	}
@@ -1456,6 +1482,9 @@ public class BoogieFile {
 	}
 	public static Stmt.IfElse IFELSE(Expr.Logical condition, Stmt trueBranch, Stmt falseBranch, Attribute... attributes) {
 		return new Stmt.IfElse(condition, trueBranch, falseBranch, attributes);
+	}
+	public static Expr.IfElse IFELSE(Expr.Logical condition, Expr trueBranch, Expr falseBranch, Attribute... attributes) {
+		return new Expr.IfElse(condition, trueBranch, falseBranch, attributes);
 	}
 	public static Stmt.Label LABEL(String label, Attribute... attributes) {
 		return new Stmt.Label(label,attributes);
