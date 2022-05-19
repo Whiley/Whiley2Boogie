@@ -222,7 +222,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     @Override
-    public Decl constructProperty(WyilFile.Decl.Property d, Expr body) {
+    public Decl constructProperty(WyilFile.Decl.Property d, Stmt body) {
         ArrayList<Decl> decls = new ArrayList<>();
         decls.addAll(constructCommentHeading("PROPERTY: " + d.getQualifiedName()));
         // Apply name mangling
@@ -231,16 +231,31 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         Pair<List<Decl.Parameter>, List<Expr.Logical>> parametersAndConstraints = constructParameters(d.getTemplate(), d.getParameters(), HEAP);
         Pair<List<Decl.Parameter>, List<Expr.Logical>> returnsAndConstraints = constructParameters(null, d.getReturns(), HEAP);
         // Extract parameter and returns
-        List<Decl.Parameter> parameters = parametersAndConstraints.first();
+        List<Decl.Parameter> params = parametersAndConstraints.first();
         List<Decl.Parameter> returns = returnsAndConstraints.first();
-        //
-        if(returns.size() > 1) {
-        	throw new UnsupportedOperationException("implement support for tuple returns");
+        // Merge preconditions
+        List<Expr.Logical> requires = parametersAndConstraints.second();
+        // Add useful comment
+        decls.addAll(constructCommentHeading(d.getQualifiedName() + " : " + d.getType()));
+        // Add method prototype
+        decls.addAll(constructProcedurePrototype(d, name, params, returns, requires, Collections.emptyList()));
+        // Add any lambda's used within the method
+        decls.addAll(constructLambdas(d));
+        // Add implementation (if appropriate)
+        if(!isExternalOrUnsafe(d) && !isImported(d)) {
+            // Yes, this is neither an external symbol nor is it declared unsafe.
+            decls.addAll(constructProcedureImplementation(d, name, params, returns, body));
         }
         Type type = returns.get(0).getType();
-        // FIXME: what to do with the type constraints?
-        decls.add(FUNCTION(name, append(HEAP_PARAM, parameters), type, body));
+        // This is a hack
+        WyilFile.Stmt.Return ret = (WyilFile.Stmt.Return) d.getBody().get(0);
+        // FIXME: this is where we need to flattern properties correctly.
+        Expr e = reconstructExpression(ret.getReturn());
+        //
+        decls.add(FUNCTION(name, append(HEAP_PARAM, params), type, e));
+        // Done
         return new Decl.Sequence(decls);
+
     }
 
     @Override
@@ -268,7 +283,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         return constructFunctionOrMethod(d, precondition, postcondition, body);
     }
 
-    private Decl constructFunctionOrMethod(WyilFile.Decl.FunctionOrMethod d, List<Expr> precondition, List<Expr> postcondition, Stmt body) {
+    private Decl constructFunctionOrMethod(WyilFile.Decl.Callable d, List<Expr> precondition, List<Expr> postcondition, Stmt body) {
         ArrayList<Decl> decls = new ArrayList<>();
         // Apply name mangling
         String name = toMangledName(d);
@@ -305,7 +320,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * @param d
 	 * @return
 	 */
-	public static boolean isExternalOrUnsafe(WyilFile.Decl.FunctionOrMethod d) {
+	public static boolean isExternalOrUnsafe(WyilFile.Decl.Callable d) {
 		return d.getModifiers().match(WyilFile.Modifier.Native.class) != null
 				|| d.getModifiers().match(WyilFile.Modifier.Unsafe.class) != null;
 	}
@@ -317,11 +332,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 	 * @param d
 	 * @return
 	 */
-	public static boolean isImported(WyilFile.Decl.FunctionOrMethod d) {
+	public static boolean isImported(WyilFile.Decl.Callable d) {
 		return d.getBody().size() == 0;
 	}
 
-    public List<Decl> constructProcedurePrototype(WyilFile.Decl.FunctionOrMethod d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, List<Expr.Logical> requires, List<Expr.Logical> ensures) {
+    public List<Decl> constructProcedurePrototype(WyilFile.Decl.Callable d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, List<Expr.Logical> requires, List<Expr.Logical> ensures) {
         List<Expr.Logical> freeRequires = new ArrayList<>();
         List<Expr.Logical> freeEnsures = new ArrayList<>();
         List<String> modifies = Collections.EMPTY_LIST;
@@ -342,7 +357,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 				freeRequires.add(constructTypeTest(v.getType(), VAR(vName), HEAP, d));
 				freeEnsures.add(constructTypeTest(v.getType(), VAR(vName), HEAP, d));
             }
-        } else {
+        } else if (d instanceof WyilFile.Decl.Function) {
             ArrayList<Decl.Parameter> f_params = new ArrayList<>(params);
             f_params.add(0,HEAP_PARAM);
             List<Expr> f_args = map(f_params, p -> VAR(p.getName()));
@@ -376,7 +391,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         return decls;
     }
 
-    public List<Decl> constructProcedureImplementation(WyilFile.Decl.FunctionOrMethod d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, Stmt body) {
+    public List<Decl> constructProcedureImplementation(WyilFile.Decl.Callable d, String name, List<Decl.Parameter> params, List<Decl.Parameter> returns, Stmt body) {
         ArrayList<Decl> decls = new ArrayList<>();
         // Add useful heading
         decls.addAll(constructCommentSubheading("Implementation"));
@@ -1371,7 +1386,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     @Override
     public Stmt constructReturn(WyilFile.Stmt.Return stmt, Expr ret) {
         // Identify enclosing function/method to figure out names of returns.
-        WyilFile.Decl.Callable enclosing = stmt.getAncestor(WyilFile.Decl.FunctionOrMethod.class);
+        WyilFile.Decl.Callable enclosing = stmt.getAncestor(WyilFile.Decl.Callable.class);
         // Construct return value assignments
         ArrayList<Stmt> stmts = new ArrayList<>();
         //
@@ -4093,8 +4108,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
      * @param var
      * @return
      */
-    public static boolean hasFinalReturn(WyilFile.Decl.FunctionOrMethod m) {
-        WyilFile.Stmt.Block b = m.getBody();
+    public static boolean hasFinalReturn(WyilFile.Decl.Callable m) {
+        WyilFile.Stmt.Block b = (WyilFile.Stmt.Block) m.getBody();
         if (b != null && b.size() > 0) {
             WyilFile.Stmt s = b.get(b.size() - 1);
             return s instanceof WyilFile.Stmt.Return;
