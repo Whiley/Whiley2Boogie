@@ -73,7 +73,7 @@ public class WhileyCompilerTests {
 	public final static Path WHILEY_SRC_DIR = Path.of("tests");
 
 	public final static TestManager manager = new TestManager(WHILEY_SRC_DIR, new WhileyCompileTest(),
-			new WhileyExecuteTest(),
+//			new WhileyExecuteTest(),
 			new BoogieVerifyTest().setTimeout(TIMEOUT).setDebug(DEBUG).setProverName(PROVER_NAME));
 
 	// ======================================================================
@@ -114,7 +114,7 @@ public class WhileyCompilerTests {
 
 	// Here we enumerate all available test cases.
 	private static Stream<Trie> debugFiles() throws IOException {
-		return readTestFiles(WHILEY_SRC_DIR, in(74, 82, 159, 404, 405, 406));
+		return readTestFiles(WHILEY_SRC_DIR, in(1434,1435,1436));
 //		return readTestFiles(WHILEY_SRC_DIR, atleast(99999));
 	}
 

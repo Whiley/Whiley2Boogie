@@ -247,16 +247,49 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             decls.addAll(constructProcedureImplementation(d, name, params, returns, body));
         }
         Type type = returns.get(0).getType();
-        // This is a hack
-        WyilFile.Stmt.Return ret = (WyilFile.Stmt.Return) d.getBody().get(0);
-        // FIXME: this is where we need to flattern properties correctly.
-        Expr e = reconstructExpression(ret.getReturn());
+        // Flattern the property.
+        Expr e = propertyFold(d.getBody());
         //
         decls.add(FUNCTION(name, append(HEAP_PARAM, params), type, e));
         // Done
         return new Decl.Sequence(decls);
 
     }
+
+	public Expr propertyFold(WyilFile.Stmt stmt) {
+		if (stmt instanceof WyilFile.Stmt.Block) {
+			WyilFile.Stmt.Block s = (WyilFile.Stmt.Block) stmt;
+			final int n = s.size();
+			if (n == 1) {
+				return propertyFold(s.get(0));
+			} else {
+				Expr e = propertyFold(s.get(n - 1));
+				for (int i = n - 2; i >= 0; --i) {
+					WyilFile.Stmt.Initialiser ith = (WyilFile.Stmt.Initialiser) s.get(i);
+					if(ith.getVariables().size() != 1) {
+						// This is a sanity check for now.
+						throw new Syntactic.Exception("Cannot deal with multiple initialisers", ith.getHeap(), ith);
+					} else {
+						WyilFile.Decl.Variable v = ith.getVariables().get(0);
+						Expr init = reconstructExpression(ith.getInitialiser());
+						e = LET(toVariableName(v), init, e, ATTRIBUTE(ith));
+					}
+				}
+				return e;
+			}
+		} if (stmt instanceof WyilFile.Stmt.IfElse) {
+			WyilFile.Stmt.IfElse s = (WyilFile.Stmt.IfElse) stmt;
+			Expr.Logical cond = (Expr.Logical) reconstructExpression(s.getCondition());
+			Expr trueBranch = propertyFold(s.getTrueBranch());
+			Expr falseBranch = propertyFold(s.getFalseBranch());
+			return IFELSE(cond, trueBranch, falseBranch, ATTRIBUTE(s));
+		} else if (stmt instanceof WyilFile.Stmt.Return) {
+			WyilFile.Stmt.Return r = (WyilFile.Stmt.Return) stmt;
+			return reconstructExpression(r.getReturn());
+		} else {
+			throw new Syntactic.Exception("Unknown property statement encountered", stmt.getHeap(), stmt);
+		}
+	}
 
     @Override
     public Decl constructVariant(WyilFile.Decl.Variant d, List clauses) {
