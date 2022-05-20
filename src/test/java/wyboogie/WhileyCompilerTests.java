@@ -117,8 +117,7 @@ public class WhileyCompilerTests {
 		// This is the list of tests which are failing after adding the property
 		// procedure check. 516+521 seems to be memory hogs. Possibly we want to be able to
 		// properly block some.  Any that time out I guess.
-//		return readTestFiles(WHILEY_SRC_DIR, in(74, 117, 812,813,815,816,817,818,819,820,821,934,935,936,1324,1325,1327,1328,1329,1330,1383,1417));
-		return readTestFiles(WHILEY_SRC_DIR, atleast(500).and(atmost(700)));
+		return readTestFiles(WHILEY_SRC_DIR, atleast(1436));
 	}
 
 	// ======================================================================
