@@ -67,8 +67,14 @@ public class BoogieVerifyTest implements TestStage {
 	@Override
 	public Result apply(Trie path, Path dir, Map<Trie, TextFile> state, TestFile tf) throws IOException {
 		boolean ignored = tf.get(Boolean.class, "boogie.ignore").orElse(false);
+		boolean block = tf.get(Boolean.class, "boogie.block").orElse(false);
 		String unit = tf.get(String.class, "main.file").orElse("main");
 		int timeout = tf.get(Integer.class, "boogie.timeout").orElse(this.timeout);
+		//
+		if(block) {
+			TestFile.Coordinate c = new TestFile.Coordinate(0, new TestFile.Range(0, 0));
+			return new Result(true, new Error(WyilFile.INTERNAL_FAILURE, Trie.fromString(unit), c));
+		}
 		//
 		MailBox.Buffered<SyntaxError> handler = new MailBox.Buffered<>();
 		try {
