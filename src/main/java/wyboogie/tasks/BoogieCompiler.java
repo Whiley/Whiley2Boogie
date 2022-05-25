@@ -662,8 +662,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                 String name = toVariableName(v);
                 Type type = constructType(v.getType());
                 decls.add(new Decl.Variable(name, type));
-				decls.add(new Decl.Variable(TEMP(range.getFirstOperand()), Type.Int));
-				decls.add(new Decl.Variable(TEMP(range.getSecondOperand()), Type.Int));
+				decls.add(new Decl.Variable(TEMP(stmt,0), Type.Int));
+				decls.add(new Decl.Variable(TEMP(stmt,1), Type.Int));
                 //
                 if(!isPure(stmt)) {
                     // Loop modifies heap in some way.  Hence, need to store a copy of HEAP at beginning of loop which
@@ -1227,8 +1227,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         // Flattern (potentiall impure) condition
         Pair<List<Stmt>,Expr> lhs = flatternImpureExpression(range.first());
         Pair<List<Stmt>,Expr> rhs = flatternImpureExpression(range.second());
-        String nLhs = TEMP(wyRange.getFirstOperand());
-        String nRhs = TEMP(wyRange.getSecondOperand());
+        String nLhs = TEMP(stmt,0);
+        String nRhs = TEMP(stmt,1);
         Expr.VariableAccess vLhs = VAR(nLhs);
         Expr.VariableAccess vRhs = VAR(nRhs);
         stmts.addAll(lhs.first());
