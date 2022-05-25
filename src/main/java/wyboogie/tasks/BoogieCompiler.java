@@ -1954,7 +1954,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             clauses.add(LT(VAR(name), ith.second()));
         }
         clauses.add((Expr.Logical) body);
-        return EXISTS(ps, AND(clauses), ATTRIBUTE(expr));
+        return EXISTS(ps, AND(clauses, ATTRIBUTE(expr)), ATTRIBUTE(expr));
     }
 
     @Override
