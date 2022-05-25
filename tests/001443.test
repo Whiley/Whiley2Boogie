@@ -3,7 +3,7 @@
 property unique_elements<T>(T[] items, int end) -> (bool r):
     // All items upto end are unique
     return end >= 0 && end <= |items| &&
-           all { i in 0..end, j in (i+1)..end | items[i] != items[j] }
+           all { i in 0..end | all { j in (i+1)..end | items[i] != items[j] } }
 
 public export method test():
    assert unique_elements([0,0],0)
