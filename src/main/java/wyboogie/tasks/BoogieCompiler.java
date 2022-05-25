@@ -746,11 +746,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             	Boolean r = join(ranges) || operand;
                 if(r) {
                     decls.add(new Decl.Variable(TEMP(expr), Type.Bool));
-                	WyilFile.Tuple<WyilFile.Decl.StaticVariable> params = expr.getParameters();
-                    for (int i = 0; i != params.size(); ++i) {
-                        String name = toVariableName(params.get(i));
-                        decls.add(new Decl.Variable(name, Type.Int));
-                    }
+                }
+                // Seems like its better just to always add these.
+                WyilFile.Tuple<WyilFile.Decl.StaticVariable> params = expr.getParameters();
+                for (int i = 0; i != params.size(); ++i) {
+                    String name = toVariableName(params.get(i));
+                    decls.add(new Decl.Variable(name, Type.Int));
                 }
                 return operand;
             }
@@ -760,11 +761,12 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             	Boolean r = join(ranges) || operand;
                 if(r) {
                 	decls.add(new Decl.Variable(TEMP(expr), Type.Bool));
-                	WyilFile.Tuple<WyilFile.Decl.StaticVariable> params = expr.getParameters();
-                    for (int i = 0; i != params.size(); ++i) {
-                        String name = toVariableName(params.get(i));
-                        decls.add(new Decl.Variable(name, Type.Int));
-                    }
+                }
+                // Seems like its better just to always add these.
+                WyilFile.Tuple<WyilFile.Decl.StaticVariable> params = expr.getParameters();
+                for (int i = 0; i != params.size(); ++i) {
+                    String name = toVariableName(params.get(i));
+                    decls.add(new Decl.Variable(name, Type.Int));
                 }
                 return operand;
             }
