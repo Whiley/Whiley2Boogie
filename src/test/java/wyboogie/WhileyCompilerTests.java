@@ -73,7 +73,7 @@ public class WhileyCompilerTests {
 	public final static Path WHILEY_SRC_DIR = Path.of("tests");
 
 	public final static TestManager manager = new TestManager(WHILEY_SRC_DIR, new WhileyCompileTest(),
-			new WhileyExecuteTest(),
+//			new WhileyExecuteTest(),
 			new BoogieVerifyTest().setTimeout(TIMEOUT).setDebug(DEBUG).setProverName(PROVER_NAME));
 
 	// ======================================================================
@@ -114,10 +114,8 @@ public class WhileyCompilerTests {
 
 	// Here we enumerate all available test cases.
 	private static Stream<Trie> debugFiles() throws IOException {
-		// This is the list of tests which are failing after adding the property
-		// procedure check. 516+521 seems to be memory hogs. Possibly we want to be able to
-		// properly block some.  Any that time out I guess.
-		return readTestFiles(WHILEY_SRC_DIR, atleast(1436));
+		return readTestFiles(WHILEY_SRC_DIR, in(74,405,406,407,408,410,413,416,417,418,419,423,429,462,483,484,602,603,616,1089));
+//		return readTestFiles(WHILEY_SRC_DIR, atleast(9999));
 	}
 
 	// ======================================================================

@@ -271,7 +271,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 						throw new Syntactic.Exception("Cannot deal with multiple initialisers", ith.getHeap(), ith);
 					} else {
 						WyilFile.Decl.Variable v = ith.getVariables().get(0);
-						Expr init = reconstructExpression(ith.getInitialiser());
+						Expr init = super.visitExpression(ith.getInitialiser());
 						e = LET(toVariableName(v), init, e, ATTRIBUTE(ith));
 					}
 				}
@@ -279,13 +279,13 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 			}
 		} if (stmt instanceof WyilFile.Stmt.IfElse) {
 			WyilFile.Stmt.IfElse s = (WyilFile.Stmt.IfElse) stmt;
-			Expr.Logical cond = (Expr.Logical) reconstructExpression(s.getCondition());
+			Expr.Logical cond = (Expr.Logical) super.visitExpression(s.getCondition());
 			Expr trueBranch = propertyFold(s.getTrueBranch());
 			Expr falseBranch = propertyFold(s.getFalseBranch());
 			return IFELSE(cond, trueBranch, falseBranch, ATTRIBUTE(s));
 		} else if (stmt instanceof WyilFile.Stmt.Return) {
 			WyilFile.Stmt.Return r = (WyilFile.Stmt.Return) stmt;
-			return reconstructExpression(r.getReturn());
+			return super.visitExpression(r.getReturn());
 		} else {
 			throw new Syntactic.Exception("Unknown property statement encountered", stmt.getHeap(), stmt);
 		}
@@ -742,6 +742,34 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             }
 
             @Override
+            public Boolean constructUniversalQuantifier(WyilFile.Expr.UniversalQuantifier expr, List<Boolean> ranges, Boolean operand) {
+            	Boolean r = join(ranges) || operand;
+                if(r) {
+                    decls.add(new Decl.Variable(TEMP(expr), Type.Bool));
+                	WyilFile.Tuple<WyilFile.Decl.StaticVariable> params = expr.getParameters();
+                    for (int i = 0; i != params.size(); ++i) {
+                        String name = toVariableName(params.get(i));
+                        decls.add(new Decl.Variable(name, Type.Int));
+                    }
+                }
+                return operand;
+            }
+
+            @Override
+            public Boolean constructExistentialQuantifier(WyilFile.Expr.ExistentialQuantifier expr, List<Boolean> ranges, Boolean operand) {
+            	Boolean r = join(ranges) || operand;
+                if(r) {
+                	decls.add(new Decl.Variable(TEMP(expr), Type.Bool));
+                	WyilFile.Tuple<WyilFile.Decl.StaticVariable> params = expr.getParameters();
+                    for (int i = 0; i != params.size(); ++i) {
+                        String name = toVariableName(params.get(i));
+                        decls.add(new Decl.Variable(name, Type.Int));
+                    }
+                }
+                return operand;
+            }
+
+            @Override
             public Boolean constructLogicalOr(WyilFile.Expr.LogicalOr expr, List<Boolean> operands) {
                 Boolean r = join(operands);
                 if(r) {
@@ -772,6 +800,8 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                         }
                     }
                     return true;
+                } else if(ft instanceof WyilFile.Decl.Property) {
+                	return true;
                 } else {
                     return join(operands);
                 }
@@ -1940,7 +1970,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
             clauses.add(LTEQ(ith.first(), VAR(name)));
             clauses.add(LT(VAR(name), ith.second()));
         }
-        return FORALL(ps, IMPLIES(AND(clauses), (Expr.Logical) body), ATTRIBUTE(expr));
+        return FORALL(ps, IMPLIES(AND(clauses), (Expr.Logical) body, ATTRIBUTE(expr)), ATTRIBUTE(expr));
     }
 
     @Override
@@ -2282,18 +2312,20 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     	Expr heap = arguments.get(0).second();
                     	Tuple<WyilFile.Expr> args = ivk.getOperands();
                     	// Add all well-definedness checks
-                    	for (int i = 1; i < arguments.size(); ++i) {
+						int offset = 1 + ivk.getBinding().getLink().getTarget().getTemplate().size();
+                    	for (int i = offset; i < arguments.size(); ++i) {
                     		Pair<Stmt,Expr> ith = arguments.get(i);
-							WyilFile.Expr arg = args.get(i - 1);
+							WyilFile.Expr arg = args.get(i - offset);
                     		if(ith.first() != null) {
                     			stmts.add(ith.first());
                     		}
                     		stmts.addAll(extractor.visitExpression(ith.second()));
-                    		WyilFile.Type tth = ft.getParameter().dimension(i-1);
+							WyilFile.Type tth = ft.getParameter().dimension(i - offset);
 							Expr.Logical constraint = constructTypeConstraint(tth, arguments.get(i).second(), heap,
 									arg);
 							if(constraint != null) {
-								stmts.add(ASSERT(constraint,ATTRIBUTE(arg),ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
+								stmts.add(ASSERT(constraint, ATTRIBUTE(arg),
+										ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
 							}
                     	}
                     	List operands = extractSecond(arguments);

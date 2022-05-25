@@ -1183,6 +1183,11 @@ public class BoogieFile {
 			public List<Logical> getOperands() {
 				return operands;
 			}
+
+			@Override
+			public String toString() {
+				return "AND" + operands;
+			}
 		}
 
 		public static class LogicalOr extends AbstractItem implements Logical,  NaryOperator {
@@ -1196,6 +1201,11 @@ public class BoogieFile {
 			@Override
 			public List<Logical> getOperands() {
 				return operands;
+			}
+
+			@Override
+			public String toString() {
+				return "OR" + operands;
 			}
 		}
 
