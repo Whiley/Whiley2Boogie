@@ -492,6 +492,8 @@ public class BoogieFilePrinter {
 			writeQuantifier((Expr.Quantifier) e);
 		} else if(e instanceof Expr.Invoke) {
 			writeInvoke((Expr.Invoke) e);
+		} else if(e instanceof Expr.Let) {
+			writeLet((Expr.Let) e);
 		} else if(e instanceof Expr.LogicalNot) {
 			writeLogicalNot((Expr.LogicalNot) e);
 		} else if(e instanceof Expr.Old) {
@@ -694,6 +696,17 @@ public class BoogieFilePrinter {
 		out.print("!",e);
 		writeExpressionWithBraces(e.getOperand());
 	}
+
+	private void writeLet(Expr.Let e) {
+		out.print("(var ",e);
+		out.print(e.getName(),e);
+		out.print(" := ",e);
+		writeExpression(e.getInitialiser());
+		out.print(";", e);
+		writeExpression(e.getOperand());
+		out.print(")", e);
+	}
+
 	private void writeVariableAccess(Expr.VariableAccess e) {
 		out.print(e.getVariable(),e);
 	}

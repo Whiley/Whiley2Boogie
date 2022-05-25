@@ -1183,6 +1183,11 @@ public class BoogieFile {
 			public List<Logical> getOperands() {
 				return operands;
 			}
+
+			@Override
+			public String toString() {
+				return "AND" + operands;
+			}
 		}
 
 		public static class LogicalOr extends AbstractItem implements Logical,  NaryOperator {
@@ -1196,6 +1201,11 @@ public class BoogieFile {
 			@Override
 			public List<Logical> getOperands() {
 				return operands;
+			}
+
+			@Override
+			public String toString() {
+				return "OR" + operands;
 			}
 		}
 
@@ -1285,6 +1295,31 @@ public class BoogieFile {
 
 			public Expr getFalseBranch() {
 				return falseBranch;
+			}
+		}
+
+		public static class Let extends AbstractItem implements Expr {
+			private final String name;
+			private final Expr initialiser;
+			private final Expr operand;
+
+			private Let(String name, Expr initialiser, Expr operand, Attribute[] attributes) {
+				super(attributes);
+				this.initialiser = initialiser;
+				this.name = name;
+				this.operand = operand;
+			}
+
+			public String getName() {
+				return name;
+			}
+
+			public Expr getInitialiser() {
+				return initialiser;
+			}
+
+			public Expr getOperand() {
+				return operand;
 			}
 		}
 	}
@@ -1759,6 +1794,9 @@ public class BoogieFile {
 	}
 	public static Expr.Invoke INVOKE(String name, List<Expr> parameters, Attribute... attributes) {
 		return new Expr.Invoke(name, parameters,attributes);
+	}
+	public static Expr.Let LET(String name, Expr initialiser, Expr operand, Attribute... attributes) {
+		return new Expr.Let(name, initialiser, operand, attributes);
 	}
 	public static Expr.VariableAccess VAR(String name, Attribute... attributes) {
 		return new Expr.VariableAccess(name,attributes);
