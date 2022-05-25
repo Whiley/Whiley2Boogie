@@ -1,5 +1,8 @@
 package wyboogie.util;
 
+import wyboogie.core.BoogieFile.Decl;
+import wyboogie.core.BoogieFile.Expr;
+import wyboogie.core.BoogieFile.Type;
 import wyboogie.tasks.BoogieCompiler;
 import wycc.lang.Syntactic;
 import wyil.lang.WyilFile;
@@ -131,12 +134,16 @@ public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Asser
     	if(wyItem instanceof WyilFile.Expr.Quantifier) {
     		WyilFile.Expr.Quantifier item = (WyilFile.Expr.Quantifier) wyItem;
     		WyilFile.Tuple<WyilFile.Decl.StaticVariable> params = item.getParameters();
+    		List<Expr.Logical> clauses = new ArrayList<>();
     		for (int i = 0; i != params.size(); ++i) {
     			WyilFile.Decl.StaticVariable v = params.get(i);
     			WyilFile.Expr.ArrayRange r = (WyilFile.Expr.ArrayRange) v.getInitialiser();
     			Expr start = bc.reconstructExpression(r.getFirstOperand());
     			Expr end = bc.reconstructExpression(r.getSecondOperand());
-    			xs.add(ASSERT(LTEQ(start, end), ATTRIBUTE(r), ATTRIBUTE(WyilFile.STATIC_NEGATIVE_RANGE_FAILURE)));
+    			xs.add(ASSERT(IMPLIES(AND(clauses),LTEQ(start, end)), ATTRIBUTE(r), ATTRIBUTE(WyilFile.STATIC_NEGATIVE_RANGE_FAILURE)));
+    			String name = bc.toVariableName(v);
+                clauses.add(LTEQ(start, VAR(name)));
+                clauses.add(LT(VAR(name), end));
     		}
     	}
     	List<Stmt.Assert> ys = map(body, s -> {

@@ -4073,7 +4073,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         }
     }
 
-    private String toVariableName(WyilFile.Decl.Variable v) {
+    public String toVariableName(WyilFile.Decl.Variable v) {
     	if (mangling) {
             return v.getName().get() + "$" + v.getIndex();
         } else {
