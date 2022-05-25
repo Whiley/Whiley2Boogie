@@ -2278,7 +2278,28 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     // Determine name mangle for call
                     String name = toMangledName(ivk.getLink().getTarget());
                     // Check mangled name matches (otherwise is synthetic)
-                    if(expr.getName().startsWith(name) && !(ft instanceof WyilFile.Type.Property)) {
+                    if(expr.getName().startsWith(name) && ft instanceof WyilFile.Type.Property) {
+                    	Expr heap = arguments.get(0).second();
+                    	Tuple<WyilFile.Expr> args = ivk.getOperands();
+                    	// Add all well-definedness checks
+                    	for (int i = 1; i < arguments.size(); ++i) {
+                    		Pair<Stmt,Expr> ith = arguments.get(i);
+							WyilFile.Expr arg = args.get(i - 1);
+                    		if(ith.first() != null) {
+                    			stmts.add(ith.first());
+                    		}
+                    		stmts.addAll(extractor.visitExpression(ith.second()));
+                    		WyilFile.Type tth = ft.getParameter().dimension(i-1);
+							Expr.Logical constraint = constructTypeConstraint(tth, arguments.get(i).second(), heap,
+									arg);
+							if(constraint != null) {
+								stmts.add(ASSERT(constraint,ATTRIBUTE(arg),ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
+							}
+                    	}
+                    	List operands = extractSecond(arguments);
+						return new Pair<>(SEQUENCE(stmts),
+								BoogieFile.INVOKE(expr.getName(), operands, expr.getAttributes()));
+                    } else if(expr.getName().startsWith(name) && !(ft instanceof WyilFile.Type.Property)) {
                         // Strip HEAP argument
                         arguments.remove(0);
                         // Add all well-definedness checks
