@@ -222,7 +222,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
     }
 
     @Override
-    public Decl constructProperty(WyilFile.Decl.Property d, Stmt body) {
+    public Decl constructProperty(WyilFile.Decl.Property d, List<Expr> precondition, Stmt body) {
         ArrayList<Decl> decls = new ArrayList<>();
         decls.addAll(constructCommentHeading("PROPERTY: " + d.getQualifiedName()));
         // Apply name mangling
@@ -234,7 +234,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
         List<Decl.Parameter> params = parametersAndConstraints.first();
         List<Decl.Parameter> returns = returnsAndConstraints.first();
         // Merge preconditions
-        List<Expr.Logical> requires = parametersAndConstraints.second();
+        List<Expr.Logical> requires = append(parametersAndConstraints.second(),flatternAsLogical(precondition));
         // Add useful comment
         decls.addAll(constructCommentHeading(d.getQualifiedName() + " : " + d.getType()));
         // Add method prototype
@@ -2311,10 +2311,11 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
                     String name = toMangledName(ivk.getLink().getTarget());
                     // Check mangled name matches (otherwise is synthetic)
                     if(expr.getName().startsWith(name) && ft instanceof WyilFile.Type.Property) {
+                    	WyilFile.Decl.Property p = (WyilFile.Decl.Property) ivk.getBinding().getLink().getTarget();
                     	Expr heap = arguments.get(0).second();
                     	Tuple<WyilFile.Expr> args = ivk.getOperands();
                     	// Add all well-definedness checks
-						int offset = 1 + ivk.getBinding().getLink().getTarget().getTemplate().size();
+						int offset = 1 + p.getTemplate().size();
                     	for (int i = offset; i < arguments.size(); ++i) {
                     		Pair<Stmt,Expr> ith = arguments.get(i);
 							WyilFile.Expr arg = args.get(i - offset);
@@ -2329,6 +2330,7 @@ public class BoogieCompiler extends AbstractTranslator<Decl, Stmt, Expr> {
 								stmts.add(ASSERT(constraint, ATTRIBUTE(arg),
 										ATTRIBUTE(WyilFile.STATIC_TYPEINVARIANT_FAILURE)));
 							}
+
                     	}
                     	List operands = extractSecond(arguments);
 						return new Pair<>(SEQUENCE(stmts),
