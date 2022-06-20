@@ -206,7 +206,6 @@ public class DefinednessExtractor extends AbstractExpressionFold<List<Stmt.Asser
         // Done
         return result;
     }
-
     @Override
     public List<Stmt.Assert> constructRemainder(Expr.Remainder expr, List<Stmt.Assert> lhs, List<Stmt.Assert> rhs) {
         List<Stmt.Assert> result = append(lhs,rhs);
