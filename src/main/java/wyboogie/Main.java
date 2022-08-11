@@ -61,10 +61,6 @@ public class Main {
 	 */
 	private Trie target = Trie.fromString("main");
 	/**
-	 * WyIL dependencies to include during compilation.
-	 */
-	private List<File> whileypath = Collections.EMPTY_LIST;
-	/**
 	 * Specify whether to enable actual verification or not.
 	 */
 	private boolean verify = true;
@@ -91,11 +87,6 @@ public class Main {
 
 	public Main setBplDir(File bpldir) {
 		this.bpldir = bpldir;
-		return this;
-	}
-
-	public Main setWhileyPath(List<File> whileypath) {
-		this.whileypath = whileypath;
 		return this;
 	}
 
@@ -143,12 +134,6 @@ public class Main {
 			// Extract source file
 			task.addSource(wyc.Compiler.readWyilFile(wyildir, source));
 		}
-		// Extract any dependencies from zips
-		for(File dep : whileypath) {
-			List<WyilFile> deps = new ArrayList<>();
-			wyc.Compiler.extractDependencies(dep,deps);
-			task.addSources(deps);
-		}
 		// Run the compiler
 		BoogieFile target = task.build();
 		try {
@@ -194,14 +179,13 @@ public class Main {
 		Trie target = Trie.fromString((String) options.get("output"));
 		File wyildir = (File) options.get("wyildir");
 		File bpldir = (File) options.get("bpldir");
-		ArrayList<File> whileypath = (ArrayList<File>) options.get("whileypath");
 		boolean debug = options.containsKey("debug");
 		boolean verify = !options.containsKey("noverify");
 		int timeout = (Integer) options.get("timeout");
 		boolean useArrayTheory = options.containsKey("useArrayTheory");
 		// Construct Main object
 		Main main = new Main().setVerbose(verbose).setWyilDir(wyildir).setBplDir(bpldir).setTarget(target)
-				.setWhileyPath(whileypath).setDebug(debug).setTimeout(timeout).setVerify(verify)
+				.setDebug(debug).setTimeout(timeout).setVerify(verify)
 				.setBoogieOption("useArrayTheory", useArrayTheory);
 		// Configure prover log (if requested)
 		if(options.containsKey("proverLog")) {
